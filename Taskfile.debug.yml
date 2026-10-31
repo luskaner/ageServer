@@ -138,5 +138,10 @@ tasks:
       - go build -o build/launcher/bin/config-admin-agent{{exeExt}} ./launcher-config-admin-agent
   build-config-all:
     deps: [ build-config, build-config-admin-agent ]
+  build-gui-config:
+    summary: Builds the Wails GUI configuration application
+    dir: gui/server/config
+    cmds:
+      - task build
 includes:
   os: ./Taskfile.debug.{{if eq OS "windows"}}other{{else}}unix{{end}}.yml

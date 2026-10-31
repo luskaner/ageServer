@@ -3,6 +3,7 @@ Log = false
 
 # Whether to generate the Platform User Id. *ONLY* as a last resort if multiple users
 # are using Custom Launchers and they are sharing incorrectly the same Platform User Id.
+# May show the same user as multiple in the leaderboards.
 # Incompatible with Authentication not set to 'disabled'.
 GeneratePlatformUserId = false
 
