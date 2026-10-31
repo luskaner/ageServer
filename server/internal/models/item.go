@@ -77,6 +77,7 @@ type Attribute struct {
 	Value  string `json:"val"`
 	Source int    `json:"source,omitempty,omitzero"`
 	Mtype  int    `json:"mtype,omitempty,omitzero"`
+	Vtype  int    `json:"vtype,omitempty,omitzero"`
 }
 
 // isNewAttributeKey is a client side transient flag. It never belongs to the

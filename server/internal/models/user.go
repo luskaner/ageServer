@@ -40,6 +40,7 @@ type User interface {
 	GetPersistentData() *PersistentStringJsonMap
 	GetItems() *PersistentJsonData[*map[int32]*MainItem]
 	GetItemLoadouts() *PersistentJsonData[*MainItemLoadouts]
+	GetChallengeProgress() *PersistentJsonData[*[]ChallengeProgress]
 	GetAuth() *PersistentJsonData[*time.Time]
 	EncodeStats() i.A
 	EncodePresence(definitions PresenceDefinitions) i.A
@@ -67,6 +68,7 @@ type MainUser struct {
 	avatarStats        *PersistentJsonData[*AvatarStats]
 	items              *PersistentJsonData[*map[int32]*MainItem]
 	itemLoadouts       *PersistentJsonData[*MainItemLoadouts]
+	challengeProgress  *PersistentJsonData[*[]ChallengeProgress]
 	auth               *PersistentJsonData[*time.Time]
 	rating             atomic.Int32
 }
@@ -117,6 +119,11 @@ type MainUsers struct {
 	// profileSink, when set, persists the identity of every user the server
 	// builds, so the ladder can still render players that are offline.
 	profileSink func(User)
+	// challengesData holds the raw challenges.json data for initializing
+	// challenge progress. It is populated by CreateMainGame from the Resources.
+	challengesData []byte
+	// challengesFormat tells the upgrader how to parse challenges.json
+	challengesFormat ChallengeFormat
 }
 
 // SetRatingSource installs the callback used to hydrate ratings on account
@@ -184,6 +191,28 @@ func (users *MainUsers) Generate(gameId string, persistentData *PersistentString
 			NewItemLoadoutsUpgradableDefaultData(),
 		)
 	}
+	var challengeProgress *PersistentJsonData[*[]ChallengeProgress]
+	if users.challengesData != nil {
+		challengeProgress = OpenPersistentJsonData[*[]ChallengeProgress](
+			persistentData,
+			identifier,
+			"challenges",
+			NewChallengeProgressUpgradableDefaultData(users.challengesData, users.challengesFormat),
+		)
+		if challengeProgress != nil {
+			// Reconcile the saved progress with the challenges of the current
+			// resources on every user load: definitions added by a resource
+			// update are included and IDs stay sequential, while the progress
+			// the client already reported is kept.
+			upgrader := NewChallengeProgressUpgradableDefaultData(users.challengesData, users.challengesFormat)
+			if err := challengeProgress.WithReadWrite(func(data *[]ChallengeProgress) error {
+				*data = reconcileChallengeProgress(*data, upgrader)
+				return nil
+			}); err != nil {
+				logger.Fail("User %s: challenge progress could not be reconciled (%s)", identifier, err)
+			}
+		}
+	}
 	avatarMetadata := OpenPersistentJsonData[*string](
 		persistentData,
 		identifier,
@@ -207,6 +236,7 @@ func (users *MainUsers) Generate(gameId string, persistentData *PersistentString
 		avatarMetadata:     avatarMetadata,
 		items:              items,
 		itemLoadouts:       itemLoadouts,
+		challengeProgress:  challengeProgress,
 		profileProperties:  profileProperties,
 		reliclink:          rng.Int32(),
 		alias:              alias,
@@ -696,6 +726,10 @@ func (u *MainUser) GetItems() *PersistentJsonData[*map[int32]*MainItem] {
 
 func (u *MainUser) GetItemLoadouts() *PersistentJsonData[*MainItemLoadouts] {
 	return u.itemLoadouts
+}
+
+func (u *MainUser) GetChallengeProgress() *PersistentJsonData[*[]ChallengeProgress] {
+	return u.challengeProgress
 }
 
 func (u *MainUser) GetAuth() *PersistentJsonData[*time.Time] {

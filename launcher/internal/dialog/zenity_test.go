@@ -78,7 +78,7 @@ func TestZenitySelectServerReturnsIndexedItem(t *testing.T) {
 	if len(fake.items) != 2 || fake.items[0] != "1. a" || fake.items[1] != "2. b" {
 		t.Errorf("items = %v, want [1. a 2. b]", fake.items)
 	}
-	if fake.text != "Select a 'server':" {
+	if fake.text != "Choose a server to join:" {
 		t.Errorf("text = %q", fake.text)
 	}
 }

@@ -2,59 +2,30 @@ package tray
 
 import (
 	"bytes"
+	"embed"
 	"image"
-	"image/color"
 	"image/png"
-	"math"
 	"sync"
 )
 
-// The icon is drawn rather than embedded.
+// embeddedAppIcon is the same picture the Wails GUI shows in its window
+// (gui/server/config/build/appicon.png), embedded here so the agent's tray
+// icon matches the application. A user can tell at a glance which program owns
+// the notification area.
 //
-// A tray icon is three shapes, and an embedded one is a binary file that has to
-// be sourced, licensed, regenerated whenever the palette moves and, on the
-// platforms that keep icons in resources, compiled into the executable. Drawing
-// it costs a few hundred bytes of Go and leaves the icon in step with the code by
-// construction.
+// The source PNG is 1024 px; tray icons end up at sixteen physical pixels, so we
+// downscale it to iconSize and let the platform scale further if needed.
 //
-// It is a globe because that is what the agent is about: a machine that was
-// alone on a network is not any more. It is a solid disk rather than an outline
-// because at the sixteen pixels the notification area actually uses, an outline
-// is a ring of grey specks and a solid shape is still a shape.
+// A tray icon is a binary file that has to be sourced, licensed, regenerated
+// whenever the palette moves and, on the platforms that keep icons in resources,
+// compiled into the executable. Embedding it keeps the binary self-contained and
+// the icon in step with the GUI by construction.
 
-// supersample is the factor each side is drawn at before being filtered down.
-//
-// Tray icons end up at sixteen physical pixels, and a shape drawn straight to
-// that size has a staircase along its edge that reads as a mistake. Drawing big
-// and averaging is what buys the soft edge the rest of the notification area
-// has.
-const supersample = 4
+//go:embed embedded_appicon.png
+var embeddedAppIcon []byte
 
-const (
-	// diskRadius is the globe's radius as a fraction of the icon's side. The
-	// margin is not decoration: the shell draws its own padding around the icon
-	// and an edge flush with the side touches it.
-	diskRadius = 0.46
-
-	// equator is the half height of the horizontal stripe, as a fraction of the
-	// radius.
-	equator = 0.075
-
-	// meridian is the half width of the vertical outline, as a fraction of the
-	// distance to the curve itself rather than to a pixel, so that it stays the
-	// same thickness whether it is crossing the middle of the disk or its edge.
-	meridian = 0.06
-
-	// meridianFlatten is how much narrower the meridian ellipse is than the disk.
-	// A meridian as wide as the disk is a line, and the globe loses the curve
-	// that makes it read as a sphere.
-	meridianFlatten = 0.45
-)
-
-var (
-	diskColour = color.RGBA{R: 0x2e, G: 0x9e, B: 0x5b, A: 0xff}
-	lineColour = color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
-)
+// embed is referenced by the //go:embed directive above.
+var _ embed.FS
 
 // iconSize is the size the icon is rendered at. The platform scales it to
 // whatever the notification area asks for, and a source larger than that keeps
@@ -63,71 +34,55 @@ const iconSize = 32
 
 // iconPNG is the rendered icon, encoded once.
 var iconPNG = sync.OnceValue(func() []byte {
+	src, err := png.Decode(bytes.NewReader(embeddedAppIcon))
+	if err != nil {
+		// The embedded PNG was validated at build time; if decoding fails here
+		// something is seriously wrong. Return nothing rather than a broken
+		// icon: the tray comes up with no picture rather than not at all.
+		return nil
+	}
+	small := downscale(src, iconSize, iconSize)
 	var buffer bytes.Buffer
-	if err := png.Encode(&buffer, renderIcon(iconSize)); err != nil {
-		// The only way png.Encode fails on a buffer that is not a file is a
-		// failure to encode an image this package just built. There is nothing to
-		// fall back to and nowhere to report it from, so an empty icon is the
-		// honest answer: the tray comes up with no picture rather than not at all.
+	if err := png.Encode(&buffer, small); err != nil {
 		return nil
 	}
 	return buffer.Bytes()
 })
 
-// renderIcon draws the globe and filters it down to size.
-func renderIcon(size int) *image.RGBA {
-	big := size * supersample
-	centre := float64(big) / 2
-	radius := diskRadius * float64(big)
-
-	// Accumulated at full width and divided at the end: sixteen samples can add
-	// up to more than a byte, so they cannot live in the image until averaged.
-	pixels := make([]uint32, size*size*4)
-	for y := 0; y < big; y++ {
-		for x := 0; x < big; x++ {
-			shade, ok := shadeAt(float64(x)+0.5-centre, float64(y)+0.5-centre, radius)
-			if !ok {
-				continue
+// downscale scales src to the given width and height by averaging each source
+// block that maps to one destination pixel. 1024 divides evenly by 32, so each
+// destination pixel is the average of exactly 32x32 source pixels.
+func downscale(src image.Image, width, height int) *image.RGBA {
+	bounds := src.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	dst := image.NewRGBA(image.Rect(0, 0, width, height))
+	for dy := 0; dy < height; dy++ {
+		for dx := 0; dx < width; dx++ {
+			x0 := dx * srcW / width
+			x1 := (dx + 1) * srcW / width
+			y0 := dy * srcH / height
+			y1 := (dy + 1) * srcH / height
+			var r, g, b, a uint32
+			n := 0
+			for y := y0; y < y1; y++ {
+				for x := x0; x < x1; x++ {
+					cr, cg, cb, ca := src.At(x, y).RGBA()
+					r += cr >> 8
+					g += cg >> 8
+					b += cb >> 8
+					a += ca >> 8
+					n++
+				}
 			}
-			offset := (y/supersample*size + x/supersample) * 4
-			pixels[offset] += uint32(shade.R)
-			pixels[offset+1] += uint32(shade.G)
-			pixels[offset+2] += uint32(shade.B)
-			pixels[offset+3] += uint32(shade.A)
+			if n > 0 {
+				offset := (dy*width + dx) * 4
+				dst.Pix[offset] = uint8(r / uint32(n))
+				dst.Pix[offset+1] = uint8(g / uint32(n))
+				dst.Pix[offset+2] = uint8(b / uint32(n))
+				dst.Pix[offset+3] = uint8(a / uint32(n))
+			}
 		}
 	}
-
-	samples := uint32(supersample * supersample)
-	img := image.NewRGBA(image.Rect(0, 0, size, size))
-	for i := 0; i < size*size; i++ {
-		offset := i * 4
-		// Rounded rather than truncated: truncating loses the half of every
-		// sample that the average lands on, which is a fifth of a bit on a fully
-		// covered pixel and rather more on the edge that is the whole point.
-		img.Pix[offset] = uint8((pixels[offset] + samples/2) / samples)
-		img.Pix[offset+1] = uint8((pixels[offset+1] + samples/2) / samples)
-		img.Pix[offset+2] = uint8((pixels[offset+2] + samples/2) / samples)
-		img.Pix[offset+3] = uint8((pixels[offset+3] + samples/2) / samples)
-	}
-	return img
-}
-
-// shadeAt is the colour of one sample, and whether the sample is on the icon at
-// all. The origin is the centre of the icon.
-func shadeAt(dx float64, dy float64, radius float64) (color.RGBA, bool) {
-	if dx*dx+dy*dy > radius*radius {
-		return color.RGBA{}, false
-	}
-	if math.Abs(dy) <= equator*radius {
-		return lineColour, true
-	}
-	// The meridian is the outline of an ellipse, so it is drawn as the distance
-	// to that ellipse rather than as a stroke of a fixed width, which would come
-	// out thick where the curve runs along the rows and thin where it crosses
-	// them.
-	along := math.Hypot(dx/(meridianFlatten*radius), dy/radius)
-	if math.Abs(along-1) < meridian {
-		return lineColour, true
-	}
-	return diskColour, true
+	return dst
 }

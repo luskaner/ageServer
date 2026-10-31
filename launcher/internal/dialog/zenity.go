@@ -36,18 +36,15 @@ func (zenityDialog) SelectServer(servers []ServerCandidate, stdin io.Reader) (in
 		items[i] = fmt.Sprintf("%d. %s", i+1, label(s))
 	}
 	selected, err := zenityListFn(
-		// The quotes are back here on purpose: a graphical dialog has no colour
-		// to mark a program name with, so the quoting still does that job here.
-		// <=30 chars: the text control is a fixed 241 px wide on Windows.
-		"Select a 'server':",
+		"Choose a server to join:",
 		items,
-		zenity.Title("Select server"),
+		zenity.Title("Select Server"),
 		zenity.OKLabel("Connect"),
-		// Cancelar significa "usar ningún servidor descubierto", que es
-		// exactamente lo que el caller ya hace arrancando el suyo. La etiqueta
-		// es corta porque el botón mide 75 px fijos en Windows.
+		// "Start own" means "use none of the discovered servers" — which is
+		// exactly what the caller already does by starting its own. The label
+		// is short because the button is 75 px fixed on Windows.
 		zenity.CancelLabel("Start own"),
-		// Solo tienen efecto en Unix; se ignoran en Windows y macOS.
+		// Only have effect on Unix; ignored on Windows and macOS.
 		zenity.Width(600),
 		zenity.Height(400),
 	)
@@ -71,11 +68,11 @@ func (zenityDialog) SelectServer(servers []ServerCandidate, stdin io.Reader) (in
 
 func (zenityDialog) ConfirmStartServer(text string, stdin io.Reader) bool {
 	err := zenityQuestionFn(text,
-		zenity.Title("Start server"),
+		zenity.Title("Start Server"),
 		zenity.OKLabel("Start"),
 		zenity.CancelLabel("Cancel"),
 		zenity.QuestionIcon,
-		zenity.Width(500), // Solo Unix.
+		zenity.Width(500), // Only Unix.
 	)
 	if err != nil {
 		if errors.Is(err, zenity.ErrCanceled) {

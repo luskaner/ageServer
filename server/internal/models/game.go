@@ -140,6 +140,14 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 	}
 	game.battleServers.Initialize(BattleServersStore[gameId], opts.BattleServer)
 	game.resources.Initialize(gameId, opts.Resources)
+	// Extract challenges.json from resources for games with challenge progress
+	if mainUsers, ok := game.users.(*MainUsers); ok && mainUsers != nil {
+		if challengesData, ok := game.resources.SignedAssets()["challenges.json"]; ok {
+			mainUsers.challengesData = challengesData
+			// Tell the upgrader which JSON format this game uses
+			mainUsers.challengesFormat = getChallengeFormat(gameId)
+		}
+	}
 	game.users.Initialize()
 	game.advertisements.Initialize(game.users, game.battleServers)
 	game.chatChannels.Initialize(game.resources.ChatChannels())
@@ -268,4 +276,16 @@ func (g *MainGame) PresenceDefinitions() PresenceDefinitions {
 
 func (g *MainGame) CustomFiles() CustomFiles {
 	return g.customFiles
+}
+
+// getChallengeFormat returns the JSON format used by a game's challenges.json.
+func getChallengeFormat(gameId string) ChallengeFormat {
+	switch gameId {
+	case "age4":
+		return FormatAoE4
+	case "age2", "athens": // AoE II and AoM (Athens) use flat array format
+		return FormatFlatArray
+	default:
+		return FormatAoE4 // default to AoE4 format
+	}
 }

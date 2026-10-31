@@ -872,11 +872,12 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		}
 		runBattleServerManager := battleServerManagerRun == "true" || (battleServerManagerRun == "required" && battleServerRequired)
 		if cfg.Server.Start == launcher.ModeAuto && !cfg.Server.StartWithoutConfirmation {
-			str := "No servers were found, proceeding to"
+			var str string
 			if runBattleServerManager {
-				str += " start a standalone battle server (if needed) and then"
+				str = "No servers were found. Start a battle server (if needed) and then start the game server?"
+			} else {
+				str = "No servers were found. Start the game server?"
 			}
-			str += " start the server."
 			if !launcher.ActiveDialog().ConfirmStartServer(str, promptInput()) {
 				reportOrDiscard().Fail("Canceled starting the server.")
 				atomicExitCode.Store(int32(launcher.ErrServerStartCanceled))

@@ -2,10 +2,8 @@ package challenge
 
 import (
 	"net/http"
-
-	i "github.com/luskaner/ageServer/server/internal"
 )
 
-func UpdateProgress(w http.ResponseWriter, _ *http.Request) {
-	i.JSON(&w, i.A{2, i.A{}, i.A{}})
+func UpdateProgress(w http.ResponseWriter, r *http.Request) {
+	updateProgress(w, r)
 }

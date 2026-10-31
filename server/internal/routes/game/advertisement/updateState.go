@@ -28,7 +28,6 @@ func UpdateState(w http.ResponseWriter, r *http.Request) {
 	battleServers := game.BattleServers()
 	sess := models.SessionOrPanic(r)
 	var ok bool
-	var peersLen int
 	var peers iter.Seq2[int32, models.Peer]
 	var advStartTime int64
 	var advEncoded i.A
@@ -41,34 +40,35 @@ func UpdateState(w http.ResponseWriter, r *http.Request) {
 		}
 		adv.UnsafeUpdateState(q.State)
 		if adv.UnsafeGetState() == 1 {
-			peersLen, peers = adv.GetPeers().Iter()
+			_, peers = adv.GetPeers().Iter()
 			advEncoded = adv.UnsafeEncode(gameTitle, sess.GetClientLibVersion(), battleServers)
 			advStartTime = adv.UnsafeGetStartTime()
 		}
 		ok = true
 	})
 	if ok {
-		userIds := make([]i.A, peersLen)
-		userIdStr := make([]i.A, peersLen)
-		races := make([]i.A, peersLen)
-		challengeProgress := make([]i.A, peersLen)
-		sessions := make([]models.Session, peersLen)
+		var userIds []i.A
+		var userIdStr []i.A
+		var races []i.A
+		var challengeProgress []i.A
+		var sessions []models.Session
 		gameSessions := game.Sessions()
-		j := 0
 		for userId, peer := range peers {
-			var sess models.Session
-			sess, ok = gameSessions.GetByUserId(userId)
-			if !ok {
+			user, userFound := game.Users().GetUserById(userId)
+			if !userFound {
+				continue
+			}
+			sess, sessFound := gameSessions.GetByUserId(userId)
+			if !sessFound {
 				continue
 			}
 			userIdSingleStr := strconv.Itoa(int(userId))
-			userIds[j] = i.A{userId, i.A{}}
-			userIdStr[j] = i.A{userIdSingleStr, i.A{}}
+			userIds = append(userIds, i.A{userId, i.A{}})
+			userIdStr = append(userIdStr, i.A{userIdSingleStr, i.A{}})
 			peerMutable := peer.GetMutable()
-			races[j] = i.A{userIdSingleStr, strconv.Itoa(int(peerMutable.RaceID))}
-			challengeProgress[j] = i.A{userIdSingleStr, challengeShared.GetChallengeProgressData()}
-			sessions[j] = sess
-			j++
+			races = append(races, i.A{userIdSingleStr, strconv.Itoa(int(peerMutable.RaceID))})
+			challengeProgress = append(challengeProgress, i.A{userIdSingleStr, challengeShared.GetChallengeProgressData(user)})
+			sessions = append(sessions, sess)
 		}
 		for _, session := range sessions {
 			wss.SendOrStoreMessage(
