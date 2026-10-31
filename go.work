@@ -28,7 +28,3 @@ use (
 )
 
 replace github.com/luskaner/ageServer/battle-server-broadcast v1.3.2 => ./battle-server-broadcast
-
-// ageBattleServer is consumed as an embedded library. It is not published as a
-// versioned module yet, so the workspace points at the sibling checkout.
-replace github.com/luskaner/ageBattleServer => ../ageBattleServer
