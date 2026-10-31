@@ -34,3 +34,4 @@ require (
 	github.com/xo/terminfo v1.2.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 )
+

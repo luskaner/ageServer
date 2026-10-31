@@ -17,3 +17,4 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 )
+

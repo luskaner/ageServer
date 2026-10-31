@@ -6,3 +6,4 @@ require (
 	github.com/hairyhenderson/go-which v0.2.5
 	golang.org/x/text v0.43.0
 )
+
