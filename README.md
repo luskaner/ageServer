@@ -246,6 +246,11 @@ supported operating systems.
 
 *Note: If you are using Antivirus it may flag one or more executables as virus, this is a **false positive***.
 
+*Note: On macOS, downloaded binaries are quarantined by Gatekeeper and may be refused as unverified as releases
+are not notarized. From the extracted download directory, run the following in the terminal to clear it:*
+`xattr -dr com.apple.quarantine .` *(alternatively, right-click each binary and choose Open). Self-built binaries
+are unaffected.*
+
 ### Verification
 
 The verification process ensures that the files you download are the same as the ones that were uploaded by the
