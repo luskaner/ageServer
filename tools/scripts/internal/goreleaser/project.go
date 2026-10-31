@@ -34,11 +34,14 @@ func GenerateCurrentConfig(currentWindowsOS OperatingSystem, archives ...*Archiv
 }
 
 func generateConfig(currentWindowsOS OperatingSystem, archives ...*Archive) error {
-	currentOS := currentOS()
-	currentArch := currentArch()
+	// Only single-target configs (GenerateCurrentConfig) are restricted to the
+	// host OS/arch. The full config (GenerateConfig) must contain every
+	// supported target regardless of the machine that generates it.
+	var operatingSystem OperatingSystem
+	var architecture Architecture
 	if currentWindowsOS != nil {
-		currentOS = currentWindowsOS
-		currentArch = currentWindowsArch()
+		operatingSystem = currentWindowsOS
+		architecture = currentWindowsArch()
 	}
 
 	project := config.Project{
@@ -46,12 +49,12 @@ func generateConfig(currentWindowsOS OperatingSystem, archives ...*Archive) erro
 	}
 	for _, a := range archives {
 		archiveBuilds := a.Builds() // Get all builds, then filter
-		if currentOS != nil {
+		if operatingSystem != nil {
 			archiveBuilds = slices.DeleteFunc(archiveBuilds, func(build config.Build) bool {
 				// Build IDs use OS.Name() (e.g., "linux", "mac", "win7", "win10")
-				osName := currentOS.Name()
+				osName := operatingSystem.Name()
 				return !strings.Contains(build.ID, "_"+osName+"_") ||
-					!slices.Contains(build.Goarch, currentArch.Goarch())
+					!slices.Contains(build.Goarch, architecture.Goarch())
 			})
 		}
 		project.Builds = append(project.Builds, archiveBuilds...)
@@ -64,12 +67,12 @@ func generateConfig(currentWindowsOS OperatingSystem, archives ...*Archive) erro
 		windowsTargets.AddTarget(OSWindowsLegacy, ArchAmd64)
 	}
 	// Filter config-helper builds to only current target
-	if currentOS != nil {
+	if operatingSystem != nil {
 		filteredWindowsTargets := NewBinaryTargets()
 		for target, archs := range *windowsTargets {
-			if target.Goos() == currentOS.Goos() {
+			if target.Goos() == operatingSystem.Goos() {
 				for arch := range archs {
-					if arch.Goarch() == currentArch.Goarch() {
+					if arch.Goarch() == architecture.Goarch() {
 						filteredWindowsTargets.AddTarget(target, arch)
 					}
 				}
@@ -129,7 +132,7 @@ func generateConfig(currentWindowsOS OperatingSystem, archives ...*Archive) erro
 		}
 	}
 	project.UniversalBinaries = universalBinaries(project.Builds)
-	if currentOS != nil {
+	if operatingSystem != nil {
 		project.UniversalBinaries = nil
 	}
 

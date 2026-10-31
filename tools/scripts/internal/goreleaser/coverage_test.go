@@ -202,6 +202,64 @@ func TestGenerateConfig(t *testing.T) {
 	}
 }
 
+// TestGenerateConfigIncludesAllPlatforms guards against the full configuration
+// being filtered by the host platform: GenerateConfig must emit every supported
+// target no matter where it runs (the release pipeline generates it on Linux).
+func TestGenerateConfigIncludesAllPlatforms(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(orig)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := NewArchive("server", Targets3264, nil)
+	archive.AddMainBinary(NewBinary("./server", Targets3264))
+	want := []string{
+		"server_win7_amd64",
+		"server_win10_amd64",
+		"server_win10_arm64",
+		"server_linux_amd64",
+		"server_linux_arm64",
+		"server_mac_amd64",
+		"server_mac_arm64",
+	}
+	if err := GenerateConfig(archive); err != nil {
+		t.Fatalf("GenerateConfig failed: %v", err)
+	}
+	data, err := os.ReadFile(".goreleaser.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var project struct {
+		Builds []struct {
+			ID string `yaml:"id"`
+		} `yaml:"builds"`
+		UniversalBinaries []struct {
+			ID string `yaml:"id"`
+		} `yaml:"universal_binaries"`
+	}
+	if err := yaml.Unmarshal(data, &project); err != nil {
+		t.Fatal(err)
+	}
+
+	found := make(map[string]bool, len(project.Builds))
+	for _, build := range project.Builds {
+		found[build.ID] = true
+	}
+	for _, id := range want {
+		if !found[id] {
+			t.Errorf("full config is missing build %q (builds: %v)", id, found)
+		}
+	}
+	if len(project.UniversalBinaries) == 0 {
+		t.Error("full config should still declare the macOS universal binaries")
+	}
+}
+
 func TestOverrideWindowsName(t *testing.T) {
 	name := overrideWindowsName("full", OSWindowsModern, ArchArm64)
 	if name != "win11" {
