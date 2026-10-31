@@ -22,6 +22,7 @@ func TestResetClearsWhatTheRunChanged(t *testing.T) {
 	c.setupCommandRan = true
 	c.hostFilePath = "/tmp/hosts"
 	c.certFilePath = "/tmp/cert.pem"
+	c.sigKeyFilePath = "/tmp/sigkey.der"
 	c.battleServerRegion = "eu"
 	c.battleServerExe = "bsm.exe"
 
@@ -33,8 +34,9 @@ func TestResetClearsWhatTheRunChanged(t *testing.T) {
 	if c.setupCommandRan {
 		t.Error("setupCommandRan is still set, so this run would undo a setup it did not do")
 	}
-	if c.hostFilePath != "" || c.certFilePath != "" {
-		t.Errorf("paths survived: hostFilePath=%q certFilePath=%q", c.hostFilePath, c.certFilePath)
+	if c.hostFilePath != "" || c.certFilePath != "" || c.sigKeyFilePath != "" {
+		t.Errorf("paths survived: hostFilePath=%q certFilePath=%q sigKeyFilePath=%q",
+			c.hostFilePath, c.certFilePath, c.sigKeyFilePath)
 	}
 	if c.battleServerRegion != "" || c.battleServerExe != "" {
 		t.Errorf("battle server survived: region=%q exe=%q", c.battleServerRegion, c.battleServerExe)

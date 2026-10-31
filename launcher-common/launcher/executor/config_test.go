@@ -1,9 +1,12 @@
 package executor
 
 import (
+	"encoding/base64"
 	"net"
+	"slices"
 	"testing"
 
+	"github.com/luskaner/ageServer/common/cmd"
 	"github.com/luskaner/ageServer/common/executor/exec"
 )
 
@@ -49,6 +52,7 @@ func TestConfigRevertFlagOptionsWithValues(t *testing.T) {
 	opts.GameId = "age2"
 	opts.LogRoot = "/tmp/logs"
 	opts.CertFilePath = "/tmp/cert.pem"
+	opts.SigKeyFilePath = "/tmp/sigkey.der"
 	opts.HostFilePath = "/tmp/hosts"
 	opts.DataPath = "/tmp/data"
 	opts.GamePath = "/tmp/game"
@@ -77,6 +81,9 @@ func TestConfigRevertFlagOptionsWithValues(t *testing.T) {
 	if revert.CertFilePath != "/tmp/cert.pem" {
 		t.Errorf("CertFilePath = %q, want %q", revert.CertFilePath, "/tmp/cert.pem")
 	}
+	if revert.SigKeyFilePath != "/tmp/sigkey.der" {
+		t.Errorf("SigKeyFilePath = %q, want %q", revert.SigKeyFilePath, "/tmp/sigkey.der")
+	}
 	if revert.HostFilePath != "/tmp/hosts" {
 		t.Errorf("HostFilePath = %q, want %q", revert.HostFilePath, "/tmp/hosts")
 	}
@@ -91,6 +98,33 @@ func TestConfigRevertFlagOptionsWithValues(t *testing.T) {
 	}
 	if !revert.Profiles {
 		t.Error("Profiles should be true")
+	}
+}
+
+// The revert arguments are built from the same flag set the setup runs with, so
+// a path the setup is told to write has to be a path the revert is told to
+// remove. Without this the temporary key file would be written and then left
+// behind when the game exits.
+func TestConfigSetupEmitsTheSigningKeyFlags(t *testing.T) {
+	opts := NewConfigSetupOptions()
+	opts.GameId = "age2"
+	opts.SigKeyFilePath = "/tmp/sigkey.der"
+	keyData := []byte{0x30, 0x01}
+	opts.AddSigKeyData = keyData
+
+	args := cmd.FlagSetToArgs(opts.flags, true)
+	for _, want := range []string{
+		"--sigKeyFilePath=/tmp/sigkey.der",
+		"--sigKeyData=" + base64.StdEncoding.EncodeToString(keyData),
+	} {
+		if !slices.Contains(args, want) {
+			t.Errorf("setup args %v do not contain %q", args, want)
+		}
+	}
+
+	revertFlags := opts.ConfigRevertFlagOptions().Flags()
+	if !slices.Contains(revertFlags, "--sigKeyFilePath=/tmp/sigkey.der") {
+		t.Errorf("revert flags %v do not contain the key file path, so it would never be removed", revertFlags)
 	}
 }
 

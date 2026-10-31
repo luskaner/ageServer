@@ -128,7 +128,7 @@ func BindFlags(fs *pflag.FlagSet, v Values) error {
 	}
 	clientExeTip += " to use the default launcher."
 	fs.StringP("clientExe", "l", autoValue, clientExeTip)
-	fs.StringP("clientExeArgs", "i", "", "The arguments to pass to the client launcher if it is custom. You may use environment variables and '{HostFilePath}'/'{CertFilePath}' replacement variables."+pathNamesInfo)
+	fs.StringP("clientExeArgs", "i", "", "The arguments to pass to the client launcher if it is custom. You may use environment variables and '{HostFilePath}'/'{CertFilePath}'/'{SigKeyFilePath}' replacement variables."+pathNamesInfo)
 
 	return nil
 }

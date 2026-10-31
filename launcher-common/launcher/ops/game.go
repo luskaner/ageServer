@@ -46,6 +46,37 @@ func (c *Config) KillAgent() {
 	c.report().Ok("config-admin-agent stopped.")
 }
 
+// clientArgsValues are the replacement values the client launcher arguments may
+// use: the files this run produced for it to read.
+//
+// On Windows the separators are doubled because these arguments are split the
+// same way as a command line, where a lone backslash is an escape character.
+// Nothing else about the paths is rewritten: the client is told where the file
+// actually is.
+func (c *Config) clientArgsValues() map[string]string {
+	values := make(map[string]string)
+	add := func(name string, path string) {
+		if path == "" {
+			return
+		}
+		if runtime.GOOS == "windows" {
+			path = strings.ReplaceAll(path, `\`, `\\`)
+		}
+		values[name] = path
+	}
+	add("HostFilePath", c.hostFilePath)
+	add("CertFilePath", c.certFilePath)
+	// Converted before add escapes it: the client's signing key DLL reads this
+	// one from a command line it splits on spaces, so it may need the short form
+	// of the path, whose separators must not then be doubled twice.
+	sigKeyPath, _ := sigKeyArgPath(c.sigKeyFilePath)
+	add("SigKeyFilePath", sigKeyPath)
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
 func (c *Config) LaunchAgentAndGame(executer base.Executor, customExecutor custom.Exec, clientExecutableArgs []string, canTrustCertificate string, canBroadcastBattleServer string, basePath string) (exitCode int) {
 	if canBroadcastBattleServer != "false" {
 		if battleServerBroadcast.Required() {
@@ -115,24 +146,7 @@ func (c *Config) LaunchAgentAndGame(executer base.Executor, customExecutor custo
 	}
 	c.report().Step("%s", str+"...")
 	var result *commonExecutor.Result
-	var values map[string]string = nil
-	if c.hostFilePath != "" {
-		values = map[string]string{
-			"HostFilePath": c.hostFilePath,
-		}
-		if runtime.GOOS == "windows" {
-			values["HostFilePath"] = strings.ReplaceAll(c.hostFilePath, `\`, `\\`)
-		}
-	}
-	if c.certFilePath != "" {
-		if values == nil {
-			values = make(map[string]string)
-		}
-		values["CertFilePath"] = c.certFilePath
-		if runtime.GOOS == "windows" {
-			values["CertFilePath"] = strings.ReplaceAll(c.certFilePath, `\`, `\\`)
-		}
-	}
+	values := c.clientArgsValues()
 	args, err := ParseCommandArgs(clientExecutableArgs, values)
 	if err != nil {
 		c.report().Fail("Failed to parse client executable arguments")

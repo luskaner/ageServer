@@ -28,7 +28,9 @@ Executable = 'auto'
 # The host file follows the Windows system format.
 # {CertFilePath} will be replaced by the certificate file path.
 # If using this variable, 'Config.Certificate.CanTrustInPc' setting will be ignored.
-# The format is the same as the server stored certificate.
+# The certificate format is the same as the server stored certificate.
+# {SigKeyFilePath} will be replaced by the public signing key path, to pass to the client launcher as '--sigkey-der'.
+# The key is downloaded from the server ("/sigkey.der") and written to a temporary file.
 # Windows: Path names need to use double backslashes within single quotes or be within double quotes.
 # Note: You may use environment variables.
 ExecutableArgs = []

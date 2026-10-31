@@ -59,4 +59,10 @@ const (
 	// machine is clean can ignore it; a caller showing a result should not tell
 	// someone a cancelled launch worked.
 	ErrCanceled
+	// ErrReadSigKey is the code for a run that needed the server's public
+	// signing key and could not get a valid one from it.
+	ErrReadSigKey
+	// ErrConfigSigKeyAdd is the code for a run that got the signing key but
+	// could not leave it in a file for the client to read.
+	ErrConfigSigKeyAdd
 )

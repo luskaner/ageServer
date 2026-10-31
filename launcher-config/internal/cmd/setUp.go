@@ -83,6 +83,9 @@ func undoSetUp() {
 	if setupValues.CertFilePath != "" {
 		_ = removeFileFn(setupValues.CertFilePath)
 	}
+	if setupValues.SigKeyFilePath != "" {
+		_ = removeFileFn(setupValues.SigKeyFilePath)
+	}
 }
 
 var setupValues *launcherCommonCmd.SetupValues
@@ -160,6 +163,13 @@ func runSetUp(args []string) (err error, exitCode int) {
 		}
 	} else {
 		addLocalCertData = setupValues.AddLocalCertData
+	}
+	if setupValues.SigKeyFilePath != "" {
+		if len(setupValues.AddSigKeyData) == 0 {
+			commonLogger.Println(commonUi.Fail("Signing key file path is set but no signing key data is provided"))
+			exitCode = internal.ErrMissingSigKeyData
+			return
+		}
 	}
 	commonLogger.Println(commonUi.Step("Setting up configuration for %s...", setupValues.GameId))
 	if setupValues.AddUserCertData != nil {
@@ -272,6 +282,20 @@ func runSetUp(args []string) (err error, exitCode int) {
 		if err != nil {
 			commonLogger.Println(commonUi.Fail("Error saving certificate file: %s", err))
 			exitCode = internal.ErrUserCertAdd
+			undoSetUp()
+			return
+		}
+	}
+	if setupValues.SigKeyFilePath != "" {
+		var sigKeyFile *os.File
+		sigKeyFile, err = createFileFn(setupValues.SigKeyFilePath)
+		if err == nil {
+			_, err = sigKeyFile.Write(setupValues.AddSigKeyData)
+			_ = sigKeyFile.Close()
+		}
+		if err != nil {
+			commonLogger.Println(commonUi.Fail("Error saving signing key file: %s", err))
+			exitCode = internal.ErrSigKeyFileAdd
 			undoSetUp()
 			return
 		}

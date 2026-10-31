@@ -11,7 +11,7 @@ func TestSetUpFlagSetRegistersFlags(t *testing.T) {
 	if values == nil || flags == nil {
 		t.Fatal("SetUpFlagSet returned nil")
 	}
-	for _, name := range []string{"ip", "localCert", "macExclusiveDomain", "caStoreCert", "agentEndOnError", "gamePath", "dataPath", "hostFilePath", "certFilePath", "metadata", "profiles", "logRoot", "game", "internet"} {
+	for _, name := range []string{"ip", "localCert", "macExclusiveDomain", "caStoreCert", "sigKeyData", "agentEndOnError", "gamePath", "dataPath", "hostFilePath", "certFilePath", "sigKeyFilePath", "metadata", "profiles", "logRoot", "game", "internet"} {
 		if f := flags.Lookup(name); f == nil {
 			t.Errorf("flag %q not registered", name)
 		}
@@ -70,7 +70,7 @@ func TestRevertFlagSetRegistersFlags(t *testing.T) {
 	if values == nil || flags == nil {
 		t.Fatal("RevertFlagSet returned nil")
 	}
-	for _, name := range []string{"ip", "localCert", "all", "gamePath", "dataPath", "hostFilePath", "certFilePath", "metadata", "profiles", "caStoreCert", "logRoot", "game"} {
+	for _, name := range []string{"ip", "localCert", "all", "gamePath", "dataPath", "hostFilePath", "certFilePath", "sigKeyFilePath", "metadata", "profiles", "caStoreCert", "logRoot", "game"} {
 		if f := flags.Lookup(name); f == nil {
 			t.Errorf("flag %q not registered", name)
 		}
@@ -111,16 +111,19 @@ func TestFlushCacheFlagSetRegistersFlags(t *testing.T) {
 
 func TestAddCommonFlags(t *testing.T) {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
-	values := AddCommonFlags(flags, "hostSuffix", "certSuffix", "metaDesc", "profDesc")
+	values := AddCommonFlags(flags, "hostSuffix", "certSuffix", "sigKeySuffix", "metaDesc", "profDesc")
 	if values == nil {
 		t.Fatal("AddCommonFlags returned nil")
 	}
-	err := flags.Parse([]string{"--gamePath", "/g", "--dataPath", "/d", "--metadata", "--profiles"})
+	err := flags.Parse([]string{"--gamePath", "/g", "--dataPath", "/d", "--metadata", "--profiles", "--sigKeyFilePath", "/tmp/sigkey.der"})
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
 	if values.GamePath != "/g" || values.DataPath != "/d" {
 		t.Errorf("GamePath=%q DataPath=%q", values.GamePath, values.DataPath)
+	}
+	if values.SigKeyFilePath != "/tmp/sigkey.der" {
+		t.Errorf("SigKeyFilePath = %q, want /tmp/sigkey.der", values.SigKeyFilePath)
 	}
 	if !values.Metadata || !values.Profiles {
 		t.Error("Metadata and Profiles should be true")

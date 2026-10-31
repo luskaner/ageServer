@@ -263,6 +263,7 @@ var (
 	serverReadCACertFn              = server.ReadCACertificateFromServer
 	configMapHostsFn                = config.MapHosts
 	configAddCertFn                 = config.AddCert
+	configAddSigKeyFn               = config.AddSigKey
 	configIsolateUserDataFn         = config.IsolateUserData
 	configAddCACertToGameFn         = config.AddCACertToGame
 	configLaunchAgentAndGameFn      = config.LaunchAgentAndGame
@@ -737,6 +738,9 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	customCertFile := slices.ContainsFunc(cfg.Client.Args, func(s string) bool {
 		return strings.Contains(s, "{CertFilePath}")
 	})
+	customSigKeyFile := slices.ContainsFunc(cfg.Client.Args, func(s string) bool {
+		return strings.Contains(s, "{SigKeyFilePath}")
+	})
 	cfgFlushCacheOpts := newConfigFlushCacheOptionsFn(canAddHost, canTrustCertificate, customHostFile, customCertFile)
 	if cfgFlushCacheOpts != nil {
 		if result := cfgFlushCacheOpts.RunFlushCache(); !result.Success() {
@@ -947,6 +951,13 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		return
 	}
 	logger.WriteFileLog(gameId, "post add cert")
+	if customSigKeyFile {
+		atomicExitCode.Store(int32(configAddSigKeyFn(serverIP)))
+		if atomicExitCode.Load() != int32(common.ErrSuccess) {
+			return
+		}
+		logger.WriteFileLog(gameId, "post add signing key")
+	}
 	atomicExitCode.Store(int32(configIsolateUserDataFn(isolateMetadata, isolateProfiles, isolationPath)))
 	if atomicExitCode.Load() != int32(common.ErrSuccess) {
 		return

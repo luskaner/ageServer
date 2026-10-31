@@ -122,6 +122,7 @@ var identifierNames = []string{
 	"caStoreCert",
 	"HostFilePath",
 	"CertFilePath",
+	"SigKeyFilePath",
 	"SetUp",
 	"Revert",
 	"setupCommand",

@@ -609,6 +609,7 @@ type runRootOverrides struct {
 	serverReadCACertFnVal             func(string) *x509.Certificate
 	configMapHostsFnVal               func(string, string, bool, bool, bool) int
 	configAddCertFnVal                func(string, uuid.UUID, *x509.Certificate, string, bool, bool) int
+	configAddSigKeyFnVal              func(string) int
 	configIsolateUserDataFnVal        func(bool, bool, string) int
 	configAddCACertToGameFnVal        func(string, uuid.UUID, *x509.Certificate, string, string, bool, bool) int
 	configLaunchAgentAndGameFnVal     func(base.Executor, custom.Exec, []string, string, string, string) int
@@ -656,6 +657,7 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	origServerReadCACert := serverReadCACertFn
 	origConfigMapHosts := configMapHostsFn
 	origConfigAddCert := configAddCertFn
+	origConfigAddSigKey := configAddSigKeyFn
 	origConfigIsolateUserData := configIsolateUserDataFn
 	origConfigAddCACertToGame := configAddCACertToGameFn
 	origConfigLaunchAgentAndGame := configLaunchAgentAndGameFn
@@ -821,6 +823,11 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 			return common.ErrSuccess
 		}
 	}
+	if o.configAddSigKeyFnVal != nil {
+		configAddSigKeyFn = o.configAddSigKeyFnVal
+	} else {
+		configAddSigKeyFn = func(string) int { return common.ErrSuccess }
+	}
 	if o.configIsolateUserDataFnVal != nil {
 		configIsolateUserDataFn = o.configIsolateUserDataFnVal
 	} else {
@@ -921,6 +928,7 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 		serverReadCACertFn = origServerReadCACert
 		configMapHostsFn = origConfigMapHosts
 		configAddCertFn = origConfigAddCert
+		configAddSigKeyFn = origConfigAddSigKey
 		configIsolateUserDataFn = origConfigIsolateUserData
 		configAddCACertToGameFn = origConfigAddCACertToGame
 		configLaunchAgentAndGameFn = origConfigLaunchAgentAndGame
@@ -1134,6 +1142,79 @@ func TestRunRootAddCertFailure(t *testing.T) {
 	_, exitCode := Run(context.Background(), fs)
 	if exitCode != common.ErrGeneral {
 		t.Errorf("expected %d for add cert failure, got %d", common.ErrGeneral, exitCode)
+	}
+}
+
+// A run whose client arguments never mention the signing key must not fetch it:
+// the server only serves one when signing is configured, and a client that does
+// not verify signatures has no use for the file.
+func TestRunRootDoesNotFetchSigningKeyUnlessClientArgsUseIt(t *testing.T) {
+	restore := applyOverrides(t, runRootOverrides{
+		gameId:        "age2",
+		isAdmin:       false,
+		gameSupported: true,
+		configAddSigKeyFnVal: func(string) int {
+			t.Error("the signing key was fetched although no client argument asks for it")
+			return common.ErrSuccess
+		},
+	})
+	defer restore()
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	_, exitCode := Run(context.Background(), fs)
+	if exitCode != common.ErrSuccess {
+		t.Errorf("expected success without fetching a signing key, got %d", exitCode)
+	}
+}
+
+// The key has to come from the server the run connected to: pointing the client
+// at a key from anywhere else would make it verify against the wrong one.
+func TestRunRootFetchesSigningKeyFromTheServerInUse(t *testing.T) {
+	var gotHost string
+	restore := applyOverrides(t, runRootOverrides{
+		gameId:        "age2",
+		isAdmin:       false,
+		gameSupported: true,
+		cfg: func() *launcher.Configuration {
+			c := validLauncherConfig()
+			c.Client.Args = []string{"--sigkey-der={SigKeyFilePath}"}
+			return c
+		},
+		configAddSigKeyFnVal: func(host string) int {
+			gotHost = host
+			return common.ErrSuccess
+		},
+	})
+	defer restore()
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	_, exitCode := Run(context.Background(), fs)
+	if exitCode != common.ErrSuccess {
+		t.Fatalf("expected success with a signing key, got %d", exitCode)
+	}
+	if gotHost != "127.0.0.1" {
+		t.Errorf("signing key fetched from %q, want the server in use (127.0.0.1)", gotHost)
+	}
+}
+
+// Without the key the client would verify catalogues against Microsoft's key and
+// reject everything the server sends, so the run stops instead of launching a
+// game that cannot work.
+func TestRunRootSigningKeyFailureAborts(t *testing.T) {
+	restore := applyOverrides(t, runRootOverrides{
+		gameId:        "age2",
+		isAdmin:       false,
+		gameSupported: true,
+		cfg: func() *launcher.Configuration {
+			c := validLauncherConfig()
+			c.Client.Args = []string{"--sigkey-der={SigKeyFilePath}"}
+			return c
+		},
+		configAddSigKeyFnVal: func(string) int { return launcher.ErrReadSigKey },
+	})
+	defer restore()
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	_, exitCode := Run(context.Background(), fs)
+	if exitCode != launcher.ErrReadSigKey {
+		t.Errorf("expected %d for a missing signing key, got %d", launcher.ErrReadSigKey, exitCode)
 	}
 }
 

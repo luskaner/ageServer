@@ -277,5 +277,8 @@ func runRevert(args []string) (err error, exitCode int) {
 	if exitCode == common.ErrSuccess && revertValues.CertFilePath != "" {
 		_ = removeFileFn(revertValues.CertFilePath)
 	}
+	if exitCode == common.ErrSuccess && revertValues.SigKeyFilePath != "" {
+		_ = removeFileFn(revertValues.SigKeyFilePath)
+	}
 	return
 }

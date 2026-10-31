@@ -61,6 +61,7 @@ func (c *ConfigSetupOptions) ConfigRevertFlagOptions() *launcherCommon.ConfigRev
 	options.GameId = c.GameId
 	options.LogRoot = c.LogRoot
 	options.CertFilePath = c.CertFilePath
+	options.SigKeyFilePath = c.SigKeyFilePath
 	options.HostFilePath = c.HostFilePath
 	options.DataPath = c.DataPath
 	options.GamePath = c.GamePath

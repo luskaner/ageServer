@@ -48,6 +48,7 @@ type Config struct {
 	setupCommandRan    bool
 	hostFilePath       string
 	certFilePath       string
+	sigKeyFilePath     string
 	battleServerRegion string
 	battleServerExe    string
 }
@@ -68,6 +69,7 @@ func (c *Config) Reset() {
 	c.setupCommandRan = false
 	c.hostFilePath = ""
 	c.certFilePath = ""
+	c.sigKeyFilePath = ""
 	c.battleServerRegion = ""
 	c.battleServerExe = ""
 }

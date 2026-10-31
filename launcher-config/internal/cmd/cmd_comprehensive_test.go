@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bytes"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -510,6 +513,27 @@ func TestRunRevertStopAgentFailureKeepsOriginalExitCode(t *testing.T) {
 	}
 }
 
+// The key file is a temporary file the launcher created for the client, so the
+// revert is the only thing that knows to remove it once the game is gone.
+func TestRunRevertRemovesSigningKeyFile(t *testing.T) {
+	resetCmdState(t)
+	saveCmdDeps(t)
+	initializeFn = func(string) error { return nil }
+	configAdminAgentRunningFn = func() bool { return false }
+
+	path := filepath.Join(t.TempDir(), "sigkey.der")
+	if err := os.WriteFile(path, []byte("key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, exitCode := runRevert([]string{"--game", "age2", "--sigKeyFilePath", path}); exitCode != common.ErrSuccess {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("signing key file survived the revert: %v", err)
+	}
+}
+
 func TestRunRevertRemoveAllSuccess(t *testing.T) {
 	resetCmdState(t)
 	saveCmdDeps(t)
@@ -793,6 +817,43 @@ func TestRunSetUpCertFileCreateFailure(t *testing.T) {
 	_, exitCode := runSetUp([]string{"--game", "age2", "--certFilePath", "/tmp/cert.pem", "--localCert", encodedLocal})
 	if exitCode != internal.ErrUserCertAdd {
 		t.Fatalf("exitCode = %d, want ErrUserCertAdd", exitCode)
+	}
+}
+
+func TestRunSetUpMissingSigKeyData(t *testing.T) {
+	resetCmdState(t)
+	saveCmdDeps(t)
+	initializeFn = func(string) error { return nil }
+	_, exitCode := runSetUp([]string{"--game", "age2", "--sigKeyFilePath", filepath.Join(t.TempDir(), "sigkey.der")})
+	if exitCode != internal.ErrMissingSigKeyData {
+		t.Fatalf("exitCode = %d, want ErrMissingSigKeyData", exitCode)
+	}
+}
+
+// The signing key is served as DER and has to reach the file byte for byte: the
+// client replaces the key it trusts with this file's contents, so a PEM wrapper
+// or any re-encoding would make it verify against something the server never
+// signed with.
+func TestRunSetUpSavesSigningKeyFile(t *testing.T) {
+	resetCmdState(t)
+	saveCmdDeps(t)
+	initializeFn = func(string) error { return nil }
+	path := filepath.Join(t.TempDir(), "sigkey.der")
+	data := []byte{0x30, 0x82, 0x01, 0x0a, 0x02}
+	_, exitCode := runSetUp([]string{
+		"--game", "age2",
+		"--sigKeyFilePath", path,
+		"--sigKeyData", base64.StdEncoding.EncodeToString(data),
+	})
+	if exitCode != common.ErrSuccess {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("key file: %v", err)
+	}
+	if !bytes.Equal(got, data) {
+		t.Fatalf("key file = %v, want %v", got, data)
 	}
 }
 

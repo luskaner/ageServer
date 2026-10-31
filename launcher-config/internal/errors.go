@@ -26,4 +26,6 @@ const (
 	ErrGamePathMissing
 	ErrInvalidDataPath
 	ErrAgentAlreadyStarted
+	ErrMissingSigKeyData
+	ErrSigKeyFileAdd
 )
