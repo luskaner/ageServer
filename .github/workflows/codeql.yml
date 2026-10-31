@@ -54,7 +54,6 @@ jobs:
             "./tools/scripts/cmd/generateGoreleaserConfig|tools/scripts/generateGoreleaserConfig"
           )
           windows_targets=(
-            "./tools/mock/battle-server/main_windows.go|tools/battle-server"
             "./tools/mock/launcher/main.go|tools/launcher"
             "./tools/mock/game/main_windows.go|tools/game"
           )

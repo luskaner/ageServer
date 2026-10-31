@@ -14,7 +14,6 @@ updates:
       - "/server-genCert"
       - "/tools/scripts"
       - "/tools/server-replay"
-      - "/tools/mock/battle-server"
       - "/tools/mock/game"
       - "/tools/mock/launcher"
     schedule:
