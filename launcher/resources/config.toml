@@ -13,6 +13,11 @@ Log = false
 # Note: graphical dialogs are always available in Windows and macOS. In Linux-like systems
 # they require 'qarma', 'zenity' or 'matedialog' to be installed.
 CanUseDialogs = true
+# Whether or not the launcher may use the internet to look up official domains.
+# If false, only the statically known domains will be used for the hosts file,
+# certificates and logs. If true and there is no internet connectivity the launcher
+# will still work with the statically known domains.
+CanUseInternet = true
 
 [Config.Certificate]
 # Whether or not to trust the certificate of the server in user or local store, or not at all.
