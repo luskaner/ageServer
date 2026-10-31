@@ -814,7 +814,7 @@ func TestRunSetUpAdminSuccessViaAgent(t *testing.T) {
 	metadataRestoreFn = func(*commonUserData.Path) bool { return true }
 	restoreProfilesFn = func(*commonUserData.Path, bool) bool { return true }
 	newCACertFn = func(string, string) caCertifier { return &mockCACert{} }
-	_, exitCode := runSetUp([]string{"--game", "age2", "--ip", "127.0.0.2", "--canUseInternet=false"})
+	_, exitCode := runSetUp([]string{"--game", "age2", "--ip", "127.0.0.2", "--internet=false"})
 	if exitCode != common.ErrSuccess {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}

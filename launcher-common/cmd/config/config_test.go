@@ -11,7 +11,7 @@ func TestSetUpFlagSetRegistersFlags(t *testing.T) {
 	if values == nil || flags == nil {
 		t.Fatal("SetUpFlagSet returned nil")
 	}
-	for _, name := range []string{"ip", "localCert", "macExclusiveDomain", "caStoreCert", "agentEndOnError", "gamePath", "dataPath", "hostFilePath", "certFilePath", "metadata", "profiles", "logRoot", "game", "canUseInternet"} {
+	for _, name := range []string{"ip", "localCert", "macExclusiveDomain", "caStoreCert", "agentEndOnError", "gamePath", "dataPath", "hostFilePath", "certFilePath", "metadata", "profiles", "logRoot", "game", "internet"} {
 		if f := flags.Lookup(name); f == nil {
 			t.Errorf("flag %q not registered", name)
 		}
@@ -56,7 +56,7 @@ func TestInitSetUpCanUseInternetFalse(t *testing.T) {
 	if values == nil {
 		t.Fatal("InitSetUp returned nil")
 	}
-	err := flags.Parse([]string{"--canUseInternet=false"})
+	err := flags.Parse([]string{"--internet=false"})
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}

@@ -44,7 +44,7 @@ func TestRunSetUp_ForwardsFlags(t *testing.T) {
 		if a == "--game=age2" {
 			foundGame = true
 		}
-		if a == "--canUseInternet=false" {
+		if a == "--internet=false" {
 			foundNoInternet = true
 		}
 	}
@@ -52,7 +52,7 @@ func TestRunSetUp_ForwardsFlags(t *testing.T) {
 		t.Errorf("expected --game=age2 in args, got %v", captured.Args)
 	}
 	if !foundNoInternet {
-		t.Errorf("expected --canUseInternet=false in args, got %v", captured.Args)
+		t.Errorf("expected --internet=false in args, got %v", captured.Args)
 	}
 	if !captured.AsAdmin {
 		t.Error("AsAdmin should be true")
@@ -82,8 +82,8 @@ func TestRunSetUp_DefaultInternetOmitsFlag(t *testing.T) {
 	ip := net.ParseIP("1.2.3.4")
 	ex.RunSetUp("age2", ip, false, true, nil, "", nil, nil)
 	for _, a := range captured.Args {
-		if a == "--canUseInternet=false" || a == "--canUseInternet" {
-			t.Fatalf("internet enabled should not include a canUseInternet flag, got %v", captured.Args)
+		if a == "--internet=false" || a == "--internet" {
+			t.Fatalf("internet enabled should not include an internet flag, got %v", captured.Args)
 		}
 	}
 }
