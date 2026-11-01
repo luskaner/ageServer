@@ -128,7 +128,10 @@ func AuthMiddleware(next http.HandlerFunc, gameId string, cached bool) http.Hand
 			}
 
 			if int(errorCode) != common.ErrSuccess {
-				i.RawJSON(&w, respBody)
+				// Re-encode the upstream error payload instead of copying the
+				// raw response body into ours: the bytes come from a remote
+				// service and must not be reflected verbatim.
+				i.JSON(&w, respAny)
 				return
 			}
 
