@@ -320,6 +320,11 @@ func (a *Archive) AddAuxiliarBinary(binary *Binary) {
 		filepath.Join("bin", strings.ReplaceAll(binary.main, a.name+"-", "")))] = binary
 }
 
+// AddBinaryWithDestination adds a binary with a custom destination path (relative to archive root)
+func (a *Archive) AddBinaryWithDestination(binary *Binary, destination string) {
+	a.binaries[filepath.ToSlash(destination)] = binary
+}
+
 func (a *Archive) CloneWithFilesPrefix(prefix string) *Archive {
 	newArchive := NewArchive(a.name, a.targets, a.overrideOsName)
 	for file := range a.files.Iter() {
