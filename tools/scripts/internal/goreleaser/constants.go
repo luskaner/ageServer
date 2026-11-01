@@ -27,6 +27,10 @@ func init() {
 					instructionSets = []string{"5", "6"}
 				}
 				Targets32.AddTarget(os, arch, instructionSets...)
+				if os == OSWindowsLegacy || os == OSWindowsModern {
+					// GUI config (Wails app) builds for both Windows versions (including 386 via fork)
+					TargetsWindowsGuiConfig.AddTarget(os, arch)
+				}
 			}
 		}
 		for _, arch := range x64Architectures {
