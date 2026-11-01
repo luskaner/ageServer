@@ -22,6 +22,17 @@ jobs:
           go-version: '1.27.3'
           cache-dependency-path: |
             go.work.sum
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: gui/server/config/frontend/package-lock.json
+      - name: Build frontend
+        run: |
+          cd gui/server/config/frontend
+          npm ci
+          npm run build
       - name: Set up Go legacy
         id: setup_go_legacy
         run: |
@@ -46,7 +57,7 @@ jobs:
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
-          version: '~> v2'
+          version: 'v2.19.0'
           args: release --fail-fast
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
