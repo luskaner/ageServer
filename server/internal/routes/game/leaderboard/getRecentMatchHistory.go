@@ -133,6 +133,11 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 	i.JSON(&w, i.A{0, history})
 }
 
+// GetCommunityRecentMatchHistory serves the locally recorded public match history.
+func GetCommunityRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
+	GetRecentMatchHistory(w, r)
+}
+
 // normalizeProfileIDs drops the placeholder identifiers the client appends to
 // pad its request and de-duplicates the result while preserving the order.
 func normalizeProfileIDs(ids []int32) []int32 {

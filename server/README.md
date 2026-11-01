@@ -247,6 +247,17 @@ For documentation on how what each endpoints does, please refer
 to [LibreMatch documentation](https://wiki.librematch.org/rlink/game/start). Other endpoints are mostly
 self-explanatory.
 
+### Public Community API
+
+The server handles the documented public `GET /community/...` paths locally without a game session. Ratings,
+recent match history, profiles, and visible/joinable advertisements come from this server's game data; news,
+achievement definitions, events, and leaderboard definitions come from configured resources. Inventories and
+avatar stats are available for profiles currently loaded by the server.
+
+Clan endpoints return empty results because this server does not store clan data. Achievement awards also return
+empty lists; the server does not persist awards. `/community/external/proxysteamuserrequest` is not served locally
+and continues through the normal API proxy, so it requires Internet access.
+
 ## Docker
 
 See [Docker](../tools/server-docker) for information.

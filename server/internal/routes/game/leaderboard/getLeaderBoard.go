@@ -29,6 +29,15 @@ type getLeaderBoardRequest struct {
 // The three arrays are matched by index, so an entry is only emitted when all
 // three positions can be filled.
 func GetLeaderBoard(w http.ResponseWriter, r *http.Request) {
+	getLeaderBoard(w, r, models.SessionOrPanic(r).GetClientLibVersion())
+}
+
+// GetCommunityLeaderBoard serves the public endpoint without a game session.
+func GetCommunityLeaderBoard(w http.ResponseWriter, r *http.Request) {
+	getLeaderBoard(w, r, i.V190)
+}
+
+func getLeaderBoard(w http.ResponseWriter, r *http.Request, clientLibVersion uint16) {
 	logger.Printf("leaderboard.getLeaderBoard: query=%s\n", r.URL.RawQuery)
 
 	// Defaults are assigned before binding so a missing parameter keeps the
@@ -61,7 +70,6 @@ func GetLeaderBoard(w http.ResponseWriter, r *http.Request) {
 	page, total := game.MatchHistory().GetLeaderboardPage(q.LeaderboardID, q.Start-1, q.Count)
 	users := game.Users()
 	history := game.MatchHistory()
-	clientLibVersion := models.SessionOrPanic(r).GetClientLibVersion()
 
 	// Ratings only reference profile IDs. The stored identity lets the ladder
 	// list players that are not connected right now, which is what the client

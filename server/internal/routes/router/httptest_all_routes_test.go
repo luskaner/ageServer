@@ -751,6 +751,35 @@ func TestApiAgeOfEmpires_httptest(t *testing.T) {
 	}
 }
 
+func TestCommunityAPIEndpointsArePublic(t *testing.T) {
+	g := newTestGame(t, game.AoE2)
+	handler := NewApiAgeOfEmpires().InitializeRoutes(game.AoE2, nil)
+	paths := []string{
+		"/community/leaderboard/GetPersonalStat?profile_ids=%5B%5D",
+		"/community/leaderboard/getRecentMatchHistory?profile_ids=%5B%5D",
+		"/community/advertisement/findAdvertisements",
+		"/community/leaderboard/GetAvatarStatForProfile?profile_names=%5B%5D",
+		"/community/achievement/getAchievements?profileids=1",
+		"/community/achievement/getAvailableAchievements",
+		"/community/news/getNews",
+		"/community/clan/find?joinPolicies=0&name=&tags=&start=0&count=10",
+		"/community/clan/getClanInfoFull?name=test",
+		"/community/CommunityEvent/getAvailableCommunityEvents",
+		"/community/item/getInventoryByProfileIDs?profileids=1",
+		"/community/leaderboard/getAvailableLeaderboards",
+		"/community/leaderboard/getLeaderboard2?leaderboard_id=6&start=1&count=10",
+	}
+	for _, path := range paths {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request = request.WithContext(context.WithValue(request.Context(), "game", g))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200 without a game session; body: %s", path, response.Code, response.Body.String())
+		}
+	}
+}
+
 // -------------------------------------------------------------------
 // SessionMiddleware + LoginMiddleware via httptest
 // -------------------------------------------------------------------

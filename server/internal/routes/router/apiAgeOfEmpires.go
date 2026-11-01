@@ -6,6 +6,7 @@ import (
 	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/common/game"
 	"github.com/luskaner/ageServer/server/internal/routes/apiAgeOfEmpires/textmoderation"
+	"github.com/luskaner/ageServer/server/internal/routes/community"
 	"github.com/luskaner/ageServer/server/internal/routes/matchcontent"
 )
 
@@ -24,6 +25,7 @@ func (a *ApiAgeOfEmpires) Initialize(_ string) bool {
 
 func (a *ApiAgeOfEmpires) InitializeRoutes(gameId string, next http.Handler) http.Handler {
 	a.Proxy = NewProxy(a.Name(), func(_ string, _ http.Handler) http.Handler {
+		community.Register(a.group)
 		a.group.HandleFunc("POST", "/textmoderation", textmoderation.TextModeration)
 		a.group.HandleFunc("POST", "/api/MatchContent/", matchcontent.Upload)
 		a.group.HandleFunc("GET", "/api/MatchContent/{matchId}", matchcontent.Download)
