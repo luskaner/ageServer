@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/andygrunwald/vdf"
-	"github.com/luskaner/ageLANServer/common/game"
+	"github.com/luskaner/ageServer/common/game"
 )
 
 type ConfigPathFn func() string
@@ -77,28 +77,30 @@ func libraryFolder(appId string, configPathFn ConfigPathFn, configPathAltFn Conf
 		_ = f.Close()
 	}()
 	parser := vdf.NewParser(f)
-	var data map[string]interface{}
+	var data map[string]any
 	data, err = parser.Parse()
 	if err != nil {
 		return
 	}
-	libraryFolders, ok := data["libraryfolders"].(map[string]interface{})
+	libraryFolders, ok := data["libraryfolders"].(map[string]any)
 	if !ok {
 		return
 	}
-	var folderMap map[string]interface{}
+	var folderMap map[string]any
 	for _, dir := range libraryFolders {
-		folderMap, ok = dir.(map[string]interface{})
+		folderMap, ok = dir.(map[string]any)
 		if !ok {
 			continue
 		}
-		var apps map[string]interface{}
-		apps, ok = folderMap["apps"].(map[string]interface{})
+		var apps map[string]any
+		apps, ok = folderMap["apps"].(map[string]any)
 		if !ok {
 			continue
 		}
 		if _, exists := apps[appId]; exists {
-			return folderMap["path"].(string)
+			if path, ok := folderMap["path"].(string); ok {
+				return path
+			}
 		}
 	}
 	return
@@ -119,7 +121,15 @@ func (g Game) Path() (folder string) {
 	if err != nil {
 		return
 	}
-	folder = filepath.Join(basePath, "common", data["AppState"].(map[string]any)["installdir"].(string))
+	appState, ok := data["AppState"].(map[string]any)
+	if !ok {
+		return
+	}
+	installDir, ok := appState["installdir"].(string)
+	if !ok {
+		return
+	}
+	folder = filepath.Join(basePath, "common", installDir)
 	if f, err := os.Stat(folder); err != nil || !f.IsDir() {
 		return ""
 	}

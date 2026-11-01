@@ -1,19 +1,20 @@
 package config
 
 import (
-	"github.com/luskaner/ageLANServer/common/cmd"
+	"github.com/luskaner/ageServer/common/cmd"
 	"github.com/spf13/pflag"
 )
 
 type CommonBaseValues struct {
 	*cmd.GameIdValues
 	*cmd.LogRootValues
-	GamePath     string
-	DataPath     string
-	HostFilePath string
-	CertFilePath string
-	Metadata     bool
-	Profiles     bool
+	GamePath       string
+	DataPath       string
+	HostFilePath   string
+	CertFilePath   string
+	SigKeyFilePath string
+	Metadata       bool
+	Profiles       bool
 }
 
 func NewCommonBaseValues() *CommonBaseValues {
@@ -39,6 +40,10 @@ func (v *CommonBaseValues) CertFilePathRef() *string {
 	return &v.CertFilePath
 }
 
+func (v *CommonBaseValues) SigKeyFilePathRef() *string {
+	return &v.SigKeyFilePath
+}
+
 func (v *CommonBaseValues) MetadataRef() *bool {
 	return &v.Metadata
 }
@@ -47,7 +52,7 @@ func (v *CommonBaseValues) ProfilesRef() *bool {
 	return &v.Profiles
 }
 
-func AddCommonFlags(flags *pflag.FlagSet, hostFilePathDescSuffix string, certFilePathDescSuffix string, metadataDesc string, profilesDesc string) (values *CommonBaseValues) {
+func AddCommonFlags(flags *pflag.FlagSet, hostFilePathDescSuffix string, certFilePathDescSuffix string, sigKeyFilePathDescSuffix string, metadataDesc string, profilesDesc string) (values *CommonBaseValues) {
 	values = NewCommonBaseValues()
 	flags.StringVar(
 		values.GamePathRef(),
@@ -63,6 +68,7 @@ func AddCommonFlags(flags *pflag.FlagSet, hostFilePathDescSuffix string, certFil
 	)
 	flags.StringVarP(values.HostFilePathRef(), "hostFilePath", "o", "", "Path to the host file. "+hostFilePathDescSuffix)
 	flags.StringVarP(values.CertFilePathRef(), "certFilePath", "t", "", "Path to the certificate file. "+certFilePathDescSuffix)
+	flags.StringVar(values.SigKeyFilePathRef(), "sigKeyFilePath", "", "Path to the server's public signing key file. "+sigKeyFilePathDescSuffix)
 	flags.BoolVarP(values.MetadataRef(), "metadata", "m", false, metadataDesc)
 	flags.BoolVarP(values.ProfilesRef(), "profiles", "p", false, profilesDesc)
 	cmd.LogRootCommand(flags, values.LogRootRef())

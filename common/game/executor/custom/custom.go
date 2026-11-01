@@ -1,10 +1,12 @@
 package custom
 
-import commonExecutor "github.com/luskaner/ageLANServer/common/executor/exec"
+import commonExecutor "github.com/luskaner/ageServer/common/executor/exec"
 
 type Exec struct {
 	Executable string
 }
+
+var execFn = func(o commonExecutor.Options) *commonExecutor.Result { return o.Exec() }
 
 func (exec Exec) execute(args []string, admin bool, optionsFn func(options commonExecutor.Options)) (result *commonExecutor.Result) {
 	options := commonExecutor.Options{File: exec.Executable, Args: args, Pid: true}
@@ -14,7 +16,7 @@ func (exec Exec) execute(args []string, admin bool, optionsFn func(options commo
 	options.ShowWindow = true
 	options.GUI = true
 	optionsFn(options)
-	result = options.Exec()
+	result = execFn(options)
 	return
 }
 

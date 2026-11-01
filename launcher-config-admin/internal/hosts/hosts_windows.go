@@ -3,14 +3,15 @@ package hosts
 import (
 	"io"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/logger"
-	"github.com/luskaner/ageLANServer/launcher-config-admin/internal"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/logger"
+	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
+	"github.com/luskaner/ageServer/launcher-config-admin/internal"
 )
 
 func FlushDns() (result *exec.Result) {
-	commonLogger.Println("Flushing DNS cache...")
+	commonLogger.Println(commonUi.Step("Flushing DNS cache..."))
 	options := exec.Options{File: "ipconfig", SpecialFile: true, UseWorkingPath: true, ExitCode: true, Wait: true, Args: []string{"/flushdns"}}
 	var suffix string
 	if internal.SetUp == nil {
@@ -24,17 +25,17 @@ func FlushDns() (result *exec.Result) {
 		if writer != nil {
 			options.Stdout = writer
 			options.Stderr = writer
-			commonLogger.Printf("run ipconfig: %s\n", options.String())
+			commonLogger.Println(commonUi.Detail("run ipconfig: %s", options.String()))
 		}
 		result = options.Exec()
 		if result != nil && !result.Success() {
-			commonLogger.Printf("Flushing DNS cache finished with exit code %d.\n", result.ExitCode)
+			commonLogger.Println(commonUi.Fail("Flushing DNS cache finished with exit code %d.", result.ExitCode))
 			if result.Err != nil {
-				commonLogger.Printf("Flush DNS error: %v\n", result.Err)
+				commonLogger.Println(commonUi.Detail("Flush DNS error: %v", result.Err))
 			}
 		}
 	}); err != nil {
-		commonLogger.Printf("Failed to buffer flush DNS log: %v\n", err)
+		commonLogger.Println(commonUi.Fail("Failed to buffer flush DNS log: %v", err))
 		result = &exec.Result{
 			ExitCode: common.ErrFileLog,
 			Err:      err,

@@ -4,5 +4,5 @@ package hosts
 
 import "math"
 
-const maxHostsPerLine = math.MaxInt // Not an actual limit
-const maxCharsPerLine = math.MaxUint8 + 1
+var maxHostsPerLine = math.MaxInt // Not an actual limit
+var maxCharsPerLine = math.MaxUint8 + 1

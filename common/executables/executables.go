@@ -64,8 +64,13 @@ func BaseNameNoExt(fileName string) string {
 	return strings.TrimSuffix(fileName, extension)
 }
 
+var (
+	osExecutableFn = os.Executable
+	osStatFn       = os.Stat
+)
+
 func FindPath(executableName string) string {
-	ex, err := os.Executable()
+	ex, err := osExecutableFn()
 	if err != nil {
 		return ""
 	}
@@ -74,7 +79,7 @@ func FindPath(executableName string) string {
 	var f os.FileInfo
 	for _, dir := range directories {
 		executablePath := filepath.Join(exePath, dir, exeDir, executableName)
-		if f, err = os.Stat(executablePath); err == nil && !f.IsDir() {
+		if f, err = osStatFn(executablePath); err == nil && !f.IsDir() {
 			executablePath, _ = filepath.Abs(executablePath)
 			return executablePath
 		}

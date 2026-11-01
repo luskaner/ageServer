@@ -3,9 +3,9 @@ package xbox
 import (
 	"fmt"
 
-	commonExecutor "github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/common/game/appx"
+	commonExecutor "github.com/luskaner/ageServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/common/game/appx"
 )
 
 type Exec struct {

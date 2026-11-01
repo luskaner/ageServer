@@ -1,7 +1,7 @@
 package config
 
 import (
-	commonCmd "github.com/luskaner/ageLANServer/common/cmd"
+	commonCmd "github.com/luskaner/ageServer/common/cmd"
 	"github.com/spf13/pflag"
 )
 

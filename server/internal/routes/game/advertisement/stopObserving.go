@@ -3,9 +3,9 @@ package advertisement
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/routes/game/advertisement/shared"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/routes/game/advertisement/shared"
 )
 
 func StopObserving(w http.ResponseWriter, r *http.Request) {

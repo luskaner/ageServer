@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common/game"
+	"github.com/luskaner/ageServer/common/game"
 	"github.com/spf13/pflag"
 )
 
@@ -15,6 +16,16 @@ const descriptionStart = `Game type.`
 const descriptionMultipleStart = `Game types.`
 const descriptionEnd = `are supported.`
 
+// supportedGamesDescription lists the supported games in a fixed order.
+//
+// The set behind it is unordered, so joining it directly made the help text
+// shuffle between two runs of the same binary, which is a bad way to discover
+// that a page changed.
+func supportedGamesDescription() string {
+	names := game.SupportedGames.ToSlice()
+	slices.Sort(names)
+	return strings.Join(names, ", ")
+}
 func GameVarCommand(flags *pflag.FlagSet, gameId *string) {
 	flags.StringVarP(
 		gameId,
@@ -24,7 +35,7 @@ func GameVarCommand(flags *pflag.FlagSet, gameId *string) {
 		fmt.Sprintf(
 			`%s %s %s`,
 			descriptionStart,
-			strings.Join(game.SupportedGames.ToSlice(), ", "),
+			supportedGamesDescription(),
 			descriptionEnd,
 		),
 	)
@@ -34,7 +45,7 @@ func gamesDescription() string {
 	return fmt.Sprintf(
 		`%s %s %s`,
 		descriptionMultipleStart,
-		strings.Join(game.SupportedGames.ToSlice(), ", "),
+		supportedGamesDescription(),
 		descriptionEnd,
 	)
 }

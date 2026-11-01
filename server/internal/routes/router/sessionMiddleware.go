@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 var sessAnonymousPaths = map[string]bool{
@@ -17,9 +17,26 @@ var sessAnonymousPaths = map[string]bool{
 	"/game/item/getItemBundleItemsJson": true,
 }
 
+// sessAnonymousPrefixes are path prefixes served without a session. The game
+// does not send sessionID on custom-file (savegame/replay) requests, exactly
+// like it does not on cloudfiles.
+var sessAnonymousPrefixes = []string{"/cloudfiles/", "/api/MatchContent/"}
+
+func isAnonymousPath(path string) bool {
+	if sessAnonymousPaths[path] {
+		return true
+	}
+	for _, prefix := range sessAnonymousPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func SessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !sessAnonymousPaths[r.URL.Path] && !strings.HasPrefix(r.URL.Path, "/cloudfiles/") {
+		if !isAnonymousPath(r.URL.Path) {
 			sessionID := r.FormValue("sessionID")
 			if sessionID == "" {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)

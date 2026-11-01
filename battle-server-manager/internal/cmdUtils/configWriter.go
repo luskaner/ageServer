@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/luskaner/ageLANServer/common/battleServer"
+	"github.com/luskaner/ageServer/common/battleServer"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -19,14 +19,14 @@ func WriteConfig(gameId string, config battleServer.Config) (err error) {
 	var tomlBytes []byte
 	tomlBytes, err = toml.Marshal(config)
 	if err != nil {
-		err = fmt.Errorf("error while marshalling battle server config: %v", err)
+		return fmt.Errorf("error while marshalling battle server config: %v", err)
 	}
 	var entries []fs.DirEntry
 	entries, err = os.ReadDir(folder)
 	if err != nil {
 		return fmt.Errorf("error while reading battle server config directory \"%s\": %v", folder, err)
 	}
-	i := -1
+	maxIdx := -1
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -35,9 +35,11 @@ func WriteConfig(gameId string, config battleServer.Config) (err error) {
 		if localErr != nil {
 			continue
 		}
-		i = index
+		if index > maxIdx {
+			maxIdx = index
+		}
 	}
-	name := battleServer.Name(i + 1)
+	name := battleServer.Name(maxIdx + 1)
 	err = os.WriteFile(filepath.Join(folder, name), tomlBytes, 0644)
 	if err != nil {
 		return fmt.Errorf("error while writing battle server config to file \"%s\": %v", name, err)

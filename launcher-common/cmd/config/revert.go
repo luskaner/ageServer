@@ -88,6 +88,7 @@ func RevertFlagSet() (values *RevertValues, flags *pflag.FlagSet) {
 		flags,
 		"",
 		"",
+		"",
 		"Restore metadata. Unnecessary for AoE:DE",
 		"Restore profiles.",
 	)

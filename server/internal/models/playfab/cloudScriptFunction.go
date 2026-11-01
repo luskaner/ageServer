@@ -1,7 +1,7 @@
 package playfab
 
 import (
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 type Named interface {

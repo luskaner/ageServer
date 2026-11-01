@@ -7,18 +7,18 @@ import (
 	"os"
 	"reflect"
 
-	"github.com/luskaner/ageLANServer/common/logger/serverCommunication"
-	"github.com/luskaner/ageLANServer/common/logger/serverCommunication/request"
-	"github.com/luskaner/ageLANServer/common/logger/serverCommunication/wss"
-	"github.com/luskaner/ageLANServer/server-replay/internal/logEntry"
-	"github.com/luskaner/ageLANServer/server-replay/internal/logEntry/http"
-	logEntryWss "github.com/luskaner/ageLANServer/server-replay/internal/logEntry/wss"
+	"github.com/luskaner/ageServer/common/logger/serverCommunication"
+	"github.com/luskaner/ageServer/common/logger/serverCommunication/request"
+	"github.com/luskaner/ageServer/common/logger/serverCommunication/wss"
+	"github.com/luskaner/ageServer/server-replay/internal/logEntry"
+	"github.com/luskaner/ageServer/server-replay/internal/logEntry/http"
+	logEntryWss "github.com/luskaner/ageServer/server-replay/internal/logEntry/wss"
 )
 
 var wssSubtypes = map[string]reflect.Type{
-	"Connection":    reflect.TypeOf(wss.Connection{}),
-	"Disconnection": reflect.TypeOf(wss.Disconnection{}),
-	"Data":          reflect.TypeOf(wss.Data{}),
+	"Connection":    reflect.TypeFor[wss.Connection](),
+	"Disconnection": reflect.TypeFor[wss.Disconnection](),
+	"Data":          reflect.TypeFor[wss.Data](),
 }
 
 const maxTokenSize = 256 * 1024

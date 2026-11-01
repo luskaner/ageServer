@@ -8,62 +8,59 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executor"
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/common/hosts"
-	"github.com/luskaner/ageLANServer/common/logger"
-	launcherCommon "github.com/luskaner/ageLANServer/launcher-common"
-	launcherCommonCmd "github.com/luskaner/ageLANServer/launcher-common/cmd/config"
-	commonUserData "github.com/luskaner/ageLANServer/launcher-common/userData"
-	"github.com/luskaner/ageLANServer/launcher-config/internal"
-	"github.com/luskaner/ageLANServer/launcher-config/internal/admin"
-	"github.com/luskaner/ageLANServer/launcher-config/internal/cmd/wrapper"
-	"github.com/luskaner/ageLANServer/launcher-config/internal/userData"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/common/hosts"
+	"github.com/luskaner/ageServer/common/logger"
+	launcherCommon "github.com/luskaner/ageServer/launcher-common"
+	launcherCommonCmd "github.com/luskaner/ageServer/launcher-common/cmd/config"
+	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
+	commonUserData "github.com/luskaner/ageServer/launcher-common/userData"
+	"github.com/luskaner/ageServer/launcher-config/internal"
 	"github.com/spf13/pflag"
 )
 
 func removeUserCert() bool {
-	commonLogger.Println("Removing previously added user certificate, authorize it if needed ...")
-	if _, err := wrapper.RemoveUserCerts(); err == nil {
-		commonLogger.Println("Successfully removed user certificate")
+	commonLogger.Println(commonUi.Step("Removing previously added user certificate, authorize it if needed ..."))
+	if _, err := removeUserCertsFn(); err == nil {
+		commonLogger.Println(commonUi.Ok("Successfully removed user certificate"))
 		return true
 	}
 
-	commonLogger.Println("Failed to remove user certificate")
+	commonLogger.Println(commonUi.Fail("Failed to remove user certificate"))
 	return false
 }
 
 func restoreMetadata() bool {
-	commonLogger.Println("Restoring previously backed up metadata")
-	if userData.Metadata(path).Restore() {
-		commonLogger.Println("Successfully restored metadata")
+	commonLogger.Println(commonUi.Step("Restoring previously backed up metadata"))
+	if metadataRestoreFn(path) {
+		commonLogger.Println(commonUi.Ok("Successfully restored metadata"))
 		return true
 	}
 
-	commonLogger.Println("Failed to restore metadata")
+	commonLogger.Println(commonUi.Fail("Failed to restore metadata"))
 	return false
 }
 
 func restoreProfiles() bool {
-	commonLogger.Println("Restoring previously backed up profiles")
-	if userData.RestoreProfiles(path, true) {
-		commonLogger.Println("Successfully restored profiles")
+	commonLogger.Println(commonUi.Step("Restoring previously backed up profiles"))
+	if restoreProfilesFn(path, true) {
+		commonLogger.Println(commonUi.Ok("Successfully restored profiles"))
 		return true
 	}
 
-	commonLogger.Println("Failed to restore profiles")
+	commonLogger.Println(commonUi.Fail("Failed to restore profiles"))
 	return false
 }
 
 func restoreGameCert() bool {
-	commonLogger.Println("Restoring previously added game's certificate store...")
-	if _, err := internal.NewCACert(setupValues.GameId, setupValues.GamePath).Restore(); err == nil {
-		commonLogger.Println("Successfully restored game's certificate store.")
+	commonLogger.Println(commonUi.Step("Restoring previously added game's certificate store..."))
+	if err, _ := newCACertFn(setupValues.GameId, setupValues.GamePath).Restore(); err == nil {
+		commonLogger.Println(commonUi.Ok("Successfully restored game's certificate store."))
 		return true
 	}
 
-	commonLogger.Println("Failed to restore game's certificate store.")
+	commonLogger.Println(commonUi.Fail("Failed to restore game's certificate store."))
 	return false
 }
 
@@ -81,10 +78,13 @@ func undoSetUp() {
 		restoreGameCert()
 	}
 	if setupValues.HostFilePath != "" {
-		_ = os.Remove(setupValues.HostFilePath)
+		_ = removeFileFn(setupValues.HostFilePath)
 	}
 	if setupValues.CertFilePath != "" {
-		_ = os.Remove(setupValues.CertFilePath)
+		_ = removeFileFn(setupValues.CertFilePath)
+	}
+	if setupValues.SigKeyFilePath != "" {
+		_ = removeFileFn(setupValues.SigKeyFilePath)
 	}
 }
 
@@ -97,6 +97,15 @@ var backedUpProfiles bool
 var addedGameCert bool
 
 func runSetUp(args []string) (err error, exitCode int) {
+	// Reset state so a previous (failed or partial) invocation in the same
+	// process cannot make undoSetUp revert things this run never did.
+	setupValues = nil
+	path = nil
+	addedUserCert = false
+	backedUpMetadata = false
+	backedUpProfiles = false
+	addedGameCert = false
+
 	var flags *pflag.FlagSet
 	setupValues, flags = launcherCommonCmd.SetUpFlagSet()
 	if err = flags.Parse(args); err != nil {
@@ -107,6 +116,7 @@ func runSetUp(args []string) (err error, exitCode int) {
 	if setupValues.GameId == "" {
 		return errors.New("required flag 'game' not set"), common.ErrSyntax
 	}
+	common.SetUseInternet(setupValues.CanUseInternet)
 
 	// signal handler
 	sigs := make(chan os.Signal, 1)
@@ -119,7 +129,9 @@ func runSetUp(args []string) (err error, exitCode int) {
 		}
 	}()
 	if setupValues.LogRoot != "" {
-		internal.Initialize(setupValues.LogRoot)
+		if initErr := initializeFn(setupValues.LogRoot); initErr != nil {
+			commonLogger.Println(commonUi.Fail("Failed to initialize file logging: %s", initErr))
+		}
 	}
 	if setupValues.GameId == game.AoE1 {
 		setupValues.Metadata = false
@@ -128,13 +140,14 @@ func runSetUp(args []string) (err error, exitCode int) {
 		setupValues.AddCACertData = nil
 	}
 	if setupValues.Metadata || setupValues.Profiles {
-		var fileInfo os.FileInfo
-		if !game.SupportedGames.ContainsOne(setupValues.GameId) {
-			commonLogger.Println("Invalid game type")
+		if !supportedGamesContainsFn(setupValues.GameId) {
+			commonLogger.Println(commonUi.Fail("Invalid game type"))
 			exitCode = launcherCommon.ErrInvalidGame
 			return
-		} else if fileInfo, err = os.Stat(setupValues.DataPath); err != nil || !fileInfo.IsDir() {
-			commonLogger.Println("Invalid data path")
+		}
+		var fileInfo os.FileInfo
+		if fileInfo, err = statFn(setupValues.DataPath); err != nil || !fileInfo.IsDir() {
+			commonLogger.Println(commonUi.Fail("Invalid data path"))
 			exitCode = internal.ErrInvalidDataPath
 			return
 		}
@@ -144,90 +157,96 @@ func runSetUp(args []string) (err error, exitCode int) {
 	var addLocalCertData []byte = nil
 	if setupValues.CertFilePath != "" {
 		if len(setupValues.AddLocalCertData) == 0 {
-			commonLogger.Println("Certificate file path is set but no local certificate data is provided")
+			commonLogger.Println(commonUi.Fail("Certificate file path is set but no local certificate data is provided"))
 			exitCode = internal.ErrMissingLocalCertData
 			return
 		}
 	} else {
 		addLocalCertData = setupValues.AddLocalCertData
 	}
-	commonLogger.Printf("Setting up configuration for %s...\n", setupValues.GameId)
-	isAdmin := executor.IsAdmin()
+	if setupValues.SigKeyFilePath != "" {
+		if len(setupValues.AddSigKeyData) == 0 {
+			commonLogger.Println(commonUi.Fail("Signing key file path is set but no signing key data is provided"))
+			exitCode = internal.ErrMissingSigKeyData
+			return
+		}
+	}
+	commonLogger.Println(commonUi.Step("Setting up configuration for %s...", setupValues.GameId))
 	if setupValues.AddUserCertData != nil {
-		commonLogger.Println("Adding user certificate, authorize it if needed...")
-		crt := common.BytesToCertificate(setupValues.AddUserCertData)
+		commonLogger.Println(commonUi.Step("Adding user certificate, authorize it if needed..."))
+		crt := bytesToCertFn(setupValues.AddUserCertData)
 		if crt == nil {
-			commonLogger.Println("Failed to parse certificate")
+			commonLogger.Println(commonUi.Fail("Failed to parse certificate"))
 			exitCode = internal.ErrUserCertAddParse
 			undoSetUp()
 			return
 		}
-		if err = wrapper.AddUserCerts([]*x509.Certificate{crt}); err == nil {
-			commonLogger.Println("Successfully added user certificate")
+		if err = addUserCertsFn([]*x509.Certificate{crt}); err == nil {
+			commonLogger.Println(commonUi.Ok("Successfully added user certificate"))
 			addedUserCert = true
 		} else {
-			commonLogger.Println("Failed to add user certificate")
-			commonLogger.Println("Error message: " + err.Error())
+			commonLogger.Println(commonUi.Fail("Failed to add user certificate"))
+			commonLogger.Println(commonUi.Fault("Error message: %s", err.Error()))
 			exitCode = internal.ErrUserCertAdd
 			undoSetUp()
 			return
 		}
 	}
 	if setupValues.Metadata {
-		commonLogger.Println("Backing up metadata")
-		if userData.Metadata(path).Backup() {
-			commonLogger.Println("Successfully backed up metadata")
+		commonLogger.Println(commonUi.Step("Backing up metadata"))
+		if metadataBackupFn(path) {
+			commonLogger.Println(commonUi.Ok("Successfully backed up metadata"))
 			backedUpMetadata = true
 		} else {
-			commonLogger.Println("Failed to back up metadata")
+			commonLogger.Println(commonUi.Fail("Failed to back up metadata"))
 			exitCode = internal.ErrMetadataBackup
 			undoSetUp()
 			return
 		}
 	}
 	if setupValues.Profiles {
-		commonLogger.Println("Backing up profiles")
-		if userData.BackupProfiles(path) {
-			commonLogger.Println("Successfully backed up profiles")
+		commonLogger.Println(commonUi.Step("Backing up profiles"))
+		if backupProfilesFn(path) {
+			commonLogger.Println(commonUi.Ok("Successfully backed up profiles"))
 			backedUpProfiles = true
 		} else {
-			commonLogger.Println("Failed to back up profiles")
+			commonLogger.Println(commonUi.Fail("Failed to back up profiles"))
 			exitCode = internal.ErrProfilesBackup
 			undoSetUp()
 			return
 		}
 	}
 	if setupValues.AddCACertData != nil {
-		commonLogger.Println("Adding certificate to game's store...")
+		commonLogger.Println(commonUi.Step("Adding certificate to game's store..."))
 		if setupValues.GamePath == "" {
-			commonLogger.Println("Game path is required to add certificate to game's store")
+			commonLogger.Println(commonUi.Fail("Game path is required to add certificate to game's store"))
 			exitCode = internal.ErrGamePathMissing
 			undoSetUp()
 			return
 		}
-		crt := common.BytesToCertificate(setupValues.AddCACertData)
+		crt := bytesToCertFn(setupValues.AddCACertData)
 		if crt == nil {
-			commonLogger.Println("Failed to parse certificate")
+			commonLogger.Println(commonUi.Fail("Failed to parse certificate"))
 			exitCode = internal.ErrGameCertAddParse
 			undoSetUp()
 			return
 		}
-		gameCert := internal.NewCACert(setupValues.GameId, setupValues.GamePath)
+		gameCert := newCACertFn(setupValues.GameId, setupValues.GamePath)
 		if err = gameCert.Backup(); err == nil {
-			commonLogger.Println("Successfully backed up game's store.")
+			commonLogger.Println(commonUi.Ok("Successfully backed up game's store."))
 			addedGameCert = true
 		} else {
-			commonLogger.Println("Failed to add certificate to game's store.")
-			commonLogger.Println("Error message: " + err.Error())
+			commonLogger.Println(commonUi.Fail("Failed to add certificate to game's store."))
+			commonLogger.Println(commonUi.Fault("Error message: %s", err.Error()))
 			exitCode = internal.ErrGameCertBackup
 			undoSetUp()
 			return
 		}
 		if err = gameCert.Append([]*x509.Certificate{crt}); err == nil {
-			commonLogger.Println("Successfully added certificate to game's store.")
+			commonLogger.Println(commonUi.Ok("Successfully added certificate to game's store."))
 		} else {
-			commonLogger.Println("Failed to add certificate to game's store.")
-			commonLogger.Println("Error message: " + err.Error())
+			commonLogger.Println(commonUi.Fail("Failed to add certificate to game's store."))
+			commonLogger.Println(commonUi.Fault("Error message: %s", err.Error()))
 			exitCode = internal.ErrGameCertAdd
 			undoSetUp()
 			return
@@ -239,14 +258,14 @@ func runSetUp(args []string) (err error, exitCode int) {
 			ipToMap = setupValues.MapIp
 		}
 	} else if len(setupValues.MapIp) > 0 {
-		if ok, addHostsErr := hosts.AddHosts(setupValues.MapIp, setupValues.GameId, setupValues.HostFilePath, hosts.WindowsLineEnding, setupValues.MacOsExclusiveMappings, nil); ok {
-			commonLogger.Println("Successfully added host mappings")
+		if ok, addHostsErr := addHostsFn(setupValues.MapIp, setupValues.GameId, setupValues.HostFilePath, hosts.WindowsLineEnding, setupValues.MacOsExclusiveMappings, nil); ok {
+			commonLogger.Println(commonUi.Ok("Successfully added host mappings"))
 		} else {
-			commonLogger.Printf("Failed to add host mappings with IP %q to custom hosts file %q\n", setupValues.MapIp.String(), setupValues.HostFilePath)
+			commonLogger.Println(commonUi.Fail("Failed to add host mappings with IP %s to custom hosts file %s", setupValues.MapIp.String(), setupValues.HostFilePath))
 			if addHostsErr != nil {
-				commonLogger.Println("Error message:", addHostsErr)
+				commonLogger.Println(commonUi.Fault("Error message: %s", addHostsErr))
 			} else {
-				commonLogger.Println("Error message: unknown (AddHosts returned ok=false with nil error)")
+				commonLogger.Println(commonUi.Fault("Error message: unknown (AddHosts returned ok=false with nil error)"))
 			}
 			exitCode = internal.ErrHostsAdd
 			undoSetUp()
@@ -255,56 +274,70 @@ func runSetUp(args []string) (err error, exitCode int) {
 	}
 	if setupValues.CertFilePath != "" {
 		var certFile *os.File
-		certFile, err = os.Create(setupValues.CertFilePath)
+		certFile, err = createFileFn(setupValues.CertFilePath)
 		if err == nil {
-			err = common.WriteAsPem(setupValues.AddLocalCertData, certFile)
+			err = writeAsPemFn(setupValues.AddLocalCertData, certFile)
 			_ = certFile.Close()
 		}
 		if err != nil {
-			commonLogger.Println("Error saving certificate file:", err)
+			commonLogger.Println(commonUi.Fail("Error saving certificate file: %s", err))
 			exitCode = internal.ErrUserCertAdd
 			undoSetUp()
 			return
 		}
 	}
+	if setupValues.SigKeyFilePath != "" {
+		var sigKeyFile *os.File
+		sigKeyFile, err = createFileFn(setupValues.SigKeyFilePath)
+		if err == nil {
+			_, err = sigKeyFile.Write(setupValues.AddSigKeyData)
+			_ = sigKeyFile.Close()
+		}
+		if err != nil {
+			commonLogger.Println(commonUi.Fail("Error saving signing key file: %s", err))
+			exitCode = internal.ErrSigKeyFileAdd
+			undoSetUp()
+			return
+		}
+	}
 	if addLocalCertData != nil || len(ipToMap) > 0 {
-		agentStarted := admin.ConnectAgentIfNeeded() == nil
+		agentStarted := connectAgentFn() == nil
 		if agentStarted {
-			commonLogger.Println("Communicating with 'config-admin-agent' to add local cert and/or host mappings...")
+			commonLogger.Println(commonUi.Step("Communicating with config-admin-agent to add local cert and/or host mappings..."))
 		} else {
-			str := "Running 'config-admin' to add local cert and/or host mappings"
-			if !isAdmin {
+			str := "Running config-admin to add local cert and/or host mappings"
+			if !isAdminFn() {
 				str += ", authorize it if needed"
 			}
-			commonLogger.Println(str + "...")
+			commonLogger.Println(commonUi.Step("%s", str+"..."))
 		}
-		err, exitCode = admin.RunSetUp(setupValues.GameId, setupValues.LogRoot, ipToMap, setupValues.MacOsExclusiveMappings, addLocalCertData)
+		err, exitCode = runSetUpAdminFn(setupValues.GameId, setupValues.LogRoot, ipToMap, setupValues.MacOsExclusiveMappings, addLocalCertData, setupValues.CanUseInternet)
 		if err == nil && exitCode == common.ErrSuccess {
 			if agentStarted {
-				commonLogger.Println("Successfully communicated with 'config-admin-agent'")
+				commonLogger.Println(commonUi.Ok("Successfully communicated with config-admin-agent"))
 			} else {
-				commonLogger.Println("Successfully ran 'config-admin'")
+				commonLogger.Println(commonUi.Ok("Successfully ran config-admin"))
 			}
 		} else {
-			commonLogger.Printf("Failed admin setup with IP %q (via agent=%v)\n", ipToMap.String(), agentStarted)
+			commonLogger.Println(commonUi.Fail("Failed admin setup with IP %s (via agent=%v)", ipToMap.String(), agentStarted))
 			if err != nil {
-				commonLogger.Println("Received error:")
-				commonLogger.Println(err)
+				commonLogger.Println(commonUi.Fault("Received error:"))
+				commonLogger.Println(commonUi.Detail("%s", err))
 			} else {
-				commonLogger.Println("Received error: none (exit code only)")
+				commonLogger.Println(commonUi.Fault("Received error: none (exit code only)"))
 			}
 			if exitCode != common.ErrSuccess {
-				commonLogger.Println("Received exit code:")
-				commonLogger.Println(exitCode)
+				commonLogger.Println(commonUi.Fault("Received exit code:"))
+				commonLogger.Println(commonUi.Detail("%d", exitCode))
 			}
 			if !agentStarted {
-				commonLogger.Println("Check the 'config-admin_setup_hosts' log file for the underlying 'config-admin' output.")
+				commonLogger.Println(commonUi.Detail("Check the config-admin_setup_hosts log file for the underlying config-admin output."))
 			}
 			exitCode = internal.ErrAdminSetup
 			if agentStarted {
-				commonLogger.Println("Failed to communicate with 'config-admin-agent'. Communicating with it to shutdown...")
+				commonLogger.Println(commonUi.Fail("Failed to communicate with config-admin-agent. Communicating with it to shutdown..."))
 				if setupValues.AgentEndOnError {
-					_ = admin.StopAgentIfNeeded()
+					_ = stopAgentIfNeededFn()
 				}
 				undoSetUp()
 			}

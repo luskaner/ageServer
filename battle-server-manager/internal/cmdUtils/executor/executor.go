@@ -4,13 +4,22 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/common/logger"
+	"github.com/luskaner/ageServer/common/cmdlog"
+	"github.com/luskaner/ageServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/game"
+	commonLogger "github.com/luskaner/ageServer/common/logger"
 )
 
 func ExecuteBattleServer(gameId string, path string, region string, name string, ports []int, certFile string,
 	keyFile string, extraArgs []string, hideWindow bool, logRoot string) (pid uint32, err error) {
+	if len(ports) < 2 {
+		err = fmt.Errorf("ports slice too short, need at least 2, got %d", len(ports))
+		return
+	}
+	// For AoE1, outOfBand is not used but caller still passes 3 entries with -1; ensure we handle 2 or 3
+	if len(ports) == 2 {
+		ports = append(ports, -1)
+	}
 	var simulationPeriod int
 	switch gameId {
 	case game.AoE1:
@@ -18,6 +27,8 @@ func ExecuteBattleServer(gameId string, path string, region string, name string,
 	case game.AoE3, game.AoM:
 		simulationPeriod = 50
 	case game.AoE2, game.AoE4:
+		simulationPeriod = 125
+	default:
 		simulationPeriod = 125
 	}
 	bsPort := fmt.Sprintf("%d", ports[0])
@@ -52,7 +63,7 @@ func ExecuteBattleServer(gameId string, path string, region string, name string,
 			options.Stderr = f
 		}
 	}
-	commonLogger.Println("Executing:", options)
+	cmdlog.Step("Executing: %s", options)
 	if result := execWithOptions(gameId, &options); result.Success() {
 		pid = result.Pid
 	} else {

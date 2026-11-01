@@ -1,9 +1,9 @@
 package advertisement
 
 import (
-	"github.com/luskaner/ageLANServer/common/game"
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	"github.com/luskaner/ageServer/common/game"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 
 	"net/http"
 )
@@ -11,7 +11,7 @@ import (
 func FindObservableAdvertisements(w http.ResponseWriter, r *http.Request) {
 	var q wanQuery
 	if err := i.Bind(r, &q); err != nil {
-		i.JSON(&w, i.A{2, i.A{}, i.A{}})
+		i.JSON(&w, i.A{2, i.A{}, i.A{}}) // resultCode=2 (error), empty advertisements, empty user profiles
 		return
 	}
 	g := models.G(r)

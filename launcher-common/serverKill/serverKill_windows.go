@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/process"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/process"
 )
 
 func Do(path string) error {

@@ -1,11 +1,11 @@
 package buildGauntletLabyrinth
 
 import (
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/user"
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
-	userData "github.com/luskaner/ageLANServer/server/internal/models/playfab/data"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models/athens"
+	"github.com/luskaner/ageServer/server/internal/models/athens/user"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
+	userData "github.com/luskaner/ageServer/server/internal/models/playfab/data"
 )
 
 type Result struct {
@@ -23,7 +23,10 @@ type Function struct {
 }
 
 func (b *Function) RunTyped(game models.Game, u models.User, parameters *Parameters) *Result {
-	athensGame := game.(*athens.Game)
+	athensGame, ok := game.(*athens.Game)
+	if !ok {
+		return &Result{}
+	}
 	athensUser := u.(*user.User)
 	nodes := GenerateNumberOfNodes()
 	nodeRows := GenerateNodeRows(nodes)

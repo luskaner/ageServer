@@ -1,6 +1,6 @@
 package internal
 
-import "github.com/luskaner/ageLANServer/common"
+import "github.com/luskaner/ageServer/common"
 
 const (
 	ErrGames = iota + common.ErrLast

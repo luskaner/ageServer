@@ -3,12 +3,12 @@ package models
 import (
 	"sync/atomic"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 type MainPeerMutable struct {
-	Race int32
-	Team int32
+	RaceID int32
+	TeamID int32
 }
 
 type Peer interface {
@@ -18,7 +18,7 @@ type Peer interface {
 	Invite(user User) bool
 	Uninvite(user User) bool
 	GetMutable() *MainPeerMutable
-	UpdateMutable(race int32, team int32)
+	UpdateMutable(raceID int32, teamID int32)
 }
 
 type MainPeer struct {
@@ -26,22 +26,21 @@ type MainPeer struct {
 	party           int32
 	advertisementIp string
 	userId          int32
-	userStatId      int32
-	mutable         *atomic.Value
+	statGroupID     int32
+	mutable         atomic.Pointer[MainPeerMutable]
 	invites         *i.SafeSet[User]
 }
 
-func NewPeer(advertisementId int32, advertisementIp string, userId int32, userStatId int32, party int32, race int32, team int32) Peer {
+func NewPeer(advertisementId int32, advertisementIp string, userId int32, statGroupID int32, party int32, raceID int32, teamID int32) Peer {
 	peer := &MainPeer{
 		advertisementId: advertisementId,
 		party:           party,
 		advertisementIp: advertisementIp,
 		userId:          userId,
-		userStatId:      userStatId,
-		mutable:         &atomic.Value{},
+		statGroupID:     statGroupID,
 		invites:         i.NewSafeSet[User](),
 	}
-	peer.UpdateMutable(race, team)
+	peer.UpdateMutable(raceID, teamID)
 	return peer
 }
 
@@ -54,19 +53,19 @@ func (peer *MainPeer) GetParty() int32 {
 }
 
 func (peer *MainPeer) GetMutable() *MainPeerMutable {
-	return peer.mutable.Load().(*MainPeerMutable)
+	return peer.mutable.Load()
 }
 
 func (peer *MainPeer) Encode() i.A {
 	mutable := peer.GetMutable()
 	return i.A{
-		peer.advertisementId,
-		peer.userId,
-		-1,
-		peer.userStatId,
-		mutable.Race,
-		mutable.Team,
-		peer.advertisementIp,
+		peer.advertisementId, // sessionID
+		peer.userId,          // profileID
+		-1,                   // ranking
+		peer.statGroupID,
+		mutable.RaceID,
+		mutable.TeamID,
+		peer.advertisementIp, // advertisementIP
 	}
 }
 
@@ -78,6 +77,6 @@ func (peer *MainPeer) Uninvite(user User) bool {
 	return peer.invites.Delete(user)
 }
 
-func (peer *MainPeer) UpdateMutable(race int32, team int32) {
-	peer.mutable.Store(&MainPeerMutable{race, team})
+func (peer *MainPeer) UpdateMutable(raceID int32, teamID int32) {
+	peer.mutable.Store(&MainPeerMutable{raceID, teamID})
 }

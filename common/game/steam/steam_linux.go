@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/common/game/wine"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/common/game/wine"
 )
 
 const suffixDir = ".steam/steam"

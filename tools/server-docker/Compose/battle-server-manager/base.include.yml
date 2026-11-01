@@ -1,7 +1,7 @@
 services:
   server:
     volumes:
-      - config_bs:/tmp/ageLANServer/battle-servers:ro
+      - config_bs:/tmp/ageServer/battle-servers:ro
     depends_on:
       battle-server-manager:
         condition: service_healthy
@@ -11,11 +11,12 @@ services:
     build:
       context: ../../../..
       dockerfile: tools/server-docker/Dockerfile/battle-server-manager/Dockerfile
+    restart: unless-stopped
     depends_on:
       gen-cert:
         condition: service_completed_successfully
     volumes:
-      - config_bs:/tmp/ageLANServer/battle-servers
+      - config_bs:/tmp/ageServer/battle-servers
       - config_bs_manager:/app/battle-server-manager/resources:ro
       - logs:/app/logs
       - certs:/app/server/resources/certificates:ro

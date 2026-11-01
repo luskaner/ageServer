@@ -1,4 +1,4 @@
-name: ageLANServer-server-no-announce-full-all-bridge
+name: ageServer-server-no-announce-full-all-bridge
 include:
   - ./battle-server-manager/base.include.yml
   - ./server.no.announce.bridge.yml

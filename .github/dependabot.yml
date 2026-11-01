@@ -14,10 +14,9 @@ updates:
       - "/server-genCert"
       - "/tools/scripts"
       - "/tools/server-replay"
-      - "/tools/mock/battle-server"
       - "/tools/mock/game"
       - "/tools/mock/launcher"
     schedule:
       interval: "daily"
     ignore:
-      - dependency-name: "github.com/luskaner/ageLANServer/*"
+      - dependency-name: "github.com/luskaner/ageServer/*"

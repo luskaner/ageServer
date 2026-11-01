@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/logger/serverCommunication/request"
-	clientHttp "github.com/luskaner/ageLANServer/server-replay/internal/client/http"
-	"github.com/luskaner/ageLANServer/server-replay/internal/logEntry"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/logger/serverCommunication/request"
+	clientHttp "github.com/luskaner/ageServer/server-replay/internal/client/http"
+	"github.com/luskaner/ageServer/server-replay/internal/logEntry"
 	"github.com/r3labs/diff/v3"
 )
 
@@ -119,7 +119,9 @@ func (r *Request) Replay(serverIP net.IP) {
 	}
 	req, err := http.NewRequest(r.data.Method, modifiedUrl.String(), body)
 	if err != nil {
-		panic(err)
+		log.Println("Could not build request:", err)
+		r.ignored = true
+		return
 	}
 	req.Header = r.data.In.Headers
 	req.Host = originalHost
@@ -127,7 +129,13 @@ func (r *Request) Replay(serverIP net.IP) {
 	now := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		// A transport failure must not kill the whole replay run; the entry
+		// will simply be reported as a mismatch in CheckResponse.
+		log.Println("Request failed:", err)
+		r.response.statusCode = 0
+		r.response.header = http.Header{}
+		r.response.body = nil
+		return
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()

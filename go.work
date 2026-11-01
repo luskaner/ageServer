@@ -1,6 +1,4 @@
-go 1.26.0
-
-toolchain go1.26.9
+go 1.27.3
 
 godebug (
 	// Always use native DNS resolver, otherwise unexpected IPs may be returned
@@ -11,12 +9,12 @@ godebug (
 
 use (
 	./config-helper
-	./tools/mock/battle-server
 	./tools/mock/game
 	./tools/mock/launcher
 	battle-server-broadcast
 	battle-server-manager
 	common
+	gui/server/config
 	launcher
 	launcher-agent
 	launcher-common
@@ -29,4 +27,4 @@ use (
 	tools/server-replay
 )
 
-replace github.com/luskaner/ageLANServer/battle-server-broadcast v1.3.2 => ./battle-server-broadcast
+replace github.com/luskaner/ageServer/battle-server-broadcast v1.3.2 => ./battle-server-broadcast

@@ -3,7 +3,7 @@ package challenge
 import (
 	"net/http"
 
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 func GetChallenges(w http.ResponseWriter, r *http.Request) {

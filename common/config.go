@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -44,6 +45,8 @@ func LoadKoanfLayers(
 
 	_ = k.Load(confmap.Provider(defaults, "."), nil)
 
+	_ = k.Load(koanfEnvProvider(Name+"_"+envPrefix), nil)
+
 	usedFile := ""
 	for _, candidate := range fileCandidates {
 		if candidate == "" {
@@ -57,8 +60,6 @@ func LoadKoanfLayers(
 		}
 	}
 
-	_ = k.Load(koanfEnvProvider(Name+"_"+envPrefix), nil)
-
 	var posFlag *posflag.Posflag
 	if fsBindings == nil {
 		posFlag = posflag.Provider(fs, ".", k)
@@ -67,7 +68,7 @@ func LoadKoanfLayers(
 			fs,
 			".",
 			k,
-			func(f *pflag.Flag) (string, interface{}) {
+			func(f *pflag.Flag) (string, any) {
 				key := f.Name
 				if binding, ok := fsBindings[key]; ok {
 					key = binding
@@ -79,8 +80,48 @@ func LoadKoanfLayers(
 	return usedFile, nil
 }
 
+// osExitFn is injectable for tests.
+var osExitFn = os.Exit
+
+func LoadKoanfLayersOrExit(
+	k *koanf.Koanf,
+	defaults map[string]any,
+	fileCandidates []string,
+	parser koanf.Parser,
+	fs *pflag.FlagSet,
+	fsBindings map[string]string,
+	envPrefix string,
+	printlnFn func(...any),
+) string {
+	return LoadKoanfLayersOrExitWith(k, defaults, fileCandidates, parser, fs, fsBindings, envPrefix, printlnFn, osExitFn)
+}
+
+func LoadKoanfLayersOrExitWith(
+	k *koanf.Koanf,
+	defaults map[string]any,
+	fileCandidates []string,
+	parser koanf.Parser,
+	fs *pflag.FlagSet,
+	fsBindings map[string]string,
+	envPrefix string,
+	printlnFn func(...any),
+	exitFn func(int),
+) string {
+	usedFile, err := LoadKoanfLayers(k, defaults, fileCandidates, parser, fs, fsBindings, envPrefix)
+	if err != nil {
+		if fileErr, ok := errors.AsType[*KoanfFileLoadError](err); ok {
+			printlnFn("Error parsing config file:", fileErr.Path+":", fileErr.Err.Error())
+		} else {
+			printlnFn("Error loading config:", err.Error())
+		}
+		exitFn(ErrConfigParse)
+	}
+	return usedFile
+}
+
 // koanfEnvProvider returns a provider that maps ENV keys to koanf keys using '.' delimiters.
-// It lowercases keys and replaces '_' with '.'. Values with spaces become string slices.
+// It strips the prefix, replaces '_' with '.' and preserves the rest of the key case, so
+// 'PREFIX_Ports_Bs' matches the 'Ports.Bs' configuration key. Values with spaces become string slices.
 func koanfEnvProvider(prefix string) *env.Env {
 	finalPrefix := strings.ReplaceAll(strings.ToUpper(prefix), "-", "_") + "_"
 	return env.Provider(".", env.Opt{

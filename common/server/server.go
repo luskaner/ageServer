@@ -11,14 +11,28 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/certStore"
+	"github.com/luskaner/ageServer/common/uuid"
+
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/certStore"
 )
 
 type AnnounceMessageDataSupportedLatest = common.AnnounceMessageData002
 
 const LatencyMeasurementCount = 3
+
+var (
+	tlsDialFn       = tls.Dial
+	serverPort      = "443"
+	serverPath      = "test"
+	newHTTPClientFn = func(serverName string, insecureSkipVerify bool, rootCAs *x509.CertPool) *http.Client {
+		tr := &http.Transport{TLSClientConfig: TlsConfig(serverName, insecureSkipVerify, rootCAs)}
+		return &http.Client{Transport: tr, Timeout: 1 * time.Second}
+	}
+	buildURLFn = func(ipAddr net.IP) url.URL {
+		return url.URL{Scheme: "https", Host: net.JoinHostPort(ipAddr.String(), serverPort), Path: serverPath}
+	}
+)
 
 func TlsConfig(serverName string, insecureSkipVerify bool, rootCAs *x509.CertPool) *tls.Config {
 	if rootCAs == nil {
@@ -39,7 +53,7 @@ func connectToServer(host string, insecureSkipVerify bool, rootCAs *x509.CertPoo
 	} else {
 		ip = ips[0]
 	}
-	return tls.Dial("tcp4", net.JoinHostPort(ip, "443"), TlsConfig(host, insecureSkipVerify, rootCAs))
+	return tlsDialFn("tcp4", net.JoinHostPort(ip, serverPort), TlsConfig(host, insecureSkipVerify, rootCAs))
 }
 
 func CheckConnectionFromServer(host string, insecureSkipVerify bool, rootCAs *x509.CertPool) (err error) {
@@ -67,15 +81,8 @@ func LanServerHost(id uuid.UUID, gameTitle string, host string, insecureSkipVeri
 }
 
 func LanServerIP(id uuid.UUID, gameTitle string, ipAddr net.IP, serverName string, insecureSkipVerify bool, rootCAs *x509.CertPool, ignoreLatency bool) (ok bool, serverId uuid.UUID, latency time.Duration, data *AnnounceMessageDataSupportedLatest) {
-	tr := &http.Transport{
-		TLSClientConfig: TlsConfig(serverName, insecureSkipVerify, rootCAs),
-	}
-	client := &http.Client{Transport: tr, Timeout: 1 * time.Second}
-	u := url.URL{
-		Scheme: "https",
-		Host:   net.JoinHostPort(ipAddr.String(), ""),
-		Path:   "test",
-	}
+	client := newHTTPClientFn(serverName, insecureSkipVerify, rootCAs)
+	u := buildURLFn(ipAddr)
 	if !ignoreLatency {
 		var latencyAccumulator time.Duration
 		for i := 0; i < LatencyMeasurementCount; i++ {
@@ -127,7 +134,7 @@ func LanServerIP(id uuid.UUID, gameTitle string, ipAddr net.IP, serverName strin
 	if err != nil {
 		return
 	}
-	if id != uuid.Nil && id != serverIdUuid {
+	if id != uuid.Nil() && id != serverIdUuid {
 		return
 	}
 	serverId = serverIdUuid

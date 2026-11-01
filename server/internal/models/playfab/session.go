@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	"github.com/luskaner/ageServer/common/uuid"
+	"github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 const sessionDuration = 24 * time.Hour
@@ -43,7 +43,7 @@ func (s *MainSessions) Initialize() {
 
 func (s *MainSessions) create(user models.User) SessionKey {
 	sess := &SessionData{
-		token: uuid.NewString(),
+		token: uuid.New().String(),
 		user:  user,
 	}
 	stored := s.baseSessions.CreateSession(generateId, sess)

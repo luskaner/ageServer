@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
 )
 
 func addItem(name string, catalogItems map[string]playfab.CatalogItem, inventoryItems *[]playfab.InventoryItem) {

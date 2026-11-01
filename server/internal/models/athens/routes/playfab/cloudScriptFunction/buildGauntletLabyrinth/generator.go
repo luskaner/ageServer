@@ -3,15 +3,15 @@ package buildGauntletLabyrinth
 import (
 	"fmt"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"slices"
 
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/routes/playfab"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/user"
+	"github.com/luskaner/ageServer/server/internal/models/athens/routes/playfab"
+	"github.com/luskaner/ageServer/server/internal/models/athens/user"
 )
 
 import (
-	mapset "github.com/deckarep/golang-set/v2"
+	mapset "github.com/deckarep/golang-set/v3"
 )
 
 const columns = 10
@@ -30,7 +30,7 @@ type Range struct {
 }
 
 func (r Range) RandomValue() int {
-	return rand.Intn(r.Max-r.Min+1) + r.Min
+	return rand.N(r.Max-r.Min+1) + r.Min
 }
 
 var nodesPerColumn = []Range{
@@ -83,7 +83,7 @@ func connectablePositions(position int) (positions []int) {
 func computePositions(previousNodes []int, numberOfNodes int) []int {
 	nodeToPositions := make(map[int]mapset.Set[int], rows)
 	positionToNodes := make(map[int]mapset.Set[int], rows)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		positionToNodes[i] = mapset.NewThreadUnsafeSet[int]()
 	}
 	for _, node := range previousNodes {
@@ -114,7 +114,7 @@ func computePositions(previousNodes []int, numberOfNodes int) []int {
 			if positions.Cardinality() != i {
 				continue
 			}
-			acumPositions.Append(positions.ToSlice()...)
+			acumPositions.AppendFrom(positions)
 		}
 		for j := windowLen; j > 0 && finalPositions.Cardinality() < numberOfNodes; j-- {
 			var currentPositions []int
@@ -148,7 +148,7 @@ func GenerateNodeRows(numberOfNodes []int) [][]int {
 	nodes := make([][]int, columns)
 	// The first positions can be completely random
 	positions := make([]int, rows)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		positions[i] = i
 	}
 	shuffle(positions)
@@ -244,7 +244,7 @@ func GenerateMissions(nodeRows [][]int, poolsIndexes []int, missionsPools playfa
 		currentColPosToIndex := nodePosToIndex[col]
 		previousColumn := missionColumns[col-1]
 		previousColPosToIndex := nodePosToIndex[col-1]
-		for pos := 0; pos < rows-1; pos++ {
+		for pos := range rows - 1 {
 			var currentColumnPos *user.ChallengeMission
 			if index, exists := currentColPosToIndex[pos]; !exists {
 				continue
@@ -278,7 +278,7 @@ func GenerateMissions(nodeRows [][]int, poolsIndexes []int, missionsPools playfa
 			if posPredecessorIndex == -1 {
 				continue
 			}
-			if rand.Intn(2) == 0 {
+			if rand.N(2) == 0 {
 				currentColumnPos.Predecessors = slices.Delete(currentColumnPos.Predecessors, nextPosPredecessorIndex, nextPosPredecessorIndex+1)
 			} else {
 				currentColumnNextPos.Predecessors = slices.Delete(currentColumnNextPos.Predecessors, posPredecessorIndex, posPredecessorIndex+1)

@@ -7,6 +7,7 @@
 package process
 
 import (
+	"context"
 	"os"
 	"time"
 )
@@ -17,8 +18,16 @@ func GetProcessStartTime(_ int) (int64, error) {
 	return 0, nil
 }
 
-func WaitForProcess(_ *os.Process, _ *time.Duration) bool {
+// WaitForProcessContext is the fallback: this platform cannot tell, so it
+// reports that the wait succeeded, which is what WaitForProcess has always done
+// here.
+func WaitForProcessContext(_ context.Context, _ *os.Process, _ *time.Duration) bool {
 	return true
+}
+
+// WaitForProcess waits for proc to exit, and reports whether it did.
+func WaitForProcess(proc *os.Process, duration *time.Duration) bool {
+	return WaitForProcessContext(context.Background(), proc, duration)
 }
 
 // ProcessesByNames returns a map of process names to their procs.

@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 
-	"github.com/luskaner/ageLANServer/common/logger"
-	commonUserData "github.com/luskaner/ageLANServer/launcher-common/userData"
+	"github.com/luskaner/ageServer/common/logger"
+	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
+	commonUserData "github.com/luskaner/ageServer/launcher-common/userData"
 )
 
 type Data struct {
@@ -30,7 +32,7 @@ func (d Data) originalPath() string {
 }
 
 func (d Data) switchPaths(backupPath string, currentPath string) (ok bool) {
-	commonLogger.Printf("\tSwitching %s <-> %s\n", currentPath, backupPath)
+	commonLogger.Println(commonUi.Detail("Switching %s <-> %s", currentPath, backupPath))
 	if _, err := os.Stat(backupPath); err == nil {
 		return
 	}
@@ -53,7 +55,7 @@ func (d Data) switchPaths(backupPath string, currentPath string) (ok bool) {
 			info, err = os.Stat(newParent)
 			if err == nil {
 				mode = info.Mode()
-				commonLogger.Printf("\t\tCreating all path hierarchy: %s\n", absolutePath)
+				commonLogger.Println(commonUi.Detail("Creating all path hierarchy: %s", absolutePath))
 				if err = os.MkdirAll(absolutePath, mode); err != nil {
 					return
 				}
@@ -69,22 +71,22 @@ func (d Data) switchPaths(backupPath string, currentPath string) (ok bool) {
 		return
 	}
 
-	commonLogger.Printf("\t\tRenaming/Moving %s to %s\n", absolutePath, backupPath)
+	commonLogger.Println(commonUi.Detail("Renaming/Moving %s to %s", absolutePath, backupPath))
 	if err := os.Rename(absolutePath, backupPath); err != nil {
 		return
 	}
 
 	var revertMethods []func() bool
 	defer func() {
-		for i := len(revertMethods) - 1; i >= 0; i-- {
-			if !revertMethods[i]() {
+		for _, revertMethod := range slices.Backward(revertMethods) {
+			if !revertMethod() {
 				break
 			}
 		}
 	}()
 
 	revertMethods = append(revertMethods, func() bool {
-		commonLogger.Printf("\t\tRenaming/Moving %s to %s\n", backupPath, absolutePath)
+		commonLogger.Println(commonUi.Detail("Renaming/Moving %s to %s", backupPath, absolutePath))
 		return os.Rename(backupPath, absolutePath) == nil
 	})
 
@@ -97,7 +99,7 @@ func (d Data) switchPaths(backupPath string, currentPath string) (ok bool) {
 				return
 			}
 		}
-		commonLogger.Printf("\t\tMaking directory %s\n", currentPath)
+		commonLogger.Println(commonUi.Detail("Making directory %s", currentPath))
 		if err = os.Mkdir(currentPath, mode); err != nil {
 			return
 		}
@@ -105,7 +107,7 @@ func (d Data) switchPaths(backupPath string, currentPath string) (ok bool) {
 		return
 	}
 
-	commonLogger.Printf("\t\tRenaming/Moving %s to %s\n", currentPath, absolutePath)
+	commonLogger.Println(commonUi.Detail("Renaming/Moving %s to %s", currentPath, absolutePath))
 	if err := os.Rename(currentPath, absolutePath); err != nil {
 		return
 	}

@@ -13,6 +13,9 @@ import (
 
 var reWinToLinVar *regexp.Regexp
 
+// osStatFn is injectable for tests.
+var parseStatFn = os.Stat
+
 func ParseCommandArgsFromSlice(value []string, values map[string]string, separateFields bool) (args []string, err error) {
 	cmdArgs := strings.Join(value, " ")
 	for key, val := range values {
@@ -46,7 +49,7 @@ func ParsePath(value []string, values map[string]string) (file os.FileInfo, path
 	if err != nil {
 		return
 	}
-	file, err = os.Stat(path)
+	file, err = parseStatFn(path)
 	return
 }
 

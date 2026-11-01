@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 func GrantAchievement(w http.ResponseWriter, _ *http.Request) {

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/luskaner/ageLANServer/common/paths"
+	"github.com/luskaner/ageServer/common/paths"
 )
 
 func ReadCertsPool(path string) (pool *x509.CertPool, err error) {
@@ -83,7 +83,7 @@ func ReadFromData(data []byte) (keys []string, keyToIndex map[string]int, values
 	return
 }
 
-func CertificatePairFolder(executablePath string) string {
+func certificatePairFolderPath(executablePath string) string {
 	if executablePath == "" {
 		return ""
 	}
@@ -91,9 +91,16 @@ func CertificatePairFolder(executablePath string) string {
 	if parentDir == "" {
 		return ""
 	}
-	folder := filepath.Join(parentDir, paths.ResourcesDir, "certificates")
+	return filepath.Join(parentDir, paths.ResourcesDir, "certificates")
+}
+
+func CertificatePairFolder(executablePath string) string {
+	folder := certificatePairFolderPath(executablePath)
+	if folder == "" {
+		return ""
+	}
 	if _, err := os.Stat(folder); os.IsNotExist(err) {
-		if os.Mkdir(folder, 0755) != nil {
+		if os.MkdirAll(folder, 0755) != nil {
 			return ""
 		}
 	}

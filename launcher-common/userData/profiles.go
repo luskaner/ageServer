@@ -4,9 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/luskaner/ageLANServer/common/game"
+	mapset "github.com/deckarep/golang-set/v3"
+	"github.com/luskaner/ageServer/common/game"
 )
 
 func (u *Path) profileFolder() string {
@@ -28,9 +29,13 @@ func (u *Path) Profiles() (err error, profiles mapset.Set[Data]) {
 	profiles = mapset.NewThreadUnsafeSet[Data]()
 	for _, entry := range entries {
 		if entry.IsDir() {
-			t, _ := typ(entry.Name())
+			t, ext := typ(entry.Name())
+			nameForParse := entry.Name()
+			if t != TypeActive {
+				nameForParse = strings.TrimSuffix(nameForParse, ext)
+			}
 			if u.gameId != game.AoE1 {
-				if _, localErr := strconv.ParseUint(entry.Name(), 10, 64); localErr != nil {
+				if _, localErr := strconv.ParseUint(nameForParse, 10, 64); localErr != nil {
 					continue
 				}
 			}

@@ -4,19 +4,21 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executor"
-	"github.com/luskaner/ageLANServer/common/logger"
-	launcherCommon "github.com/luskaner/ageLANServer/launcher-common"
-	"github.com/luskaner/ageLANServer/launcher-config-admin/internal/cmd"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/executor"
+	"github.com/luskaner/ageServer/common/logger"
+	launcherCommon "github.com/luskaner/ageServer/launcher-common"
+	"github.com/luskaner/ageServer/launcher-common/ui"
+	"github.com/luskaner/ageServer/launcher-config-admin/internal/cmd"
 )
 
 var version = "development"
 
 func main() {
+	ui.Initialize(os.Stdout, os.Environ())
 	commonLogger.Initialize(os.Stdout)
 	if !executor.IsAdmin() {
-		commonLogger.Println("This program must be run as an administrator")
+		commonLogger.Println(ui.Fail("This program must be run as an administrator"))
 		os.Exit(launcherCommon.ErrNotAdmin)
 	}
 	common.ChdirToExe()

@@ -5,11 +5,17 @@ import (
 	"battle-server-manager/internal/cmdUtils"
 	"slices"
 
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/battleServer"
-	"github.com/luskaner/ageLANServer/common/cmd/bsManager"
-	"github.com/luskaner/ageLANServer/common/logger"
+	mapset "github.com/deckarep/golang-set/v3"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/battleServer"
+	"github.com/luskaner/ageServer/common/cmd/bsManager"
+	"github.com/luskaner/ageServer/common/cmdlog"
+)
+
+var (
+	parsedGameIdsFnRemove = cmdUtils.ParsedGameIds
+	battleServerConfigsFn = battleServer.Configs
+	removeFn              = cmdUtils.Remove
 )
 
 func runRemove(args []string) (err error, exitCode int) {
@@ -19,26 +25,26 @@ func runRemove(args []string) (err error, exitCode int) {
 		return
 	}
 	var games mapset.Set[string]
-	games, err = cmdUtils.ParsedGameIds(&values.GameIds)
+	games, err = parsedGameIdsFnRemove(&values.GameIds)
 	if err != nil {
-		commonLogger.Println(err.Error())
+		cmdlog.Fail("%s", err.Error())
 		exitCode = internal.ErrGames
 		return
 	}
 	var configs []battleServer.Config
 	for g := range games.Iter() {
-		commonLogger.Printf("Game: %s\n", g)
-		commonLogger.Printf("\tRemoving '%s' region...\n", values.Region)
-		configs, err = battleServer.Configs(g, false)
+		cmdlog.Section("Game " + g)
+		cmdlog.Step("Removing %s region...", values.Region)
+		configs, err = battleServerConfigsFn(g, false, false)
 		if err != nil {
-			commonLogger.Printf("\t%s\n", err)
+			cmdlog.Fault("%s", err)
 			continue
 		}
 		configs = slices.DeleteFunc(configs, func(c battleServer.Config) bool {
 			return c.Region != values.Region
 		})
-		if !cmdUtils.Remove(g, configs, false) {
-			commonLogger.Println("\tNo configuration needs it.")
+		if !removeFn(g, configs, false) {
+			cmdlog.Info("No configuration needs it.")
 		}
 	}
 	return

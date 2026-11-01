@@ -1,6 +1,6 @@
 package internal
 
-import commonLogger "github.com/luskaner/ageLANServer/common/logger"
+import commonLogger "github.com/luskaner/ageServer/common/logger"
 
 var Logger *commonLogger.Root
 

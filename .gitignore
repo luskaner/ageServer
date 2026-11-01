@@ -1,4 +1,3 @@
-.tools
 .task
 .env
 .idea/
@@ -13,5 +12,10 @@ build/**/*
 !build/battle-server-manager/
 !build/battle-server-manager/.gitkeep
 .goreleaser.yaml
+.tools
 tools/**/go.sum
 go.work.sum
+coverage
+cover_routes
+coverage_all
+userData/

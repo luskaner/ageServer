@@ -3,12 +3,17 @@ package internal
 import (
 	"os"
 
-	"github.com/luskaner/ageLANServer/common"
-	commonLogger "github.com/luskaner/ageLANServer/common/logger"
+	"github.com/luskaner/ageServer/common"
+	commonLogger "github.com/luskaner/ageServer/common/logger"
+)
+
+var (
+	newOwnFileLoggerFn = commonLogger.NewOwnFileLogger
+	osExitFn           = os.Exit
 )
 
 func InitializeOrExit(logRoot string) {
-	if err := commonLogger.NewOwnFileLogger("config-admin-agent", logRoot, "", true); err != nil {
-		os.Exit(common.ErrFileLog)
+	if err := newOwnFileLoggerFn("config-admin-agent", logRoot, "", true); err != nil {
+		osExitFn(common.ErrFileLog)
 	}
 }

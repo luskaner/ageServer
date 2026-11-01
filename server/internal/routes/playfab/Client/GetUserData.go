@@ -3,9 +3,9 @@ package Client
 import (
 	"net/http"
 
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab/data"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Client/shared"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/models/playfab/data"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Client/shared"
 )
 
 func GetUserData(w http.ResponseWriter, r *http.Request) {

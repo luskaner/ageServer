@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/luskaner/ageLANServer/common/logger/serverCommunication/wss"
+	"github.com/luskaner/ageServer/common/logger/serverCommunication/wss"
 )
 
 type Disconnection struct {

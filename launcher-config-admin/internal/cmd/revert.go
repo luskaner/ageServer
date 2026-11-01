@@ -6,21 +6,20 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/logger"
-	"github.com/luskaner/ageLANServer/launcher-common/cert"
-	"github.com/luskaner/ageLANServer/launcher-common/cmd/config/admin"
-	"github.com/luskaner/ageLANServer/launcher-config-admin/internal"
-	"github.com/luskaner/ageLANServer/launcher-config-admin/internal/hosts"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/logger"
+	"github.com/luskaner/ageServer/launcher-common/cmd/config/admin"
+	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
+	"github.com/luskaner/ageServer/launcher-config-admin/internal"
 )
 
 func trustCertificates(certificates []*x509.Certificate) bool {
-	commonLogger.Println("Adding previously removed local certificate")
-	if err := cert.TrustCertificates(false, certificates); err == nil {
-		commonLogger.Println("Successfully added local certificate")
+	commonLogger.Println(commonUi.Step("Adding previously removed local certificate"))
+	if err := trustCertsFn(false, certificates); err == nil {
+		commonLogger.Println(commonUi.Ok("Successfully added local certificate"))
 		return true
 	}
-	commonLogger.Println("Failed to add local certificate")
+	commonLogger.Println(commonUi.Fail("Failed to add local certificate"))
 	return false
 }
 
@@ -32,7 +31,9 @@ func runRevert(args []string) (err error, exitCode int) {
 	}
 	internal.SetUp = new(false)
 	if values.LogRoot != "" {
-		internal.Initialize(values.LogRoot)
+		if initErr := initializeFn(values.LogRoot); initErr != nil {
+			commonLogger.Println(commonUi.Fail("Failed to initialize file logging: %s", initErr))
+		}
 	}
 	if values.RemoveAll {
 		values.IPs = true
@@ -40,10 +41,10 @@ func runRevert(args []string) (err error, exitCode int) {
 	}
 	var removedCertificates []*x509.Certificate
 	if values.Certs {
-		commonLogger.Println("Removing local certificate")
-		removedCertificates, err = cert.UntrustCertificates(false)
+		commonLogger.Println(commonUi.Step("Removing local certificate"))
+		removedCertificates, err = untrustCertsFn(false)
 		if err == nil {
-			commonLogger.Println("Successfully removed local certificate")
+			commonLogger.Println(commonUi.Ok("Successfully removed local certificate"))
 			sigs := make(chan os.Signal, 1)
 			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 			go func() {
@@ -54,8 +55,8 @@ func runRevert(args []string) (err error, exitCode int) {
 				}
 			}()
 		} else {
-			commonLogger.Println("Failed to remove local certificate")
-			commonLogger.Println("Error:", err)
+			commonLogger.Println(commonUi.Fail("Failed to remove local certificate"))
+			commonLogger.Println(commonUi.Fault("Error: %s", err))
 			if !values.RemoveAll {
 				exitCode = internal.ErrLocalCertRemove
 				return
@@ -63,9 +64,9 @@ func runRevert(args []string) (err error, exitCode int) {
 		}
 	}
 	if values.IPs {
-		commonLogger.Println("Removing IP mappings")
-		if err = hosts.RemoveHosts(); err == nil {
-			commonLogger.Println("Successfully removed IP mappings")
+		commonLogger.Println(commonUi.Step("Removing IP mappings"))
+		if err = removeHostsFn(); err == nil {
+			commonLogger.Println(commonUi.Ok("Successfully removed IP mappings"))
 		} else {
 			exitCode = internal.ErrIpMapRemove
 			if !values.RemoveAll {
@@ -75,7 +76,7 @@ func runRevert(args []string) (err error, exitCode int) {
 					}
 				}
 			}
-			commonLogger.Println("Failed to remove IP mappings")
+			commonLogger.Println(commonUi.Fail("Failed to remove IP mappings"))
 		}
 	}
 	return

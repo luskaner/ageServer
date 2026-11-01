@@ -4,7 +4,7 @@ import (
 	"math/rand/v2"
 	"sync"
 
-	"github.com/google/uuid"
+	"github.com/luskaner/ageServer/common/uuid"
 )
 
 var rng RandReader
@@ -18,7 +18,7 @@ func (rr *RandReader) Read(p []byte) (int, error) {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
 	for i := range p {
-		p[i] = byte(rr.UintN(256))
+		p[i] = byte(rr.N(256))
 	}
 	return len(p), nil
 }

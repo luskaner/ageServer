@@ -1,9 +1,9 @@
 package executor
 
 import (
-	"github.com/luskaner/ageLANServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/executor/exec"
 )
 
-func execWithOptions(_ string, options *exec.Options) exec.Result {
+var execWithOptions = func(_ string, options *exec.Options) exec.Result {
 	return *options.Exec()
 }

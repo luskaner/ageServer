@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"unsafe"
 
-	"github.com/luskaner/ageLANServer/common/game"
+	"github.com/luskaner/ageServer/common/game"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )

@@ -4,36 +4,11 @@ import (
 	"net"
 	"net/netip"
 
-	mapset "github.com/deckarep/golang-set/v2"
+	mapset "github.com/deckarep/golang-set/v3"
 )
 
 func RunningNetworkInterfaces() (map[*net.Interface][]*net.IPNet, error) {
-	interfacesAddresses := make(map[*net.Interface][]*net.IPNet)
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-	var addrs []net.Addr
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		addrs, err = iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok {
-				if ipnet.IP.To4() != nil {
-					if _, ok := interfacesAddresses[&iface]; !ok {
-						interfacesAddresses[&iface] = make([]*net.IPNet, 0)
-					}
-					interfacesAddresses[&iface] = append(interfacesAddresses[&iface], ipnet)
-				}
-			}
-		}
-	}
-	return interfacesAddresses, nil
+	return deps.RunningNetworkInterfaces()
 }
 
 func NetIPToNetIPAddr(ip net.IP) (addr netip.Addr) {

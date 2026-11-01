@@ -5,7 +5,7 @@ import (
 	"io"
 	"sync"
 
-	commonLogger "github.com/luskaner/ageLANServer/common/logger"
+	commonLogger "github.com/luskaner/ageServer/common/logger"
 )
 
 var PrefixerMutex sync.Mutex

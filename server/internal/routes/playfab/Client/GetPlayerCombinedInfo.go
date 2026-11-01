@@ -3,8 +3,8 @@ package Client
 import (
 	"net/http"
 
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Client/shared"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Client/shared"
 )
 
 type userReadonlyData struct{}
@@ -26,11 +26,9 @@ func GetPlayerCombinedInfo(w http.ResponseWriter, r *http.Request) {
 	shared.RespondOK(
 		&w,
 		getPlayerCombinedInfoRequest{
-			PlayFabId: sess.PlayfabId(),
-			infoResultPayload: infoResultPayload{
-				UserInventory:        []any{},
-				CharacterInventories: []any{},
-			},
+			PlayFabId:            sess.PlayfabId(),
+			UserInventory:        []any{},
+			CharacterInventories: []any{},
 		},
 	)
 }

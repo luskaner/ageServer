@@ -1,6 +1,6 @@
 package internal
 
-import commonGame "github.com/luskaner/ageLANServer/common/game"
+import commonGame "github.com/luskaner/ageServer/common/game"
 
 var (
 	V190 uint16 = 190

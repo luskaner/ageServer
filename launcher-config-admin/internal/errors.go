@@ -1,7 +1,7 @@
 package internal
 
 import (
-	launcherCommon "github.com/luskaner/ageLANServer/launcher-common"
+	launcherCommon "github.com/luskaner/ageServer/launcher-common"
 )
 
 const (

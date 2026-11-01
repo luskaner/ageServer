@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/luskaner/ageLANServer/common/logger/serverCommunication"
+	"github.com/luskaner/ageServer/common/logger/serverCommunication"
 )
 
 type Base struct {

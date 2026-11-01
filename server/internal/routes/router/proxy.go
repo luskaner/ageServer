@@ -9,7 +9,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/server/internal"
 )
 
 type Proxy struct {
@@ -21,6 +22,9 @@ type Proxy struct {
 
 func NewProxy(host string, initFn func(gameId string, next http.Handler) http.Handler) (proxy Proxy) {
 	proxy = Proxy{host: host, initializeRoutes: initFn}
+	if !internal.CanUseInternet {
+		return
+	}
 	ip, err := common.DirectHostToIP(host)
 	if err != nil {
 		return
@@ -33,6 +37,7 @@ func NewProxy(host string, initFn func(gameId string, next http.Handler) http.Ha
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.Out.URL.Scheme = remote.Scheme
 			pr.Out.URL.Host = remote.Host
+			pr.Out.Host = host
 		},
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{

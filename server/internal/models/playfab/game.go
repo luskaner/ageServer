@@ -1,6 +1,6 @@
 package playfab
 
-import "github.com/luskaner/ageLANServer/server/internal/models"
+import "github.com/luskaner/ageServer/server/internal/models"
 
 type Game interface {
 	models.Game

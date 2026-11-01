@@ -1,6 +1,6 @@
 package internal
 
-import launcherCommon "github.com/luskaner/ageLANServer/launcher-common"
+import launcherCommon "github.com/luskaner/ageServer/launcher-common"
 
 const (
 	ErrListen = iota + launcherCommon.ErrLast
@@ -11,4 +11,5 @@ const (
 	ErrIpsAlreadyMapped
 	ErrCertInvalid
 	ErrFlushCache
+	ErrGameNotSupported
 )

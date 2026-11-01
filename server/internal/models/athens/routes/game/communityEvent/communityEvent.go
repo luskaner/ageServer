@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 type DailyCelestialChallengeScore struct {

@@ -5,9 +5,8 @@ package ipc
 import (
 	"net"
 	"os"
-	"path"
 
-	"github.com/luskaner/ageLANServer/launcher-common/ipc"
+	"github.com/luskaner/ageServer/launcher-common/ipc"
 )
 
 func SetupServer() (listener net.Listener, err error) {
@@ -28,5 +27,5 @@ func SetupServer() (listener net.Listener, err error) {
 }
 
 func RevertServer() {
-	_ = os.Remove(path.Join())
+	_ = os.Remove(ipc.Path())
 }

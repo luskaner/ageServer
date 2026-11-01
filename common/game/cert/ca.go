@@ -3,8 +3,8 @@ package cert
 import (
 	"path/filepath"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/game"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/game"
 )
 
 type CA struct {

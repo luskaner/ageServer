@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	commonCmd "github.com/luskaner/ageLANServer/common/cmd"
-	commonUserData "github.com/luskaner/ageLANServer/launcher-common/userData"
+	commonCmd "github.com/luskaner/ageServer/common/cmd"
+	commonUserData "github.com/luskaner/ageServer/launcher-common/userData"
 )
 
 var Version string

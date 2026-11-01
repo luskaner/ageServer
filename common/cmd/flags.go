@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -15,11 +14,6 @@ func FlagSetToArgs(fs *pflag.FlagSet, includeName bool) []string {
 	}
 	fs.VisitAll(func(f *pflag.Flag) {
 		valueStr := f.Value.String()
-		if getter, ok := f.Value.(interface{ Get() interface{} }); ok {
-			if b, isByteSlice := getter.Get().([]byte); isByteSlice {
-				valueStr = base64.StdEncoding.EncodeToString(b)
-			}
-		}
 		if valueStr == f.DefValue {
 			return
 		}

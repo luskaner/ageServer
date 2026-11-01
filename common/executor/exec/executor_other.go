@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/luskaner/ageLANServer/common"
+	"github.com/luskaner/ageServer/common"
 	"mvdan.cc/sh/v3/syntax"
 )
 

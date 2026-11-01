@@ -1,8 +1,8 @@
 package game
 
 import (
-	mapset "github.com/deckarep/golang-set/v2"
-	commonGame "github.com/luskaner/ageLANServer/common/game"
+	mapset "github.com/deckarep/golang-set/v3"
+	commonGame "github.com/luskaner/ageServer/common/game"
 )
 
 var gameToNativeSteamProcess map[string]string

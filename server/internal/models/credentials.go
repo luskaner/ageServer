@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"time"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 const credentialsExpiry = time.Minute * 5
@@ -13,7 +13,7 @@ const credentialsExpiry = time.Minute * 5
 func generateSignature() string {
 	b := make([]byte, 32)
 	i.WithRng(func(rand *i.RandReader) {
-		for j := 0; j < len(b); j++ {
+		for j := range len(b) {
 			b[j] = byte(rand.UintN(256))
 		}
 	})

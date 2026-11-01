@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/luskaner/ageLANServer/common/game"
-	commonLogger "github.com/luskaner/ageLANServer/common/logger"
-	"github.com/luskaner/ageLANServer/launcher-common/userData"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/launcher-common/cmdlog"
+	"github.com/luskaner/ageServer/launcher-common/userData"
 )
 
 const elementSepDotGlob = "."
@@ -126,7 +126,7 @@ func sortByModTime(filesInfo *[]os.FileInfo) {
 }
 
 func CopyGameLogs(gameId string, basePath string, logRoot string) {
-	commonLogger.Println("Copying game logs...")
+	cmdlog.Step("Copying game logs...")
 	if g, ok := gameIdToGame[gameId]; ok {
 		finalPath := userData.NewPath(basePath, gameId).String()
 		paths := g.Paths(finalPath)
@@ -137,7 +137,7 @@ func CopyGameLogs(gameId string, basePath string, logRoot string) {
 			} else {
 				str += "KO"
 			}
-			commonLogger.Println(str)
+			cmdlog.Println(str)
 		}
 	}
 }

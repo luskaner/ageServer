@@ -3,10 +3,10 @@ package advertisement
 import (
 	"net/http"
 
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/luskaner/ageLANServer/common/game"
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	mapset "github.com/deckarep/golang-set/v3"
+	"github.com/luskaner/ageServer/common/game"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 type searchQuery struct {
@@ -28,14 +28,14 @@ type wanQuery struct {
 
 func findAdvResp(errorCode int, advs i.A, usersProfileInfo i.A) i.A {
 	resp := getAdvResp(errorCode, advs)
-	resp = append(resp, usersProfileInfo)
+	resp = append(resp, usersProfileInfo) // user profiles
 	return resp
 }
 
 func findAdvertisements(w http.ResponseWriter, r *http.Request, length int, offset int, ongoing bool, lanRegions map[string]struct{}, extraCheck func(models.Advertisement) bool, includeUserProfiles bool) {
 	var q searchQuery
 	if err := i.Bind(r, &q); err != nil {
-		i.JSON(&w, findAdvResp(2, i.A{}, i.A{}))
+		i.JSON(&w, findAdvResp(2, i.A{}, i.A{})) // resultCode=2 (error), empty advertisements, empty user profiles
 		return
 	}
 	g := models.G(r)
@@ -108,7 +108,7 @@ func findAdvertisements(w http.ResponseWriter, r *http.Request, length int, offs
 func FindAdvertisements(w http.ResponseWriter, r *http.Request) {
 	var q wanQuery
 	if err := i.Bind(r, &q); err != nil {
-		i.JSON(&w, findAdvResp(2, i.A{}, i.A{}))
+		i.JSON(&w, findAdvResp(2, i.A{}, i.A{})) // resultCode=2 (error), empty advertisements, empty user profiles
 		return
 	}
 	findAdvertisements(w, r, q.Length, q.Offset, false, nil, nil, false)

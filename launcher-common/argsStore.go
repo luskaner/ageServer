@@ -6,13 +6,22 @@ import (
 	"strings"
 	"sync"
 
-	mapset "github.com/deckarep/golang-set/v2"
+	mapset "github.com/deckarep/golang-set/v3"
 )
 
 const argsStoreSep = "|"
 
+// argsStoreByteToStringSlice splits stored content, dropping empty entries so
+// empty files or leading/trailing separators never produce phantom flags.
 func argsStoreByteToStringSlice(s []byte) []string {
-	return strings.Split(string(s), argsStoreSep)
+	parts := strings.Split(string(s), argsStoreSep)
+	flags := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			flags = append(flags, part)
+		}
+	}
+	return flags
 }
 
 type ArgsStore struct {
@@ -39,6 +48,11 @@ func (s *ArgsStore) Load() (err error, flags []string) {
 		}
 		return
 	}
+	if len(content) == 0 {
+		// An empty file (e.g. created but never written) must not yield a
+		// phantom empty-string flag.
+		return
+	}
 	flags = argsStoreByteToStringSlice(content)
 	return
 }
@@ -61,15 +75,28 @@ func (s *ArgsStore) Store(flags []string) error {
 	flagsToSave := argsStoreByteToStringSlice(content)
 	existingFlags := mapset.NewSet[string](flagsToSave...)
 	for _, flag := range flags {
+		if flag == "" {
+			continue
+		}
 		if !existingFlags.ContainsOne(flag) {
 			flagsToSave = append(flagsToSave, flag)
+			existingFlags.Add(flag)
 		}
 	}
 	_, err = f.Seek(0, io.SeekStart)
 	if err != nil {
 		return err
 	}
-	_, err = f.WriteString(strings.Join(flagsToSave, argsStoreSep))
+	joined := strings.Join(flagsToSave, argsStoreSep)
+	_, err = f.WriteString(joined)
+	if err != nil {
+		return err
+	}
+	// Truncate in case new content is shorter than previous file (e.g. leading
+	// separators or filtered empty flags produced a shorter join).
+	if err = f.Truncate(int64(len(joined))); err != nil {
+		return err
+	}
 	return err
 }
 

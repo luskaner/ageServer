@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 
 	"github.com/hairyhenderson/go-which"
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/executor/exec"
 )
 
 var updateStoreBinaries = []string{
@@ -90,6 +90,8 @@ func TrustCertificates(_ bool, certs []*x509.Certificate) error {
 		err = common.WriteAsPem(cert.Raw, certFile)
 
 		if err != nil {
+			_ = certFile.Close()
+			_ = os.Remove(certFile.Name())
 			return err
 		}
 
@@ -111,6 +113,7 @@ func TrustCertificates(_ bool, certs []*x509.Certificate) error {
 			var newCertFile *os.File
 			newCertFile, err = os.Open(certFile.Name())
 			if err != nil {
+				_ = certFileTmp.Close()
 				_ = os.Remove(certFile.Name())
 				_ = os.Remove(certFileTmp.Name())
 				return err
@@ -120,6 +123,7 @@ func TrustCertificates(_ bool, certs []*x509.Certificate) error {
 			_ = newCertFile.Close()
 			_ = os.Remove(newCertFile.Name())
 			if err != nil {
+				_ = certFileTmp.Close()
 				_ = os.Remove(certFileTmp.Name())
 				return err
 			}
@@ -164,6 +168,9 @@ func UntrustCertificates(_ bool) (certs []*x509.Certificate, err error) {
 	if err != nil {
 		return
 	}
+	defer func() {
+		_ = certFile.Close()
+	}()
 
 	var certBytes []byte
 	certBytes, err = io.ReadAll(certFile)

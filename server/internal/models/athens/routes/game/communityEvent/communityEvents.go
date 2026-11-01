@@ -8,7 +8,7 @@ import (
 
 	_ "time/tzdata"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 const dayDuration = 24 * time.Hour
@@ -71,7 +71,7 @@ func generateMonthlyEvents() (events []CommunityEvent) {
 		dailyCelestialChallengeStart.Location(),
 	)
 	// Generate events for 2 months just in case
-	for months := 0; months < 2; months++ {
+	for months := range 2 {
 		eventStart := currentEvent.AddDate(0, months, 0)
 		eventEnd := eventStart.AddDate(0, months, 0).Add(-time.Hour)
 		expiryTime := eventStart.AddDate(1, 0, 0)
@@ -115,7 +115,7 @@ func generateDailyChallengeEvents() (events []CommunityEvent) {
 	currentEventStart := dailyCelestialChallengeStart.Add(daysSince)
 	daysSinceIt := uint64(daysSince / dayDuration)
 	// Generate events for a 3 days just in case
-	for days := 0; days < 3; days++ {
+	for days := range 3 {
 		eventStart := currentEventStart.Add(dayDuration * time.Duration(days))
 		eventEnd := eventStart.Add(dayDuration - time.Second)
 		expiryTime := eventEnd.Add(dayDuration * 7)

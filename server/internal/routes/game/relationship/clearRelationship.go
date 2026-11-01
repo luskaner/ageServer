@@ -3,7 +3,7 @@ package relationship
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 func ClearRelationship(w http.ResponseWriter, _ *http.Request) {

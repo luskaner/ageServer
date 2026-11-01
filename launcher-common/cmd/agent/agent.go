@@ -3,7 +3,7 @@ package agent
 import (
 	"runtime"
 
-	"github.com/luskaner/ageLANServer/common/cmd"
+	"github.com/luskaner/ageServer/common/cmd"
 	"github.com/spf13/pflag"
 )
 
@@ -28,10 +28,10 @@ func SingleFlagSet(version string, runFn func(*pflag.FlagSet) (err error, exitCo
 	cmd.LogRootCommand(flags, values.LogRootRef())
 	cmd.GameVarCommand(flags, values.GameIdRef())
 	flags.StringVar(&values.ServerExecutable, "serverExecutable", "", "Path to the Server executable to for stopping it after game closes.")
-	flags.StringVar(&values.BattleServerManagerExecutable, "bsManagerExecutable", "", "Path to the Battle Server Manager executable to monitor.")
-	flags.StringVar(&values.BattleServerRegion, "bsRegion", "", "Region of the battle server for stopping it after game closes.")
+	flags.StringVar(&values.BattleServerManagerExecutable, "bsManagerExecutable", "", "Path to the standalone Battle Server Manager executable to monitor.")
+	flags.StringVar(&values.BattleServerRegion, "bsRegion", "", "Region of the standalone battle server for stopping it after game closes.")
 	if runtime.GOOS == "windows" {
-		flags.BoolVar(&values.BattleServerLANRebroadcast, "bsLanRebroadcast", false, "Whether to rebroadcast LAN packets from the Battle Server to the local network.")
+		flags.BoolVar(&values.BattleServerLANRebroadcast, "bsLanRebroadcast", false, "Whether to rebroadcast LAN packets from the standalone Battle Server to the local network.")
 	}
 	flags.StringSliceVar(&values.ProcessNames, "processes", nil, "Process names to monitor for game start/stop events.")
 	flags.StringVar(&values.BaseDataPath, "baseDataPath", "", "Base path for user data.")

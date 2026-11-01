@@ -3,8 +3,8 @@ package item
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 func GetItemLoadouts(w http.ResponseWriter, r *http.Request) {

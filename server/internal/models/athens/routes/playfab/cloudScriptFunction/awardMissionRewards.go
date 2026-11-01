@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/user"
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models/athens/user"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
 )
 
 type AwardMissionRewardsParameters struct {

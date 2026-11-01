@@ -3,7 +3,7 @@ package base
 import (
 	"fmt"
 
-	commonExecutor "github.com/luskaner/ageLANServer/common/executor/exec"
+	commonExecutor "github.com/luskaner/ageServer/common/executor/exec"
 )
 
 type Executor interface {

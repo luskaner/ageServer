@@ -1,7 +1,7 @@
 package bsManager
 
 import (
-	"github.com/luskaner/ageLANServer/common/cmd"
+	"github.com/luskaner/ageServer/common/cmd"
 	"github.com/spf13/pflag"
 )
 

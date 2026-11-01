@@ -17,7 +17,7 @@ ENV WINEPREFIX=/wine \
     WINEARCH=win64 \
     DISPLAY=""
 # Compile
-FROM golang:1.26-alpine3.24 AS compiler
+FROM golang:1.27-alpine3.24 AS compiler
 WORKDIR /app
 COPY tools/server-docker/Dockerfile/battle-server-manager/go.work.template go.work
 COPY common common
@@ -40,15 +40,15 @@ RUN upx --lzma battle-server-manager
 FROM runner
 VOLUME /app/battle-server-manager/resources
 VOLUME /app/server/resources/certificates
-VOLUME /tmp/ageLANServer/battle-servers
+VOLUME /tmp/ageServer/battle-servers
 WORKDIR /app/battle-server-manager
 COPY --from=compiler /app/build/resources resources
 COPY --from=compressor /app/battle-server-manager .
-ENV AGELANSERVER_BATTLE_SERVER_MANAGER_Ports_Bs=27012
-ENV AGELANSERVER_BATTLE_SERVER_MANAGER_Ports_WebSocket=27112
-ENV AGELANSERVER_BATTLE_SERVER_MANAGER_Ports_OutOfBand=27212
-ENV AGELANSERVER_BATTLE_SERVER_MANAGER_CertsPath=/app/server/resources/certificates
-ENV AGELANSERVER_BATTLE_SERVER_MANAGER_Executable_Path=/app/BattleServer.exe
+ENV AGESERVER_BATTLE_SERVER_MANAGER_Ports_Bs=27012
+ENV AGESERVER_BATTLE_SERVER_MANAGER_Ports_WebSocket=27112
+ENV AGESERVER_BATTLE_SERVER_MANAGER_Ports_OutOfBand=27212
+ENV AGESERVER_BATTLE_SERVER_MANAGER_CertsPath=/app/server/resources/certificates
+ENV AGESERVER_BATTLE_SERVER_MANAGER_Executable_Path=/app/BattleServer.exe
 EXPOSE 27012/tcp
 EXPOSE 27112/tcp
 EXPOSE 27212/tcp

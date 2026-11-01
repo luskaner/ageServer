@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/luskaner/ageLANServer/common/game"
+	mapset "github.com/deckarep/golang-set/v3"
+	"github.com/luskaner/ageServer/common/game"
 )
 
 func (u *Path) metadataFolder() string {

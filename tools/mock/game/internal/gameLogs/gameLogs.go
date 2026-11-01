@@ -3,8 +3,8 @@ package gameLogs
 import (
 	"log"
 
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/launcher-common/userData"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/launcher-common/userData"
 )
 
 type Game interface {

@@ -12,7 +12,7 @@ type CustomTime struct {
 	Format string
 }
 
-func (ct CustomTime) Update() {
+func (ct *CustomTime) Update() {
 	ct.Time = time.Now()
 }
 

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	mapset "github.com/deckarep/golang-set/v2"
+	mapset "github.com/deckarep/golang-set/v3"
 )
 
 func parseCmdline(cmdline string) []string {
@@ -37,13 +37,12 @@ func GetProcessStartTime(pid int) (int64, error) {
 		return 0, err
 	}
 	// Format: pid (comm) state ppid ... field 22 is starttime
-	// Find the last ')' to skip the comm field which may contain spaces/parentheses
-	statStr := string(data)
-	lastParen := strings.LastIndex(statStr, ")")
-	if lastParen == -1 {
+	// Cut around the last ')' to skip the comm field which may contain spaces/parentheses
+	_, statTail, found := strings.CutLast(string(data), ")")
+	if !found {
 		return 0, errors.New("invalid stat format")
 	}
-	fields := strings.Fields(statStr[lastParen+1:])
+	fields := strings.Fields(statTail)
 	// After (comm), fields are: state(0), ppid(1), pgrp(2), session(3), tty_nr(4), tpgid(5),
 	// flags(6), minflt(7), cminflt(8), majflt(9), cmajflt(10), utime(11), stime(12),
 	// cutime(13), cstime(14), priority(15), nice(16), num_threads(17), itrealvalue(18),

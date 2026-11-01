@@ -3,7 +3,7 @@ package msstore
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 func GetStoreTokens(w http.ResponseWriter, _ *http.Request) {

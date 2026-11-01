@@ -3,8 +3,8 @@ package item
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 type itemIdLoadoutRequest struct {
@@ -28,7 +28,12 @@ func EquipItemLoadout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var itemLoadoutEncoded i.A
-	_ = u.GetItemLoadouts().WithReadOnly(func(data *models.MainItemLoadouts) error {
+	loadouts := u.GetItemLoadouts()
+	if loadouts == nil {
+		i.JSON(&w, i.A{2, i.A{}, i.A{}})
+		return
+	}
+	_ = loadouts.WithReadOnly(func(data *models.MainItemLoadouts) error {
 		itemLoadout := data.Get(req.Id)
 		if itemLoadout != nil {
 			itemLoadoutEncoded = itemLoadout.Encode(userId)

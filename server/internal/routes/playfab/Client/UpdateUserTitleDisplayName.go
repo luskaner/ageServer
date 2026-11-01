@@ -3,8 +3,8 @@ package Client
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Client/shared"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Client/shared"
 )
 
 type updateUserTitleDisplayNameRequest struct {

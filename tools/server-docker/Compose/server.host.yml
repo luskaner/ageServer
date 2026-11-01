@@ -1,4 +1,4 @@
-name: ageLANServer-server-host
+name: ageServer-server-host
 include:
   - ./server/base.include.yml
   - ./server/host.include.yml

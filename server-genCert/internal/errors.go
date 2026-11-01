@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"github.com/luskaner/ageLANServer/common"
+	"github.com/luskaner/ageServer/common"
 )
 
 const (

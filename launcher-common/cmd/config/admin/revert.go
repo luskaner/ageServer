@@ -1,8 +1,8 @@
 package admin
 
 import (
-	commonCmd "github.com/luskaner/ageLANServer/common/cmd"
-	"github.com/luskaner/ageLANServer/launcher-common/cmd/config"
+	commonCmd "github.com/luskaner/ageServer/common/cmd"
+	"github.com/luskaner/ageServer/launcher-common/cmd/config"
 	"github.com/spf13/pflag"
 )
 

@@ -1,15 +1,15 @@
 package athens
 
 import (
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/routes/game/communityEvent"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/routes/playfab"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/routes/playfab/cloudScriptFunction/buildGauntletLabyrinth/precomputed"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/user"
-	commonPlayfab "github.com/luskaner/ageLANServer/server/internal/models/playfab"
+	mapset "github.com/deckarep/golang-set/v3"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models/athens/routes/game/communityEvent"
+	"github.com/luskaner/ageServer/server/internal/models/athens/routes/playfab"
+	"github.com/luskaner/ageServer/server/internal/models/athens/routes/playfab/cloudScriptFunction/buildGauntletLabyrinth/precomputed"
+	"github.com/luskaner/ageServer/server/internal/models/athens/user"
+	commonPlayfab "github.com/luskaner/ageServer/server/internal/models/playfab"
 )
 
 type Game struct {
@@ -36,9 +36,7 @@ func CreateGame() models.Game {
 		},
 	)
 	g := &Game{
-		BaseGame: commonPlayfab.BaseGame{
-			Game: mainGame,
-		},
+		Game: mainGame,
 	}
 	blessings := playfab.ReadBlessings()
 	g.CatalogItems, g.InventoryItems = playfab.Items(blessings)

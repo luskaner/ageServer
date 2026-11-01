@@ -1,6 +1,7 @@
-github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/hairyhenderson/go-which v0.2.3 h1:it1AhsE22R9vmHwPoarntRKAxLQh3DDjrmjvhdyPKsc=
-github.com/hairyhenderson/go-which v0.2.3/go.mod h1:Y//UTU8Ka+DbmX+J84onw2hhzgqduvt97PCKQXOf/HQ=
-github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/hairyhenderson/go-which v0.2.5 h1:CnrWMn/LkrgeewG1gGzXiWdwSKJctiHigIt4dpQ4YyI=
+github.com/hairyhenderson/go-which v0.2.5/go.mod h1:pF+m35gGzSVht1bCdAmVorE47j17VsihYa6UVJNqktM=
+github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
+github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
+go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 golang.org/x/text v0.43.0 h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=
 golang.org/x/text v0.43.0/go.mod h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=

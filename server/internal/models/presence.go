@@ -1,7 +1,7 @@
 package models
 
 import (
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 type PresenceDefinitions interface {
@@ -20,13 +20,13 @@ type MainPresenceDefinitions struct {
 
 func (pd *MainPresenceDefinitions) Initialize(presence i.A) {
 	if len(presence) > 0 {
-		rawData := presence[1].(i.A)
+		rawData := presence[1].(i.A) // presence definitions
 		pd.data = make(map[int32]PresenceDefinition, len(rawData))
 		for _, rawPresence := range rawData {
 			rawPresenceArr := rawPresence.(i.A)
-			id := int32(rawPresenceArr[0].(float64))
+			id := int32(rawPresenceArr[0].(float64)) // id
 			var label *string
-			if rawPresenceArr[2] != nil {
+			if rawPresenceArr[2] != nil { // label
 				label = new(rawPresenceArr[2].(string))
 			}
 			pd.data[id] = &MainPresenceDefinition{

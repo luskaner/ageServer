@@ -3,6 +3,7 @@ Log = false
 
 # Whether to generate the Platform User Id. *ONLY* as a last resort if multiple users
 # are using Custom Launchers and they are sharing incorrectly the same Platform User Id.
+# May show the same user as multiple in the leaderboards.
 # Incompatible with Authentication not set to 'disabled'.
 GeneratePlatformUserId = false
 
@@ -12,6 +13,33 @@ GeneratePlatformUserId = false
 # adaptive: resolve to 'cached' if internet is detected or 'disabled' otherwise.
 # disabled: no authentication as it worked before.
 Authentication = 'disabled'
+
+# Whether the server re-signs the catalogues it serves (itemDefinitions.json, itemBundleItems.json,
+# levelRewardsTable.json and the arrays ending in a signature) with its own key, instead of serving
+# the signatures already captured inside those files.
+# Leave it false for a stock client: the captured signatures are the ones it trusts. Turn it on only
+# together with a client that trusts this server's signing key, otherwise it rejects every catalogue.
+[Sign]
+# When Enabled is true, the server signs responses with its own key.
+# When false (default), the server uses the captured signatures from resources/responses.
+Enabled = false
+
+# PlatformUserIdExceptions is a list of platform user IDs for which signing
+# is the REVERSE of Enabled. This allows selective signing:
+# - When Enabled = true: users in this list get unsigned (captured) responses
+# - When Enabled = false: users in this list get signed responses
+# The platform user ID is the numeric ID (e.g., "76561198000000000" for Steam, Xbox ID for Xbox).
+PlatformUserIdExceptions = []
+
+[Internet]
+# Whether to allow the server to use the Internet at all (DNS connectivity check,
+# authentication, and public IP detection). Set to false for fully offline/air-gapped use.
+Enabled = true
+
+# Manually specify the external/public IPv4 address of this server. If set, this value is used
+# instead of querying https://api.ipify.org/. Set to 'auto' (default) to auto-detect,
+# which requires Internet.Enabled = true.
+IP = 'auto'
 
 [Games]
 # Games that the server will accept.
@@ -50,3 +78,78 @@ Port = 31978
 # Multicast group to respond to (IPv4 only).
 # If changed, the launchers will need to specify the address in Server.AnnounceMulticastGroups.
 MulticastGroup = '239.31.97.8'
+
+# CONFIGURING CUSTOM FILES
+# Serves the /api/MatchContent/ endpoints used by the game to upload and
+# download multiplayer savegames and replays. Without it, restoring a saved
+# multiplayer game fails with "Failed to upload/download custom files".
+[CustomFiles]
+
+# Whether to enable the endpoints. When disabled the routes answer 404.
+Enabled = true
+
+# Folder where the files are stored. If 'auto', uses the system temp folder:
+# <TEMP>\ageServer\custom-files\<game>\ (Unix: /tmp/ageServer/...).
+Folder = 'auto'
+
+# Maximum size of a single file. Long matches and custom content can make a
+# .aoe2mpgame several MB. Accepts B/KB/MB/GB suffixes.
+MaxFileSize = '32MB'
+
+# Maximum accumulated size per game. When exceeded, the oldest files are
+# evicted first.
+MaxTotalSize = '256MB'
+
+# How long a custom file is kept since its upload. Accepts Go durations
+# (e.g. 12h, 30m, 1h30m). Files are also purged at startup if older than this.
+Expiry = '12h'
+
+# CONFIGURING EMBEDDED BATTLE SERVER
+# Runs a battle server inside the ageLAN server process instead of as a
+# separate executable. Configure per game under Games.<game>.EmbeddedBattleServer.
+# The server starts the battle server on startup and stops it on shutdown.
+# The battle server appears in the game's battle server list like any
+# external battle server.
+#
+# STARTIFMISSING: Controls when the embedded battle server auto-starts if no
+# external battle server is configured ([[Games.<game>.BattleServers]]) and none
+# is detected by the battle-server-manager. Accepted values:
+#   "true" (default): always start if missing
+#   "false": never auto-start
+#   "required": start if missing for age4/athens, otherwise false
+# [Games.age1.EmbeddedBattleServer]
+# StartIfMissing = "true"
+# Region = 'my-embedded-server'
+# Name = 'Embedded Battle Server'
+# IPv4 = 'auto'
+# BsPort = 0
+# WebSocketPort = 0
+# OutOfBandPort = 0
+# LogLevel = 'info'
+#
+# The simulation period is not configurable here: each game always runs with
+# its own default (25 ms for AoE: DE, 50 for AoE III: DE and AoM: RT, 125 for
+# AoE II: DE and AoE IV: AE).
+
+# CONFIGURING BATTLE SERVER REPLAYS
+# When enabled, the embedded battle server writes the recorded game data to
+# self-describing .replay files. This is separate from the cloud replay upload.
+[BattleServerReplays]
+# Whether to enable replay recording. When disabled, no files are written.
+Enabled = false
+
+# Folder where the replay files are stored. If 'auto', uses the userData folder:
+# <resources>/userData/<game>/replays (e.g., resources/userData/age2/replays).
+Folder = 'auto'
+
+# Maximum size of a single replay file. Accepts B/KB/MB/GB suffixes.
+MaxFileSize = '32MB'
+
+# Maximum accumulated size per game. When exceeded, the oldest files are
+# evicted first.
+MaxTotalSize = '256MB'
+
+# How long a replay file is kept since its last write. Accepts Go durations
+# (e.g. 12h, 30m, 1h30m). Files are also purged at startup if older than this.
+# Set to 0 or a negative value (e.g. -1) to keep replay files forever.
+Expiry = '12h'

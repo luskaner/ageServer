@@ -3,8 +3,8 @@ package ip
 import (
 	"net/netip"
 
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/luskaner/ageLANServer/common"
+	mapset "github.com/deckarep/golang-set/v3"
+	"github.com/luskaner/ageServer/common"
 )
 
 func ResolveHosts(hosts mapset.Set[string]) mapset.Set[netip.Addr] {

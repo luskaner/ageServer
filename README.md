@@ -1,19 +1,17 @@
-# Age LAN Server
-<img width="1024" height="572" alt="ageLANServer logo" src="https://github.com/user-attachments/assets/3a467da6-048c-460e-b78f-1fdf46629f70" />
+# Age Server
+<img width="1024" height="572" alt="ageServer logo" src="https://github.com/user-attachments/assets/3a467da6-048c-460e-b78f-1fdf46629f70" />
 
-Age LAN Server (formerly *AoE 2 DE LAN Server*) is a web server (with its launcher) that allows you to play multiplayer
+Age Server (formerly *Age Server*, originally *AoE 2 DE LAN Server*) is a web server (with its launcher) that allows you to play multiplayer
 lobbies without having an
 internet
 connection **to the game server**  ensuring the game multiplayer functionality is still available even if the official
 server
 is in maintenance or is eventually shutdown.
 
-*Note: It is not strictly limited to LAN only.*
-
 > [!IMPORTANT]
 > You will still need a custom launcher to bypass the online-only restriction that is imposed by the game to being
-> connected to the internet and Steam or Xbox Live, depending on the platform and version, to fully play offline. My
-> other [project](https://github.com/luskaner/ageLANServerLauncherCompanion) provides the files and information to
+> connected to the internet and Xbox Live or Steam, depending on the platform and version, to fully play offline. My
+> other [project](https://github.com/luskaner/ageServerLauncherCompanion) provides the files and information to
 > download a Steam Emulator and play 100% offline.
 
 **🎮 Supported games:**
@@ -22,7 +20,7 @@ is in maintenance or is eventually shutdown.
 * **Age of Empires II: Definitive Edition**.
 * **Age of Empires III: Definitive Edition**.
 * **Age of Empires IV: Anniversary Edition**.
-* **Age of Mythology: Retold** ([currently](https://github.com/luskaner/ageLANServer/issues/245) only the *Steam*
+* **Age of Mythology: Retold** ([currently](https://github.com/luskaner/ageServer/issues/245) only the *Steam*
   version).
 
 ## ⚙️Features
@@ -32,11 +30,11 @@ is in maintenance or is eventually shutdown.
 - ↕️ Restore game.
 - 📦 Data mods.
 - 🗣️ Lobby chatting.
-- 🎮 Crossplay Steam & Xbox.
+- 🎮 Crossplay Xbox & Steam.
 
 > [!TIP]
 > See more details
-> in [Questions and Answers (QA)](https://github.com/luskaner/ageLANServer/wiki/Questions-and-Answers-(QA)).
+> in [Questions and Answers (QA)](https://github.com/luskaner/ageServer/wiki/Questions-and-Answers-(QA)).
 
 ### AoE II: DE, AoE III: DE, AoE IV: AE and AoM: RT
 
@@ -124,27 +122,6 @@ is in maintenance or is eventually shutdown.
 
 </details>
 
-## Unimplemented features
-
-<details>
-<summary>List of unimplemented features</summary>
-
-- ❌ **Matchmaking**: does not make sense having a likely ephimeral server with limited users, use the official server
-  for
-  that.
-- ❌ **Achievements**: only the official server should be able to. Meeting the requirements of an achievement during a
-  match might cause issues (see [Troubleshooting](https://github.com/luskaner/ageLANServer/wiki/Troubleshooting)
-  for more details).
-- ❌ **Leaderboards**: will appear empty.
-- ❌ **Clans**: all players are outside clans. Browsing clan will appear empty and creating one will always result in
-  error.
-- ❌ **Lobby ban player**: will appear like it works but doesn't.
-- ❌ **Report/Block player**: will appear like it works but doesn't.
-
-*Note: Most of these do not apply to Age of Empires: Definitive Edition.*
-
-</details>
-
 ## Minimum system requirements
 
 ### Server
@@ -153,7 +130,7 @@ is in maintenance or is eventually shutdown.
 
 - **Windows**: 7 or equivalent (10 or higher recommended).
 - **Linux**: kernel 3.2 (5.10 or higher recommended, see [here](https://go.dev/wiki/Linux) for more details).
-- **macOS**: Monterey v12 (Sonoma v14 or higher recommended).
+- **macOS**: Ventura v13 (Sequoia v15 or higher recommended).
 
 Admin rights or firewall permission to listen on port 443 (https) will likely be required depending on the operating
 system and configuration.
@@ -165,7 +142,7 @@ system and configuration.
 - Solaris-based (Solaris and Illumos).
 - AIX.
 
-Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/MinimumRequirements) 1.26.
+Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/MinimumRequirements) 1.27.
 
 </details>
 
@@ -177,7 +154,7 @@ Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/Mi
 - Linux with kernel 3.2 (5.10 or higher recommended):
     - x86-64 (recommended).
     - ARM64.
-- macOS Monterey v12 (Sonoma v14 or higher recommended):
+- macOS Ventura v13 (Sequoia v15 or higher recommended):
     - Intel (recommended).
     - Apple Silicon. Required for AoE II: DE native Steam version in Launcher.
 
@@ -188,22 +165,21 @@ it will require admin rights elevation.**
 ### Client
 
 - Age of Empires: Definitive Edition
-  on [Steam](https://store.steampowered.com/app/1017900/Age_of_Empires_Definitive_Edition)
-  or [Xbox](https://www.xbox.com/games/store/age-of-empires-definitive-edition/9njwtjsvgvlj) (*only on a compatible
-  Windows version*). Recommended version *100.2.31845.0* or later.
+  on [Xbox](https://www.xbox.com/games/store/age-of-empires-definitive-edition/9njwtjsvgvlj) or
+  [Steam](https://store.steampowered.com/app/1017900/Age_of_Empires_Definitive_Edition).
+  Recommended version *100.2.31845.0* or later.
 - Age of Empires II: Definitive Edition
-  on [Steam](https://store.steampowered.com/app/813780/Age_of_Empires_II_Definitive_Edition)
-  or [Xbox](https://www.xbox.com/games/store/age-of-empires-ii-definitive-edition/9N42SSSX2MTG/0010) (*only on a
-  compatible Windows version*). Minimum a mid 2024 version or later.
+  on [Xbox](https://www.xbox.com/games/store/age-of-empires-ii-definitive-edition/9N42SSSX2MTG/0010) or
+  [Steam](https://store.steampowered.com/app/813780/Age_of_Empires_II_Definitive_Edition).
+  Minimum a mid 2024 version or later.
 - Age of Empires III: Definitive Edition
-  on [Steam](https://store.steampowered.com/app/933110/Age_of_Empires_III_Definitive_Edition)
-  or [Xbox](https://www.xbox.com/games/store/age-of-empires-iii-definitive-edition/9n1hf804qxn4) (*only on a compatible
-  Windows version*). Recommended a late 2023 version or later.
+  on [Xbox](https://www.xbox.com/games/store/age-of-empires-iii-definitive-edition/9n1hf804qxn4) or
+  [Steam](https://store.steampowered.com/app/933110/Age_of_Empires_III_Definitive_Edition).
+  Recommended a late 2023 version or later.
 - Age of Empires IV: Anniversary Edition
-  on [Steam](https://store.steampowered.com/app/1466860/Age_of_Empires_IV_Anniversary_Edition)
-  or [Xbox](https://www.xbox.com/games/store/age-of-empires-iv-anniversary-edition/9n94ncgm1q2n) (*only on a compatible
-  Windows version*). Recommended a 2025
-  version or later.
+  on [Xbox](https://www.xbox.com/games/store/age-of-empires-iv-anniversary-edition/9n94ncgm1q2n) or
+  [Steam](https://store.steampowered.com/app/1466860/Age_of_Empires_IV_Anniversary_Edition).
+  Recommended a 2025 version or later.
 - Age of Mythology: Retold
   on [Steam](https://store.steampowered.com/app/1934680/Age_of_Mythology_Retold). Recommended a 2025 version or later.
 
@@ -211,7 +187,7 @@ it will require admin rights elevation.**
 
 ## Binaries
 
-See the [releases page](https://github.com/luskaner/ageLANServer/releases) for server and launcher binaries for a
+See the [releases page](https://github.com/luskaner/ageServer/releases) for server and launcher binaries for a
 subset of
 supported operating systems.
 <details>
@@ -345,17 +321,17 @@ Afterward, it reverses any changes to allow the official launcher to connect to 
 ## Simplest way to use it
 
 1. **Download** the proper *full* asset from the latest
-   stable release from https://github.com/luskaner/ageLANServer/releases.
+   stable release from https://github.com/luskaner/ageServer/releases.
 2. **Uncompress** it somewhere.
 3. *Windows Optional*: *You may need to add the launcher/server binaries to the exception list of your Antivirus*.
 4. *Windows Optional*: Unblock the `.exe` files as
    explained [here](https://www.tenforums.com/tutorials/5357-unblock-file-windows-10-a.html)
-5. If not using the Steam or Xbox launcher, **edit the `launcher/resources/config.<game_title>.toml` file** with a text
+5. If not using the Xbox or Steam launcher, **edit the `launcher/resources/config.<game_title>.toml` file** with a text
    editor (like Notepad)
    and modify the `Client.Executable` section to point to the game launcher path. In this case, you also need to modify
    `Client.Path` to point to the game's directory.
    **You will need to use a custom launcher (plus what my
-   other [repo](https://github.com/luskaner/ageLANServerLauncherCompanion) provides) for 100% offline play**.
+   other [repo](https://github.com/luskaner/ageServerLauncherCompanion) provides) for 100% offline play**.
 6. If you are using AoE IV/AoM and don't have AoE II: DE installed edit the
    `battle-server-manager/resources/config.<game>.toml` file and point `Executable.Path` to the AoE II: DE
    BattleServer.exe executable (it's portable), for example, 'S:
@@ -380,7 +356,7 @@ Afterward, it reverses any changes to allow the official launcher to connect to 
     <summary>Server instructions</summary>
 
 1. **Download** the proper *server* asset from latest
-   stable [release](https://github.com/luskaner/ageLANServer/releases).
+   stable [release](https://github.com/luskaner/ageServer/releases).
 2. **Generate the certificate** by simply executing `bin/genCert`.
 3. If needed **edit the [config](server/resources/config/config.toml) file**.
 4. **Run** the `server` binary for all games or the `start_` game title specific script.
@@ -391,7 +367,7 @@ Afterward, it reverses any changes to allow the official launcher to connect to 
     <summary>Launcher instructions</summary>
 
 1. **Download** the proper *launcher* asset from latest
-   stable [release](https://github.com/luskaner/ageLANServer/releases).
+   stable [release](https://github.com/luskaner/ageServer/releases).
 2. If needed **edit the `launcher/resources/config.<game_title>.toml` and/or `launcher/resources/config.toml` files**.
    You will need to edit the `Client.Executable` section to point to the game launcher path if using a custom launcher
    which you will need to use
@@ -405,7 +381,7 @@ Afterward, it reverses any changes to allow the official launcher to connect to 
     <summary>Battle Server Manager instructions</summary>
 
 1. **Download** the proper *battle-server-manager* asset from latest
-   stable [release](https://github.com/luskaner/ageLANServer/releases).
+   stable [release](https://github.com/luskaner/ageServer/releases).
 2. If needed **edit the `battle-server-manager/resources/config.<game_title>.toml`**.
 3. **Run** the `start_...` script.
 
@@ -435,11 +411,7 @@ shall prevail over any additional restrictions when it comes to redistribution, 
 3. **Personal Use Only:**  
    This downloadable package is intended for **strictly personal use**. Commercial use or any use beyond personal
    purposes is prohibited unless express written consent is obtained from the provider.
-4. **Usage Environment (LAN):**  
-   The software must be used within a LAN (Local Area Network) environment, as long as the official game servers remain
-   available and operational. If the official servers are undergoing maintenance, become temporarily unavailable, or are
-   permanently withdrawn, this requirement becames void.
-5. **Limitation of Provider's Liability:**  
+4. **Limitation of Provider's Liability:**  
    These additional terms apply solely to the original downloadable package provided by the provider. The provider
    assumes no responsibility for any misuse of the software or for intellectual property infringements resulting from
    its use contrary to these terms. Any liability arising from the improper use of the software lies exclusively with

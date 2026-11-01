@@ -2,26 +2,42 @@
 # vim: set ts=2 sw=2 tw=0 fo=cnqoj
 version: '3'
 
-dotenv: [ '.env', '{{.ENV}}/.env.', '{{.HOME}}/.env' ]
+dotenv: [ '.env', '{{.ENV}}/.env', '{{.HOME}}/.env' ]
 
 tasks:
   build-goreleaser-cfg:
     internal: true
     cmds:
-      - go run tools/scripts/cmd/generateGoreleaserConfig.go "{{ .GOROOT_LEGACY }}"
+      - go tool generateGoreleaserConfig "{{ .GOROOT_LEGACY }}" current
+  build-goreleaser-cfg-all:
+    internal: true
+    cmds:
+      - go tool generateGoreleaserConfig "{{ .GOROOT_LEGACY }}"
+  build-gui-config:
+    summary: Builds the Wails GUI configuration application
+    dir: gui/server/config
+    cmds:
+      - task build
   build:
     deps:
       - build-goreleaser-cfg
+      - build-gui-config
+    cmds:
+      - goreleaser build --clean --snapshot --single-target
+  build-all:
+    deps:
+      - build-goreleaser-cfg-all
+      - build-gui-config
     cmds:
       - goreleaser build --clean --snapshot
   release:
     deps:
-      - build-goreleaser-cfg
+      - build-goreleaser-cfg-all
     cmds:
       - goreleaser release --clean --snapshot --fail-fast
   release-no-sign:
     deps:
-      - build-goreleaser-cfg
+      - build-goreleaser-cfg-all
     cmds:
       - goreleaser release --clean --snapshot --fail-fast --skip=sign
 includes:

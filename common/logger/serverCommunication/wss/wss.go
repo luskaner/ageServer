@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/luskaner/ageLANServer/common/logger/serverCommunication"
+	"github.com/luskaner/ageServer/common/logger/serverCommunication"
 )
 
 type BaseRead struct {

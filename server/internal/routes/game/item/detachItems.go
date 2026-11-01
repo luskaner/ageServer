@@ -3,8 +3,8 @@ package item
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 type detachItemsRequest struct {
@@ -37,18 +37,18 @@ func DetachItems(w http.ResponseWriter, r *http.Request) {
 	itemsEncoded := make([]i.A, minLength)
 	_ = u.GetItems().WithReadWrite(func(data *map[int32]*models.MainItem) error {
 		for j, itemId := range req.ItemIds.Data {
-			itemLocationId := req.LocationIds.Data[j]
-			durabilityCount := req.DurabilityCounts.Data[j]
+			locationID := req.LocationIds.Data[j]
+			durability := req.DurabilityCounts.Data[j]
 			if item, exists := (*data)[itemId]; !exists {
 				errorCodes[j] = 2
 				itemsEncoded[j] = i.A{}
 			} else {
 				errorCodes[j] = 0
-				if itemLocationId != -1 {
-					item.SetLocationId(itemLocationId)
+				if locationID != -1 {
+					item.SetLocationID(locationID)
 				}
-				if durabilityCount != -1 {
-					item.SetDurabilityCount(durabilityCount)
+				if durability != -1 {
+					item.SetDurability(durability)
 				}
 				item.IncrementVersion()
 				itemsEncoded[j] = item.Encode(sess.GetUserId())

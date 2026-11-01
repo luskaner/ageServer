@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/luskaner/ageLANServer/server-replay/internal/decoder"
-	"github.com/luskaner/ageLANServer/server-replay/internal/logEntry"
+	"github.com/luskaner/ageServer/server-replay/internal/decoder"
+	"github.com/luskaner/ageServer/server-replay/internal/logEntry"
 	"github.com/spf13/cobra"
 )
 

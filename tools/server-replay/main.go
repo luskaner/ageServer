@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/server-replay/internal/cmd"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/server-replay/internal/cmd"
 )
 
 var version = "development"

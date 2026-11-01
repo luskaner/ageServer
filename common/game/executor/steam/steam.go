@@ -1,9 +1,9 @@
 package steam
 
 import (
-	commonExecutor "github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/game/executor/base"
-	"github.com/luskaner/ageLANServer/common/game/steam"
+	commonExecutor "github.com/luskaner/ageServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/game/executor/base"
+	"github.com/luskaner/ageServer/common/game/steam"
 )
 
 func newExec(gameId string) (exec *Exec, ok bool) {

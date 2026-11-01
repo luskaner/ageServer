@@ -1,0 +1,279 @@
+/* Base document setup. The Wails window is translucent (Mica/acrylic), so the
+   document must stay transparent for the native backdrop to show through the
+   webview; Mantine's theme resolver maps --mantine-color-body to transparent. */
+html,
+body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+}
+
+body {
+    font-family: var(--mantine-font-family);
+    color: var(--mantine-color-text);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+input,
+textarea {
+    user-select: text;
+}
+
+#root {
+    min-height: 100vh;
+}
+
+/* ===== Settings card surface (WinUI 3 layers over the window backdrop) =====
+   Fluent 2 paints an in-app card with the layer fill plus a hairline stroke
+   (LayerFillColorDefault and CardStrokeColorDefault), not with the solid card
+   background a web component would use: the Mica of the window has to keep
+   showing through. SettingCard reads these tokens, so the light and the dark
+   set only have to name the two colours. A hovered row adds the same subtle
+   overlay Fluent uses for list items. */
+:root,
+[data-mantine-color-scheme='dark'] {
+    /* A light wash over the window backdrop: the card is glass, not a panel.
+       The Mica of the desktop keeps showing through it. */
+    --app-card-bg: rgba(255, 255, 255, 0.06);
+    --app-card-border: rgba(255, 255, 255, 0.04);
+    --app-card-row-hover: rgba(255, 255, 255, 0.05);
+}
+
+[data-mantine-color-scheme='light'] {
+    --app-card-bg: rgba(255, 255, 255, 0.65);
+    --app-card-border: rgba(0, 0, 0, 0.04);
+    --app-card-row-hover: rgba(0, 0, 0, 0.03);
+}
+
+.app-card {
+    background-color: var(--app-card-bg);
+}
+
+/* A card the page does not let the user open (a disabled game) keeps its
+   summary readable but looks switched off. */
+.app-card--disabled {
+    opacity: 0.7;
+}
+
+.app-card-row:hover,
+.app-row:hover {
+    background-color: var(--app-card-row-hover, rgba(255, 255, 255, 0.05));
+}
+
+/* ===== InfoBar (WinUI 3 inline message) =====
+   A tinted surface with a hairline stroke and a severity icon, one step above
+   the card fill so it reads as a message and not as another setting. The
+   severity only changes the tint and the icon colour. */
+.app-infobar {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--app-infobar-border);
+    border-radius: var(--mantine-radius-sm);
+    background-color: var(--app-infobar-bg);
+    color: var(--mantine-color-text);
+    font-size: var(--mantine-font-size-sm);
+    line-height: 1.4;
+}
+
+.app-infobar-icon {
+    display: flex;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--app-infobar-icon);
+}
+
+.app-infobar-body {
+    min-width: 0;
+}
+
+:root,
+[data-mantine-color-scheme='dark'] {
+    --app-infobar-info-bg: rgba(255, 255, 255, 0.045);
+    --app-infobar-info-border: rgba(255, 255, 255, 0.09);
+    --app-infobar-info-icon: var(--mantine-primary-color-filled);
+    --app-infobar-warning-bg: rgba(252, 225, 0, 0.1);
+    --app-infobar-warning-border: rgba(252, 225, 0, 0.28);
+    --app-infobar-warning-icon: #fce100;
+    --app-infobar-error-bg: rgba(255, 99, 71, 0.12);
+    --app-infobar-error-border: rgba(255, 99, 71, 0.3);
+    --app-infobar-error-icon: var(--mantine-color-error);
+}
+
+[data-mantine-color-scheme='light'] {
+    --app-infobar-info-bg: rgba(255, 255, 255, 0.7);
+    --app-infobar-info-border: rgba(0, 0, 0, 0.06);
+    --app-infobar-info-icon: var(--mantine-primary-color-filled);
+    --app-infobar-warning-bg: #fff4ce;
+    --app-infobar-warning-border: #e8dcb0;
+    --app-infobar-warning-icon: #9d5d00;
+    --app-infobar-error-bg: #fde7e9;
+    --app-infobar-error-border: #f1b9be;
+    --app-infobar-error-icon: var(--mantine-color-error);
+}
+
+.app-infobar--info {
+    --app-infobar-bg: var(--app-infobar-info-bg);
+    --app-infobar-border: var(--app-infobar-info-border);
+    --app-infobar-icon: var(--app-infobar-info-icon);
+}
+
+.app-infobar--warning {
+    --app-infobar-bg: var(--app-infobar-warning-bg);
+    --app-infobar-border: var(--app-infobar-warning-border);
+    --app-infobar-icon: var(--app-infobar-warning-icon);
+}
+
+.app-infobar--error {
+    --app-infobar-bg: var(--app-infobar-error-bg);
+    --app-infobar-border: var(--app-infobar-error-border);
+    --app-infobar-icon: var(--app-infobar-error-icon);
+}
+
+/* ===== Navigation pane (WinUI 3 NavigationView) =====
+   The selected item is a rounded fill with a short accent bar on its leading
+   edge, which is what tells a Windows 11 navigation item apart from a web
+   menu entry. */
+.winui-nav-item {
+    position: relative;
+}
+
+.winui-nav-item[data-active]::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--mantine-primary-color-filled);
+    transform: translateY(-50%);
+}
+
+/* ===== Opaque dialog surface (Windows 11 style) =====
+   --mantine-color-body is transparent so the native Mica backdrop shows
+   through, which would also make a dialog see-through. The panel gets its own
+   solid fill; only the overlay behind it stays translucent. */
+:root,
+[data-mantine-color-scheme='dark'] {
+    --app-modal-bg: #202020;
+    --app-modal-border: rgba(255, 255, 255, 0.08);
+    --app-modal-header-border: rgba(255, 255, 255, 0.06);
+}
+
+[data-mantine-color-scheme='light'] {
+    --app-modal-bg: #f3f3f3;
+    --app-modal-border: rgba(0, 0, 0, 0.08);
+    --app-modal-header-border: rgba(0, 0, 0, 0.06);
+}
+
+.app-modal-content {
+    background-color: var(--app-modal-bg) !important;
+    border: 1px solid var(--app-modal-border);
+    box-shadow: var(--mantine-shadow-xl);
+    /* Fluent's OverlayCornerRadius: 8 px, for surface-level content only. */
+    border-radius: var(--mantine-radius-md);
+}
+
+.app-modal-header {
+    background-color: var(--app-modal-bg);
+    border-bottom: 1px solid var(--app-modal-header-border);
+    padding-bottom: var(--mantine-spacing-sm);
+    margin-bottom: var(--mantine-spacing-md);
+}
+
+.app-modal-title {
+    font-weight: 600;
+}
+
+/* ===== File drop zone (screen 1) ===== */
+.hero-icon {
+    color: var(--mantine-primary-color-filled);
+}
+
+.dropzone {
+    border-style: dashed !important;
+    cursor: pointer;
+    transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.dropzone:hover,
+.dropzone.file-drop-target-active {
+    border-color: var(--mantine-primary-color-filled);
+    background-color: var(--mantine-primary-color-light);
+}
+
+.dropzone-icon {
+    color: var(--mantine-primary-color-filled);
+}
+
+/* ===== IPv4 input: four octets in a Mantine-like input frame ===== */
+.ipv4-input {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 176px;
+    margin-inline: auto;
+    padding-inline: 6px;
+    /* Fill and border follow the scheme the way Mantine's own inputs do: white
+       on a light desktop, dark grey on a dark one. */
+    background: var(--mantine-color-default);
+    border: 1px solid var(--mantine-color-default-border);
+    border-radius: var(--mantine-radius-sm);
+    transition: border-color 150ms ease;
+}
+
+.ipv4-input:hover {
+    /* A slightly stronger border, whichever way the scheme goes. */
+    border-color: color-mix(in srgb, var(--mantine-color-default-border), var(--mantine-color-text) 25%);
+}
+
+.ipv4-input:focus-within {
+    border-color: var(--mantine-primary-color-filled);
+}
+
+.ipv4-input:has(input:disabled) {
+    /* The frame follows its segments: Mantine's dimmed fill, like any other
+       disabled input. Wins over the hover border by specificity. */
+    background: var(--mantine-color-disabled);
+    border-color: var(--mantine-color-disabled-border);
+}
+
+.ipv4-input-segment {
+    width: 34px;
+    min-width: 0;
+    padding: 7px 0;
+    border: 0;
+    background: transparent;
+    color: var(--mantine-color-text);
+    font-family: inherit;
+    font-size: var(--mantine-font-size-sm);
+    text-align: center;
+    outline: none;
+}
+
+.ipv4-input-segment:disabled {
+    color: var(--mantine-color-disabled-color);
+    cursor: not-allowed;
+}
+
+.ipv4-input-separator {
+    color: var(--mantine-color-dimmed);
+    font-size: var(--mantine-font-size-sm);
+    line-height: 1;
+}
+
+.ipv4-input:has(input:disabled) .ipv4-input-separator {
+    color: var(--mantine-color-disabled-color);
+}
+
+.ipv4-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}

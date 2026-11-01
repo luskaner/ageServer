@@ -1,0 +1,9 @@
+{
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "[go]": {
+    "editor.insertSpaces": false,
+    "editor.tabSize": 4
+  },
+  "git.ignoreLimitWarning": true
+}

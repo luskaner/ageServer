@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	mapset "github.com/deckarep/golang-set/v2"
+	mapset "github.com/deckarep/golang-set/v3"
 	"github.com/miekg/dns"
 )
 
@@ -20,30 +20,128 @@ var failedHostToIps map[string]time.Time
 var ipToHosts map[string]mapset.Set[string]
 var hostToIps map[string]mapset.Set[string]
 
-func init() {
-	ClearDNSCache()
+// Resolver abstracts DNS resolution so production uses real DNS and tests
+// inject fakes. All methods are safe for concurrent use.
+type Resolver interface {
+	// HostToIPs resolves a hostname to IPv4 addresses.
+	HostToIPs(host string) []net.IP
+	// IPToHosts performs reverse DNS lookup on an IP address.
+	IPToHosts(ip string) []string
+	// DirectHostToIP queries external DNS servers directly for a host.
+	DirectHostToIP(host string) (string, error)
+	// DialTCP connects to addr with a timeout.
+	DialTCP(network, address string, timeout time.Duration) (net.Conn, error)
+	// NetInterfaces returns the OS network interfaces.
+	NetInterfaces() ([]net.Interface, error)
+	// RunningNetworkInterfaces returns up interfaces mapped to their IPv4 addrs.
+	RunningNetworkInterfaces() (map[*net.Interface][]*net.IPNet, error)
 }
 
-func domainToIps(host string) []net.IP {
+// defaultResolver is the production implementation that calls real OS/DNS APIs.
+type defaultResolver struct{}
+
+func (r *defaultResolver) HostToIPs(host string) []net.IP {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	resolver := &net.Resolver{}
-	ips, err := resolver.LookupIP(ctx, "ip4", host)
+	ips, err := (&net.Resolver{}).LookupIP(ctx, "ip4", host)
 	if err != nil {
 		return nil
 	}
 	return ips
 }
 
-func ipToDnsName(ip string) []string {
+func (r *defaultResolver) IPToHosts(ip string) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	resolver := &net.Resolver{}
-	names, err := resolver.LookupAddr(ctx, ip)
+	names, err := (&net.Resolver{}).LookupAddr(ctx, ip)
 	if err != nil {
 		return nil
 	}
 	return names
+}
+
+func (r *defaultResolver) DirectHostToIP(host string) (string, error) {
+	fqdnHost := dns.Fqdn(host)
+	m := new(dns.Msg)
+	m.SetQuestion(fqdnHost, dns.TypeA)
+	client := &dns.Client{Timeout: time.Second}
+	for _, dnsServer := range dnsServers {
+		in, _, err := client.Exchange(m, net.JoinHostPort(dnsServer, "53"))
+		if err != nil {
+			continue
+		}
+		if in.Rcode != dns.RcodeSuccess {
+			continue
+		}
+		for _, ans := range in.Answer {
+			if a, ok := ans.(*dns.A); ok {
+				return a.A.String(), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("no IP found for %s", host)
+}
+
+func (r *defaultResolver) DialTCP(network, address string, timeout time.Duration) (net.Conn, error) {
+	return net.DialTimeout(network, address, timeout)
+}
+
+func (r *defaultResolver) NetInterfaces() ([]net.Interface, error) {
+	return net.Interfaces()
+}
+
+func (r *defaultResolver) RunningNetworkInterfaces() (map[*net.Interface][]*net.IPNet, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[*net.Interface][]*net.IPNet)
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok {
+				if ipnet.IP.To4() != nil {
+					if _, ok := result[&iface]; !ok {
+						result[&iface] = make([]*net.IPNet, 0)
+					}
+					result[&iface] = append(result[&iface], ipnet)
+				}
+			}
+		}
+	}
+	return result, nil
+}
+
+// deps holds the active resolver. Package-level functions delegate to it.
+var deps Resolver = &defaultResolver{}
+
+// SetResolver replaces the active resolver and returns a cleanup function
+// that restores the previous one. Intended for tests:
+//
+//	cleanup := SetResolver(&mockResolver{})
+//	defer cleanup()
+func SetResolver(r Resolver) (restore func()) {
+	orig := deps
+	deps = r
+	return func() { deps = orig }
+}
+
+func init() {
+	ClearDNSCache()
+}
+
+func domainToIps(host string) []net.IP {
+	return deps.HostToIPs(host)
+}
+
+func ipToDnsName(ip string) []string {
+	return deps.IPToHosts(ip)
 }
 
 func cachedHostToIps(host string) (bool, mapset.Set[string]) {
@@ -72,34 +170,12 @@ func cachedIpToHosts(ip string) (bool, mapset.Set[string]) {
 }
 
 func DirectHostToIP(host string) (string, error) {
-	fqdnHost := dns.Fqdn(host)
-	m := new(dns.Msg)
-	m.SetQuestion(fqdnHost, dns.TypeA)
-	client := &dns.Client{
-		Timeout: time.Second,
-	}
-	for _, dnsServer := range dnsServers {
-		in, _, err := client.Exchange(m, net.JoinHostPort(dnsServer, "53"))
-		if err != nil {
-			continue
-		}
-
-		if in.Rcode != dns.RcodeSuccess {
-			continue
-		}
-
-		for _, ans := range in.Answer {
-			if a, ok := ans.(*dns.A); ok {
-				return a.A.String(), nil
-			}
-		}
-	}
-	return "", fmt.Errorf("no IP found for %s", host)
+	return deps.DirectHostToIP(host)
 }
 
 func DNSConnectivity() bool {
 	for _, dnsServer := range dnsServers {
-		conn, err := net.DialTimeout("tcp", net.JoinHostPort(dnsServer, "53"), time.Second)
+		conn, err := deps.DialTCP("tcp", net.JoinHostPort(dnsServer, "53"), time.Second)
 		if err != nil {
 			continue
 		}
@@ -170,7 +246,7 @@ func HostOrIpToIpsSet(host string) mapset.Set[string] {
 }
 
 func ResolveUnspecifiedIps() (ips []string) {
-	interfaces, err := net.Interfaces()
+	interfaces, err := deps.NetInterfaces()
 
 	if err != nil {
 		return
@@ -211,7 +287,7 @@ func ResolveUnspecifiedIps() (ips []string) {
 func Matches(addr1 string, addr2 string) bool {
 	addr2Ips := HostOrIpToIpsSet(addr2)
 	addr1Ips := HostOrIpToIpsSet(addr1)
-	return addr2Ips.Intersect(addr1Ips).Cardinality() > 0
+	return !addr2Ips.Intersect(addr1Ips).IsEmpty()
 }
 
 func IpToHosts(ip string) mapset.Set[string] {

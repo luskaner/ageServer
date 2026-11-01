@@ -1,4 +1,4 @@
-name: ageLANServer-server-no-announce-host
+name: ageServer-server-no-announce-host
 include:
   - ./server/base.include.yml
   - ./server/host.include.yml

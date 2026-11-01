@@ -2,16 +2,22 @@ package login
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 func returnData(w http.ResponseWriter, messageId uint, messages []i.A) {
+	// Marshal the id too: concatenating it as a raw number keeps the wire
+	// format but writes only escaped value data to the response.
+	id, _ := json.Marshal(messageId)
 	j, _ := json.Marshal(i.A{messages})
-	i.RawJSON(&w, []byte(fmt.Sprintf(`%d,%s`, messageId, j)))
+	var body []byte
+	body = append(body, id...)
+	body = append(body, ',')
+	body = append(body, j...)
+	i.RawJSON(&w, body)
 }
 
 func returnError(w http.ResponseWriter) {

@@ -3,9 +3,9 @@ package chat
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/routes/wss"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/routes/wss"
 )
 
 type recipientIDs struct {
@@ -17,10 +17,10 @@ type recipientID struct {
 }
 
 func whisperResult(w *http.ResponseWriter, legacy bool, code int) {
-	response := i.A{code}
+	response := i.A{code} // resultCode
 	if !legacy {
 		// FIXME: Is it the 0 repeated for each recipient?
-		response = append(response, i.A{0})
+		response = append(response, i.A{0}) // per-recipient resultCode
 	}
 	i.JSON(w, response)
 }
@@ -66,17 +66,18 @@ func SendWhisper(w http.ResponseWriter, r *http.Request, legacy bool) {
 		return
 	}
 
+	// message structure: [empty, [senderName, message], message]
 	message := i.A{""}
 	if !legacy {
 		message = append(
 			message,
 			i.A{
-				"",
-				req.Message,
+				"",          // senderName (empty)
+				req.Message, // message
 			}...,
 		)
 	}
-	message = append(message, req.Message)
+	message = append(message, req.Message) // message
 	sessions := g.Sessions()
 	var receiverSession models.Session
 	for _, receiver := range receivers {

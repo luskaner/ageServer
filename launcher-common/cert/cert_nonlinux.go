@@ -2,7 +2,7 @@
 
 package cert
 
-import "github.com/luskaner/ageLANServer/common/executor/exec"
+import "github.com/luskaner/ageServer/common/executor/exec"
 
 func FlushCerts() (result *exec.Result) {
 	return exec.ResultSuccess

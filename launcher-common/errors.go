@@ -1,6 +1,6 @@
 package launcher_common
 
-import "github.com/luskaner/ageLANServer/common"
+import "github.com/luskaner/ageServer/common"
 
 const (
 	ErrNotAdmin = iota + common.ErrLast

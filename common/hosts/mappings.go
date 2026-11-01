@@ -4,7 +4,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common"
+	"github.com/luskaner/ageServer/common"
 )
 
 // HostMappings maps a host to an IP, but an IP can be mapped to multiple hosts.

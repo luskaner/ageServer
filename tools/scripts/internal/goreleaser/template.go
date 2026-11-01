@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"text/template"
 
-	"github.com/google/uuid"
+	"github.com/luskaner/ageServer/common/uuid"
 )
 
 type Renders[D any] interface {
@@ -22,18 +22,20 @@ type Template[D any] struct {
 }
 
 func NewTemplate[D any](text string) *Template[D] {
-	tmpl := template.New(uuid.NewString())
+	tmpl := template.New(uuid.New().String())
 	return &Template[D]{tmpl: tmpl, text: text}
 }
 
 func (t *Template[D]) Render(data D) string {
-	if tmpl, err := t.tmpl.Parse(t.text); err != nil {
+	tmpl, err := t.tmpl.Parse(t.text)
+	if err != nil {
 		return ""
-	} else {
-		var buf bytes.Buffer
-		if err = tmpl.Execute(&buf, data); err != nil {
-			buf.WriteString("")
-		}
-		return buf.String()
 	}
+	var buf bytes.Buffer
+	if err = tmpl.Execute(&buf, data); err != nil {
+		// A failed execution may have written partial output; returning it
+		// would silently corrupt the generated configuration.
+		return ""
+	}
+	return buf.String()
 }

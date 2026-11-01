@@ -3,7 +3,7 @@ package common
 import (
 	"fmt"
 
-	commonGame "github.com/luskaner/ageLANServer/common/game"
+	commonGame "github.com/luskaner/ageServer/common/game"
 )
 
 const Tld = "com"
@@ -35,6 +35,20 @@ var SelfSignedCertDomains = []string{relicDomain, "*" + worldsEdge + dotTld, "*.
 
 var generatedDomainsCache = make(map[string][]string)
 
+var directHostToIPFn = DirectHostToIP
+
+var useInternet = true
+
+// SetUseInternet controls whether common may perform outbound internet access.
+// Currently it gates the public DNS enumeration of official release domains in
+// generateDomains. Disabling it returns only the statically known release
+// domains. It invalidates the generated domains cache as it may have been
+// populated with the previous setting.
+func SetUseInternet(enabled bool) {
+	useInternet = enabled
+	generatedDomainsCache = make(map[string][]string)
+}
+
 func CertDomains() []string {
 	domains := []string{"*" + playFabSuffix}
 	domains = append(domains, SelfSignedCertDomains...)
@@ -53,7 +67,7 @@ func GameHosts(gameId string, withMacOsExclusive bool) (domains []string) {
 		}
 		fallthrough
 	case commonGame.AoE1, commonGame.AoE2, commonGame.AoE3:
-		domains = []string{relicDomain, SubDomain + worldsEdge + dotTld}
+		domains = append(domains, relicDomain, SubDomain+worldsEdge+dotTld)
 	case commonGame.AoM:
 		domains = []string{"athens-live" + apiWorldsEdge}
 	}
@@ -110,11 +124,13 @@ func generateDomains(gameId string) (domains []string) {
 	for release := 1; release <= releaseMin; release++ {
 		domains = append(domains, generateDomainName(release))
 	}
-	for release := releaseMin + 1; ; release++ {
-		if _, err := DirectHostToIP(generateDomainName(release)); err == nil {
-			domains = append(domains, generateDomainName(release))
-		} else {
-			break
+	if useInternet {
+		for release := releaseMin + 1; ; release++ {
+			if _, err := directHostToIPFn(generateDomainName(release)); err == nil {
+				domains = append(domains, generateDomainName(release))
+			} else {
+				break
+			}
 		}
 	}
 	generatedDomainsCache[gameId] = domains

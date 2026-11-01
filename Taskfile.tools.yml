@@ -3,22 +3,8 @@
 version: '3'
 
 tasks:
-  build:
-    label: "Build {{.PROGRAM}}{{exeExt}}"
-    run: when_changed
-    internal: true
-    sources:
-      - tools/scripts/**/*
-    generates:
-      - .tools/{{.PROGRAM}}{{exeExt}}
-    method: checksum
-    cmds:
-      - go build -o ./.tools/{{.PROGRAM}}{{exeExt}} tools/scripts/cmd/{{.PROGRAM}}.go
   run:
-    deps:
-      - task: build
-        vars: { PROGRAM: '{{.PROGRAM}}' }
     cmds:
-      - ./.tools/{{.PROGRAM}}{{exeExt}} {{.ARGS | default ""}}
+      - go tool {{.PROGRAM}} {{.ARGS | default ""}}
 includes:
   mock: ./Taskfile.tools.mock.yml

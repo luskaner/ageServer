@@ -35,6 +35,10 @@ func Add(entry Replays) {
 }
 
 func Replay(serverIP net.IP, ignoreDelays bool) {
+	if len(entries) == 0 {
+		log.Println("No entries to replay.")
+		return
+	}
 	previousUptime := entries[0].Uptime()
 	sleep := func(entry Replays) {}
 	if !ignoreDelays {

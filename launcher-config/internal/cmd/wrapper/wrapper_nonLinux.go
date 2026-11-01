@@ -5,7 +5,7 @@ package wrapper
 import (
 	"crypto/x509"
 
-	"github.com/luskaner/ageLANServer/launcher-common/cert"
+	"github.com/luskaner/ageServer/launcher-common/cert"
 )
 
 func RemoveUserCerts() (crts []*x509.Certificate, err error) {

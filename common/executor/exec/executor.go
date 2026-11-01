@@ -8,8 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executor"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/executor"
+)
+
+// Injectable functions for testing
+var (
+	osExecutableFn         = os.Executable
+	execCustomExecutableFn = execCustomExecutable
 )
 
 type Options struct {
@@ -72,7 +78,7 @@ func (options Options) Exec() (result *Result) {
 
 func (options Options) standardExec() (result *Result) {
 	result = &Result{}
-	err, cmd := execCustomExecutable(
+	err, cmd := execCustomExecutableFn(
 		options.File,
 		options.GUI,
 		options.Wait,
@@ -105,7 +111,7 @@ func (options Options) String() string {
 
 func getExecutablePath(executable string) string {
 	if filepath.IsLocal(executable) {
-		ex, err := os.Executable()
+		ex, err := osExecutableFn()
 		if err != nil {
 			return ""
 		}
@@ -138,4 +144,14 @@ func execCustomExecutable(executable string, gui bool, wait bool, show bool, exe
 		err = cmd.Start()
 	}
 	return err, cmd
+}
+
+// SetOsExecutableFn sets a custom os.Executable for testing.
+func SetOsExecutableFn(fn func() (string, error)) {
+	osExecutableFn = fn
+}
+
+// SetExecCustomExecutableFn sets a custom execCustomExecutable for testing.
+func SetExecCustomExecutableFn(fn func(executable string, gui bool, wait bool, show bool, executableWorkingPath bool, stdout io.Writer, stderr io.Writer, arg ...string) (error, *exec.Cmd)) {
+	execCustomExecutableFn = fn
 }

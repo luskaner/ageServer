@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/luskaner/ageLANServer/server/internal/models/initializer"
+	"github.com/luskaner/ageServer/server/internal/models/initializer"
 )
 
 func TitleMiddleware(gameId string, next http.Handler) http.Handler {

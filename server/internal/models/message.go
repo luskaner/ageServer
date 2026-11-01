@@ -1,14 +1,14 @@
 package models
 
 import (
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 type Message interface {
 	GetTime() int64
 	GetBroadcast() bool
 	GetContent() string
-	GetType() uint8
+	GetMessageType() uint8
 	GetSender() User
 	GetReceivers() []User
 	GetAdvertisementId() int32
@@ -22,10 +22,10 @@ type MainMessage struct {
 	broadcast       bool
 	content         string
 	// Only used for clientLibVersion >= V194, json encoded
-	metadata  string
-	typ       uint8
-	sender    User
-	receivers []User
+	metadata    string
+	messageType uint8
+	sender      User
+	receivers   []User
 }
 
 func (message *MainMessage) GetTime() int64 {
@@ -40,8 +40,8 @@ func (message *MainMessage) GetContent() string {
 	return message.content
 }
 
-func (message *MainMessage) GetType() uint8 {
-	return message.typ
+func (message *MainMessage) GetMessageType() uint8 {
+	return message.messageType
 }
 
 func (message *MainMessage) GetSender() User {
@@ -62,14 +62,14 @@ func (message *MainMessage) GetMetadata() string {
 
 func (message *MainMessage) Encode(clientLibVersion uint16) i.A {
 	msg := i.A{
-		message.sender.GetId(),
-		message.content,
-		message.content,
-		message.typ,
-		message.advertisementId,
+		message.sender.GetId(),  // senderID
+		message.content,         // filteredMessage
+		message.content,         // content
+		message.messageType,     // messageType
+		message.advertisementId, // sessionID
 	}
 	if clientLibVersion >= i.V194 {
-		msg = append(msg, message.metadata)
+		msg = append(msg, message.metadata) // metadata
 	}
 	return msg
 }

@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common"
+	"github.com/luskaner/ageServer/common"
 )
 
 const marking = common.Name
@@ -69,6 +69,9 @@ func (l Line) Commented() (ok bool, nl Line) {
 func (l Line) Uncommented() (nl string) {
 	if !l.OnlyComments() {
 		return l.String()
+	}
+	if len(l.comments) == 0 {
+		return ""
 	}
 	sb := strings.Builder{}
 	sb.WriteString(l.comments[0])

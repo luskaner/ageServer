@@ -6,7 +6,7 @@ import (
 	"os/user"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/luskaner/ageLANServer/launcher-common/ipc"
+	"github.com/luskaner/ageServer/launcher-common/ipc"
 )
 
 func SetupServer() (listener net.Listener, err error) {

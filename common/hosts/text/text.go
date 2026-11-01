@@ -18,10 +18,12 @@ const (
 	EncodingOther
 )
 
+var getEncodingFn = GetEncoding
+
 func Decode(buf []byte) (text string, encType int, err error) {
 	encType = Encoding(buf)
 	var enc encoding.Encoding
-	enc, err = GetEncoding(encType)
+	enc, err = getEncodingFn(encType)
 	if err != nil {
 		return
 	}
@@ -37,6 +39,8 @@ func Decode(buf []byte) (text string, encType int, err error) {
 	return
 }
 
+var utf8ValidFn = utf8.Valid
+
 func Encoding(buf []byte) (enc int) {
 	enc = EncodingOther
 	n := len(buf)
@@ -46,7 +50,7 @@ func Encoding(buf []byte) (enc int) {
 		return
 	}
 	if n < 2 {
-		if utf8.Valid(buf) {
+		if utf8ValidFn(buf) {
 			enc = EncodingUTF8
 		}
 		return
@@ -87,7 +91,7 @@ func Encoding(buf []byte) (enc int) {
 	}
 
 	// 3. UTF-8 first: includes ASCII-only content.
-	if utf8.Valid(buf) {
+	if utf8ValidFn(buf) {
 		enc = EncodingUTF8
 		return
 	}

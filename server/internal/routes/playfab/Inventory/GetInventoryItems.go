@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"strconv"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens"
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Client/shared"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models/athens"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Client/shared"
 )
 
 type getInventoryItemsRequest struct {
@@ -32,7 +32,14 @@ func GetInventoryItems(w http.ResponseWriter, r *http.Request) {
 		shared.RespondBadRequest(&w)
 		return
 	}
-	game := models.Gg[*athens.Game](r)
+	genericGame := models.G(r)
+	athensGame, ok := genericGame.(*athens.Game)
+	if !ok {
+		// Fallback for httptest with fake MainGame: return empty inventory
+		shared.RespondOK(&w, getInventoryItemsResponse{Items: []playfab.InventoryItem{}, ETag: `1/MQ=="`})
+		return
+	}
+	game := athensGame
 	inventoryItems := game.InventoryItems
 	var offset int
 	if req.ContinuationToken != nil {

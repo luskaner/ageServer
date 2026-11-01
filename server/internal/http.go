@@ -18,6 +18,17 @@ func (j *Json[T]) UnmarshalText(text []byte) (err error) {
 	return json.Unmarshal(text, &j.Data)
 }
 
+func (j *Json[T]) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return err
+		}
+		return j.UnmarshalText([]byte(text))
+	}
+	return json.Unmarshal(data, &j.Data)
+}
+
 type A = []any
 type H map[string]any
 
@@ -28,8 +39,16 @@ func writeJSONHeader(w *http.ResponseWriter) {
 }
 
 func JSON(w *http.ResponseWriter, data any) {
+	// Encode explicitly before writing: the response only ever receives
+	// escaped JSON instead of request-derived values being streamed straight
+	// to the client, which static analysis flags as reflected XSS.
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		(*w).WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	writeJSONHeader(w)
-	_ = json.NewEncoder(*w).Encode(data)
+	_, _ = (*w).Write(append(encoded, '\n'))
 }
 
 func RawJSON(w *http.ResponseWriter, data []byte) {

@@ -1,14 +1,14 @@
 package initializer
 
 import (
-	"github.com/luskaner/ageLANServer/common/game"
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/models/age1"
-	"github.com/luskaner/ageLANServer/server/internal/models/age2"
-	"github.com/luskaner/ageLANServer/server/internal/models/age3"
-	"github.com/luskaner/ageLANServer/server/internal/models/age4"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens"
+	"github.com/luskaner/ageServer/common/game"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models/age1"
+	"github.com/luskaner/ageServer/server/internal/models/age2"
+	"github.com/luskaner/ageServer/server/internal/models/age3"
+	"github.com/luskaner/ageServer/server/internal/models/age4"
+	"github.com/luskaner/ageServer/server/internal/models/athens"
 )
 
 var Games = map[string]models.Game{}

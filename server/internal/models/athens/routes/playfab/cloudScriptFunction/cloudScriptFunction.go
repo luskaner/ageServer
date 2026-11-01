@@ -1,8 +1,8 @@
 package cloudScriptFunction
 
 import (
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/routes/playfab/cloudScriptFunction/buildGauntletLabyrinth"
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/models/athens/routes/playfab/cloudScriptFunction/buildGauntletLabyrinth"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
 )
 
 var Store map[string]playfab.CloudScriptFunction

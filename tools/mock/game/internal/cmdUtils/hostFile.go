@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/hosts"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/hosts"
 )
 
 func HandleHostFile(hostFilePath string) (err error) {

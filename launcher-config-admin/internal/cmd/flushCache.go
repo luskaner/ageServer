@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"runtime"
-
-	"github.com/luskaner/ageLANServer/common"
-	commonLogger "github.com/luskaner/ageLANServer/common/logger"
-	"github.com/luskaner/ageLANServer/launcher-common/cert"
-	"github.com/luskaner/ageLANServer/launcher-common/cmd/config"
-	"github.com/luskaner/ageLANServer/launcher-config-admin/internal"
-	"github.com/luskaner/ageLANServer/launcher-config-admin/internal/hosts"
+	"github.com/luskaner/ageServer/common"
+	commonLogger "github.com/luskaner/ageServer/common/logger"
+	"github.com/luskaner/ageServer/launcher-common/cmd/config"
+	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
+	"github.com/luskaner/ageServer/launcher-config-admin/internal"
 )
 
 func runFlushCache(args []string) (err error, exitCode int) {
@@ -18,31 +15,33 @@ func runFlushCache(args []string) (err error, exitCode int) {
 		return
 	}
 	if values.LogRoot != "" {
-		internal.Initialize(values.LogRoot)
+		if initErr := initializeFn(values.LogRoot); initErr != nil {
+			commonLogger.Println(commonUi.Fail("Failed to initialize file logging: %s", initErr))
+		}
 	}
 	if values.Certs {
-		if runtime.GOOS != "windows" {
-			commonLogger.Println("Flushing Certs cache...")
-			if result := cert.FlushCerts(); !result.Success() {
-				commonLogger.Println("Failed to flush Certs cache")
+		if runtimeGOOS != "windows" {
+			commonLogger.Println(commonUi.Step("Flushing Certs cache..."))
+			if result := flushCertsFn(); !result.Success() {
+				commonLogger.Println(commonUi.Fail("Failed to flush Certs cache"))
 				if result.ExitCode != common.ErrSuccess {
-					commonLogger.Printf("Exit code: %v\n", result.ExitCode)
+					commonLogger.Println(commonUi.Fault("Exit code: %v", result.ExitCode))
 				}
 				if result.Err != nil {
-					commonLogger.Printf("Error: %v\n", result.Err)
+					commonLogger.Println(commonUi.Fault("Error: %v", result.Err))
 				}
 				exitCode = internal.ErrFlushCacheCerts
 			}
 		}
 	}
 	if values.IPs {
-		if result := hosts.FlushDns(); !result.Success() {
-			commonLogger.Println("Failed to flush DNS cache")
+		if result := flushDnsFn(); !result.Success() {
+			commonLogger.Println(commonUi.Fail("Failed to flush DNS cache"))
 			if result.ExitCode != common.ErrSuccess {
-				commonLogger.Printf("Exit code: %v\n", result.ExitCode)
+				commonLogger.Println(commonUi.Fault("Exit code: %v", result.ExitCode))
 			}
 			if result.Err != nil {
-				commonLogger.Printf("Error: %v\n", result.Err)
+				commonLogger.Println(commonUi.Fault("Error: %v", result.Err))
 			}
 			if exitCode == internal.ErrFlushCacheCerts {
 				exitCode = internal.ErrFlushCache

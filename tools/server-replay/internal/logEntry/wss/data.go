@@ -6,14 +6,33 @@ import (
 	"net"
 
 	"github.com/gorilla/websocket"
-	"github.com/luskaner/ageLANServer/common/logger/serverCommunication/wss"
-	"github.com/luskaner/ageLANServer/server-replay/internal/logEntry"
+	"github.com/luskaner/ageServer/common/logger/serverCommunication/wss"
+	"github.com/luskaner/ageServer/server-replay/internal/logEntry"
 )
 
 type Data struct {
 	Websocket[wss.Data]
 	messageResponse
 	response bool
+}
+
+// dataResponseMatches compares the LOGGED expected response against the
+// actual one, tolerating volatile fields (dates, IPs) like CompareJSON.
+//
+// Regression: this used to compare the actual response against itself
+// (d.body is messageResponse.body), so every WSS response reported OK.
+func dataResponseMatches(expected []byte, actual []byte) bool {
+	var from any
+	if err := json.Unmarshal(expected, &from); err != nil {
+		log.Printf("Error unmarshalling expected response: %s", err)
+		return false
+	}
+	var to any
+	if err := json.Unmarshal(actual, &to); err != nil {
+		log.Printf("Error unmarshalling actual response: %s", err)
+		return false
+	}
+	return logEntry.CompareJSON(from, to)
 }
 
 func (d *Data) CheckResponse() {
@@ -32,17 +51,7 @@ func (d *Data) CheckResponse() {
 				return
 			}
 		} else {
-			var from any
-			if err := json.Unmarshal(d.body, &from); err != nil {
-				log.Printf("Error unmarshalling expected response: %s", err)
-				return
-			}
-			var to any
-			if err := json.Unmarshal(d.messageResponse.body, &to); err != nil {
-				log.Printf("Error unmarshalling actual response: %s", err)
-				return
-			}
-			if !logEntry.CompareJSON(from, to) {
+			if !dataResponseMatches(d.data.Body.Body, d.messageResponse.body) {
 				return
 			}
 		}

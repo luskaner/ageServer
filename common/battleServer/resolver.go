@@ -3,7 +3,7 @@ package battleServer
 import (
 	"path/filepath"
 
-	"github.com/luskaner/ageLANServer/common/game"
+	"github.com/luskaner/ageServer/common/game"
 )
 
 const Executable = "BattleServer.exe"

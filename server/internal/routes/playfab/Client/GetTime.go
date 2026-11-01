@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Client/shared"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Client/shared"
 )
 
 type timeResponse struct {

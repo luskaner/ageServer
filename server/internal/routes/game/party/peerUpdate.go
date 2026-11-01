@@ -3,9 +3,9 @@ package party
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/routes/game/party/shared"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/routes/game/party/shared"
 )
 
 func PeerUpdate(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +32,7 @@ func PeerUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		advPeers := adv.GetPeers()
 		var peers []models.Peer
-		for j := 0; j < length; j++ {
+		for j := range length {
 			var u models.User
 			u, ok = gameUsers.GetUserById(profileIds[j])
 			if !ok {

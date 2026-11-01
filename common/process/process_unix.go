@@ -9,6 +9,7 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"os"
 	"time"
@@ -28,7 +29,20 @@ func status(proc *os.Process) (err error, alive bool, permitted bool) {
 	return
 }
 
+// WaitForProcess waits for proc to exit, and reports whether it did.
+//
+// A nil duration waits for as long as it takes.
 func WaitForProcess(proc *os.Process, duration *time.Duration) bool {
+	return WaitForProcessContext(context.Background(), proc, duration)
+}
+
+// WaitForProcessContext is WaitForProcess that gives up when ctx is cancelled.
+//
+// It exists because the longest wait in the launcher is for another instance to
+// go away, which is exactly the wait somebody wants to interrupt: a launcher that
+// is waiting up to a minute for a previous run cannot be stopped during it, and
+// in a graphical frontend nothing can be done about that at all.
+func WaitForProcessContext(ctx context.Context, proc *os.Process, duration *time.Duration) bool {
 	pollInterval := 100 * time.Millisecond
 	if duration == nil {
 		pollInterval *= 10
@@ -41,6 +55,8 @@ func WaitForProcess(proc *os.Process, duration *time.Duration) bool {
 				return true
 			}
 			select {
+			case <-ctx.Done():
+				return false
 			case <-timeoutChan:
 				return false
 			case <-ticker.C:
@@ -62,6 +78,8 @@ func WaitForProcess(proc *os.Process, duration *time.Duration) bool {
 		timeoutChan = timer.C
 	}
 	select {
+	case <-ctx.Done():
+		return false
 	case err := <-done:
 		if err == nil {
 			return true

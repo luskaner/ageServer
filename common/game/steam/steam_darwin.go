@@ -3,7 +3,7 @@ package steam
 import (
 	"os"
 
-	"github.com/luskaner/ageLANServer/common/game"
+	"github.com/luskaner/ageServer/common/game"
 )
 
 const applicationSupport = `/Library/Application Support/`

@@ -7,7 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	internalClient "github.com/luskaner/ageLANServer/server-replay/internal/client"
+	internalClient "github.com/luskaner/ageServer/server-replay/internal/client"
 )
 
 var dialer *websocket.Dialer

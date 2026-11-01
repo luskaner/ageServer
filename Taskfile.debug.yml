@@ -12,10 +12,14 @@ tasks:
     method: checksum
     cmds:
       - task: :tools:run
-        vars: { PROGRAM: 'createServerResourcesFolder' }
-      - task: :tools:run
         vars: { PROGRAM: 'copyServerResources' }
   prepare-server:
+    deps:
+      - prepare-server-genCert
+      - build-genCert
+    cmds:
+      - build/server/bin/genCert{{exeExt}} -r
+  ensure-certificate:
     deps:
       - prepare-server-genCert
       - build-genCert
@@ -24,13 +28,14 @@ tasks:
       - server-genCert/**/*
     generates:
       - build/server/bin/genCert{{exeExt}}
+      - build/server/resources/certificates/**/*
     method: checksum
+    vars:
+      ARGS: '{{.ARGS | default ""}}'
     cmds:
-      - build/server/bin/genCert{{exeExt}} -r
+      - build/server/bin/genCert{{exeExt}} -i {{.ARGS}}
   prepare-launcher:
     deps:
-      - build-config-all
-      - prepare-server
       - prepare-battle-server-manager
       - build-server
       - build-launcher-agent
@@ -48,7 +53,7 @@ tasks:
       - task: :tools:run
         vars: { PROGRAM: 'copyLauncherResources' }
   prepare-battle-server-manager:
-    deps: [ prepare-server ]
+    deps: [ ensure-certificate ]
     sources:
       - common/**/*
       - battle-server-manager/**/*
@@ -78,7 +83,7 @@ tasks:
       - build/server/bin/genCert{{exeExt}}
     method: checksum
     cmds:
-      - go build -o build/server/bin/genCert ./server-genCert
+      - go build -o build/server/bin/genCert{{exeExt}} ./server-genCert
   build-battle-server-manager:
     sources:
       - common/**/*
@@ -132,6 +137,11 @@ tasks:
     cmds:
       - go build -o build/launcher/bin/config-admin-agent{{exeExt}} ./launcher-config-admin-agent
   build-config-all:
-    deps: [ build-config, build-config-admin, build-config-admin-agent ]
+    deps: [ build-config, build-config-admin-agent ]
+  build-gui-config:
+    summary: Builds the Wails GUI configuration application
+    dir: gui/server/config
+    cmds:
+      - task build
 includes:
   os: ./Taskfile.debug.{{if eq OS "windows"}}other{{else}}unix{{end}}.yml

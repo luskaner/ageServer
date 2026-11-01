@@ -3,22 +3,6 @@
 version: '3'
 
 tasks:
-  build-battleserver:
-    vars:
-      SUFFIX: '{{.SUFFIX | default "BattleServer"}}'
-    internal: true
-    env:
-      GOOS: windows
-      GOARCH: amd64
-    run: when_changed
-    sources:
-      - common/**/*
-      - tools/mock/battle-server/**/*
-    generates:
-      - build/mock/game/{{.GAME_ID}}/{{.SUFFIX}}.exe
-    method: checksum
-    cmds:
-      - go build -ldflags="-X 'battle-server/internal/cmd.defaultRelayBroadcastPortStr={{.DEF_RELAY_BS_PORT}}' -X 'battle-server/internal/cmd.defaultBsPublicPortStr={{.DEF_BS_PUBLIC_PORT}}' -X 'battle-server/internal/cmd.defaultOutOfBandStr={{.DEF_OOB_PORT}}'" -o build/mock/game/{{.GAME_ID}}/{{.SUFFIX}}.exe ./tools/mock/battle-server
   build-launcher:
     internal: true
     env:
@@ -58,22 +42,16 @@ tasks:
     cmds:
       - task: build-common
         vars: { GAME_ID: 'age1', GAME_BIN_NAME: 'AoEDE_s' }
-      - task: build-battleserver
-        vars: { GAME_ID: 'age1', DEF_RELAY_BS_PORT: '8888', DEF_BS_PUBLIC_PORT: '8888', DEF_OOB_PORT: '' }
   build-age2:
     cmds:
       - task: build-common
         vars: { GAME_ID: 'age2', GAME_BIN_NAME: 'AoE2DE_s' }
-      - task: build-battleserver
-        vars: { GAME_ID: 'age2', SUFFIX: 'BattleServer/BattleServer', DEF_RELAY_BS_PORT: '9999', DEF_BS_PUBLIC_PORT: '27012', DEF_OOB_PORT: '27212' }
       - task: :run
         vars: { PROGRAM: 'createGameMockCA', ARGS: 'age2' }
   build-age3:
     cmds:
       - task: build-common
         vars: { GAME_ID: 'age3', GAME_BIN_NAME: 'AoE3DE_s' }
-      - task: build-battleserver
-        vars: { GAME_ID: 'age3', DEF_RELAY_BS_PORT: '9999', DEF_BS_PUBLIC_PORT: '8888', DEF_OOB_PORT: '9888' }
       - task: :run
         vars: { PROGRAM: 'createGameMockCA', ARGS: 'age3' }
   build-age4:

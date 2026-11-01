@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/battleServer"
-	"github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/process"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/battleServer"
+	"github.com/luskaner/ageServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/process"
 	"golang.org/x/sys/windows"
 )
 
@@ -70,7 +70,10 @@ func listenForBattleServerBroadcast(gameId string) (*battleServer.BroadcastMessa
 				break
 			}
 		} else {
-			return nil, nil, parseErr
+			// Stray or malformed datagrams on the broadcast port must be
+			// skipped, not fatal: other traffic may share the port.
+			log.Printf("Skipping invalid broadcast message: %v", parseErr)
+			continue
 		}
 	}
 

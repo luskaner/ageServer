@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/luskaner/ageLANServer/common/cmd"
+	"github.com/luskaner/ageServer/common/cmd"
 )
 
 var Version string

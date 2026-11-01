@@ -3,8 +3,8 @@ package user
 import (
 	"time"
 
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab/data"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models/playfab/data"
 )
 
 type PunchCardProgress struct {

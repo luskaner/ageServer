@@ -4,7 +4,7 @@ import (
 	"iter"
 	"strconv"
 
-	"github.com/luskaner/ageLANServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal"
 )
 
 type ChatChannel interface {

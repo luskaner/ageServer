@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/luskaner/ageLANServer/common/game"
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/routes/game/relationship"
-	"github.com/luskaner/ageLANServer/server/internal/routes/wss"
+	"github.com/luskaner/ageServer/common/game"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/routes/game/relationship"
+	"github.com/luskaner/ageServer/server/internal/routes/wss"
 )
 
 type PlatformLoginRequest struct {
@@ -21,8 +21,27 @@ type PlatformLoginRequest struct {
 	ClientLibVersion uint16 `schema:"clientLibVersion"`
 }
 
+// connectionID is the fixed value sent in the platformlogin response.
+// The client parses but never uses this field; 0 is fine.
+const connectionID = 0
+
 func PlatformLoginError(t time.Time, w http.ResponseWriter) {
-	i.JSON(&w, i.A{2, "", 0, t, i.A{}, i.A{}, 0, 0, nil, nil, i.A{}, i.A{}, 0, i.A{}})
+	i.JSON(&w, i.A{
+		2,     // resultCode: 0 = success, 2 = error
+		"",    // connectionToken
+		0,     // connectionID
+		t,     // serverTime
+		i.A{}, // accountInfo
+		i.A{}, // profiles
+		0,     // banLevel
+		0,     // banSeconds
+		nil,   // banMessage
+		nil,   // clientSettings
+		i.A{}, // selectProfile
+		i.A{}, // sslCertificates
+		0,     // shouldUseClientSync: 0 = disabled (server-authoritative sync), 1 = enabled (client-side prediction)
+		i.A{}, // relayServers
+	})
 }
 
 func Platformlogin(w http.ResponseWriter, r *http.Request) {
@@ -36,11 +55,11 @@ func Platformlogin(w http.ResponseWriter, r *http.Request) {
 		sessions.Delete(sess.Id())
 	}
 	req := r.Context().Value("request").(PlatformLoginRequest)
-	sessionId := sessions.Create(u.GetId(), req.ClientLibVersion)
-	sess, _ = sessions.GetById(sessionId)
+	connectionToken := sessions.Create(u.GetId(), req.ClientLibVersion)
+	sess, _ = sessions.GetById(connectionToken)
 	presenceDefinitions := g.PresenceDefinitions()
 	relationship.ChangePresence(req.ClientLibVersion, sessions, users, u, presenceDefinitions, 1)
-	profileInfo := u.EncodeProfileInfo(req.ClientLibVersion)
+	profile := u.EncodeProfileInfo(req.ClientLibVersion)
 	if title == game.AoE3 || title == game.AoM || title == game.AoE4 {
 		for user := range users.GetUserIds() {
 			if user != u.GetId() {
@@ -49,20 +68,24 @@ func Platformlogin(w http.ResponseWriter, r *http.Request) {
 					wss.SendOrStoreMessage(
 						currentSess,
 						"FriendAcceptMessage",
-						i.A{profileInfo},
+						i.A{profile},
 					)
 				}
 			}
 		}
 	}
 	profileId := u.GetProfileId()
-	extraProfileInfoList := i.A{}
+	leaderboardStat := i.A{}
 	if title == game.AoE2 || i.SinceTheBalticPowers(title, req.ClientLibVersion) {
-		extraProfileInfoList = append(extraProfileInfoList, u.EncodeExtraProfileInfo(req.ClientLibVersion))
+		var rating *models.PlayerRating
+		if rows := g.MatchHistory().GetRatingsForLeaderboard(models.SoloRMRanked, []int32{u.GetId()}); rows != nil {
+			rating = rows[u.GetId()]
+		}
+		leaderboardStat = append(leaderboardStat, u.EncodeLeaderboardStat(rating))
 	}
 	battleServers := g.BattleServers()
-	servers := battleServers.Encode(r)
-	if len(servers) == 0 {
+	relayServers := battleServers.Encode(r)
+	if len(relayServers) == 0 {
 		server := battleServers.NewBattleServer("")
 		server.SetIPv4("127.0.0.1")
 		server.SetBsPort(27012)
@@ -71,60 +94,65 @@ func Platformlogin(w http.ResponseWriter, r *http.Request) {
 			server.SetName("localhost")
 			server.SetOutOfBandPort(27212)
 		}
-		servers = append(servers, server.EncodeLogin(r))
+		relayServers = append(relayServers, server.EncodeLogin(r))
 	}
+	serverTime := r.Context().Value("time").(time.Time).Unix()
 	response := i.A{
-		0,
-		sessionId,
-		549_000_000,
-		r.Context().Value("time").(time.Time).Unix(),
+		0, // resultCode: 0 = success, 2 = error
+		connectionToken,
+		connectionID,
+		serverTime,
 		i.A{
-			profileId,
-			u.GetPlatformPath(),
-			u.GetPlatformId(),
-			-1,
-			0,
-			"en",
-			"eur",
-			2,
-			nil,
-		},
-		i.A{profileInfo},
-		0,
-		0,
-		nil,
+			profileId,           // id
+			u.GetPlatformPath(), // accountName
+			u.GetAccountType(),  // 3 = Steam, 9 = Xbox
+			-1,                  // ssoID: not available
+			0,                   // ssoStatus
+			"en",                // country
+			"eur",               // currency
+			2,                   // spamAllowed: 0=none, 1=friends only, 2=all (default), 3=filtered
+			nil,                 // metaData
+			// profiles (optional) is omitted
+		}, // accountInfo
+		i.A{profile}, // profiles
+		0,            // banLevel
+		0,            // banSeconds
+		nil,          // banMessage
 	}
-	var avatarStats i.A
+	var stats i.A
 	if title == game.AoE1 {
-		response = append(response, i.A{})
+		// AoE1 clients expect an extra top-level element before clientSettings.
+		response = append(response, i.A{}) // extra (AoE1 only)
 	} else {
-		avatarStats = u.EncodeAvatarStats()
+		stats = u.EncodeStats()
 	}
-	allProfileInfo := i.A{
-		0,
-		profileInfo,
+	selectProfile := i.A{
+		0, // resultCode: 0 = success, 2 = error
+		profile,
+		// relationships
 		relationship.Relationships(title, req.ClientLibVersion, users, u, presenceDefinitions),
-		extraProfileInfoList,
-		avatarStats,
-		nil,
-		i.A{},
-		nil,
-		1,
+		leaderboardStat,
+		stats,
+		nil,   // clanInfo
+		i.A{}, // clanMembershipRequests
+		nil,   // extendedData
+		1,     // enableCrossplay: 1 = enabled
 	}
 	if title != game.AoE1 {
-		allProfileInfo = append(allProfileInfo, i.A{})
+		selectProfile = append(selectProfile, i.A{}) // privacySettings
 	}
 	if req.ClientLibVersion >= i.V193 {
-		allProfileInfo = append(allProfileInfo, -1)
+		selectProfile = append(selectProfile, -1) // extra field for newer clients
 	}
+	clientSettings := g.Resources().LoginData()
 	response = append(response,
-		g.Resources().LoginData(),
-		allProfileInfo,
-		i.A{},
-		0,
-		servers,
+		clientSettings,
+		selectProfile,
+		i.A{}, // sslCertificates
+		0,     // shouldUseClientSync: 0 = disabled (server-authoritative sync), 1 = enabled (client-side prediction)
+		relayServers,
 	)
-	expiration := time.Now().Add(time.Hour).UTC().Format(time.RFC1123)
+	expiration := time.Now().Add(time.Hour).UTC().Format(http.TimeFormat)
 	w.Header().Set("Set-Cookie", fmt.Sprintf("reliclink=%d; Expires=%s; Max-Age=3600", u.GetReliclink(), expiration))
 	w.Header().Set("Request-Context", "appId=cid-v1:d21b644d-4116-48ea-a602-d6167fb46535")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")

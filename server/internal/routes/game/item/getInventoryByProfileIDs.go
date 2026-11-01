@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 type getInventoryByProfileIDsRequest struct {
@@ -43,12 +43,12 @@ func GetInventoryByProfileIDs(w http.ResponseWriter, r *http.Request) {
 		}
 		profileIdStr := strconv.Itoa(int(profileId))
 		initialData[j] = i.A{
-			profileIdStr,
-			itemsEncoded,
+			profileIdStr, // profileID
+			itemsEncoded, // items
 		}
 		finalData[j] = i.A{
-			profileIdStr,
-			locations,
+			profileIdStr, // profileID
+			locations,    // item locations
 		}
 	}
 	i.JSON(&w, i.A{0, initialData, finalData})

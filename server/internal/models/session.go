@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/luskaner/ageLANServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal"
 )
 
 type Session interface {
@@ -49,7 +49,12 @@ func (s *SessionData) GetClientLibVersion() uint16 {
 }
 
 func (s *SessionData) AddMessage(message internal.A) {
-	s.messageChan <- message
+	// Non-blocking send: if the channel is full (client stopped polling),
+	// drop the message instead of blocking the caller's goroutine forever.
+	select {
+	case s.messageChan <- message:
+	default:
+	}
 }
 
 func (s *SessionData) WaitForMessages(ackNum uint) (uint, []internal.A) {

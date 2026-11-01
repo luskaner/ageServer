@@ -10,6 +10,7 @@ import (
 type SetupBaseValues struct {
 	MapIp                  net.IP
 	MacOsExclusiveMappings bool
+	CanUseInternet         bool
 	AddLocalCertData       []byte
 }
 
@@ -30,6 +31,7 @@ type SetupValues struct {
 	*SetupBaseValues
 	AddUserCertData []byte
 	AddCACertData   []byte
+	AddSigKeyData   []byte
 	AgentEndOnError bool
 }
 
@@ -46,6 +48,10 @@ func (v *SetupValues) AddUserCertDataRef() *[]byte {
 
 func (v *SetupValues) AddCACertDataRef() *[]byte {
 	return &v.AddCACertData
+}
+
+func (v *SetupValues) AddSigKeyDataRef() *[]byte {
+	return &v.AddSigKeyData
 }
 
 func InitSetUp(flags *pflag.FlagSet) (values *SetupBaseValues) {
@@ -65,6 +71,8 @@ func InitSetUp(flags *pflag.FlagSet) (values *SetupBaseValues) {
 		"Add the certificate to the local machine's trusted root store",
 	)
 	flags.BoolVar(values.MacOsExclusiveMappingsRef(), "macExclusiveDomain", false, "macOS exclusive domain")
+	flags.BoolVar(&values.CanUseInternet, "internet", true, "Whether or not the process may use the internet to look up official domains.")
+	_ = flags.MarkHidden("internet")
 	return values
 }
 
@@ -76,6 +84,7 @@ func SetUpFlagSet() (values *SetupValues, flags *pflag.FlagSet) {
 		flags,
 		"Only relevant when using 'ip' option. If empty, it will use the system path",
 		"It requires the 'localCert' option to be set. If non-empty the certificate will be saved only to the specified path.",
+		"It requires the 'sigKeyData' option to be set. If non-empty the signing key will be saved only to the specified path.",
 		"Backup metadata. Unnecessary for AoE:DE",
 		"Backup profiles.",
 	)
@@ -83,6 +92,8 @@ func SetUpFlagSet() (values *SetupValues, flags *pflag.FlagSet) {
 		flags.BytesBase64VarP(values.AddUserCertDataRef(), "userCert", "u", nil, "Add the certificate to the user's trusted root store")
 	}
 	flags.BytesBase64VarP(values.AddCACertDataRef(), "caStoreCert", "s", nil, "Add the certificate to the game's trusted root store. For all except AoE I: DE and AoE IV: AE.")
+	flags.BytesBase64Var(values.AddSigKeyDataRef(), "sigKeyData", nil, "The server's public signing key (DER) to save to 'sigKeyFilePath'.")
+	_ = flags.MarkHidden("sigKeyData")
 	flags.BoolVarP(&values.AgentEndOnError, "agentEndOnError", "r", false, "Stop the 'config-admin-agent' if it is running and any admin action failed.")
 	_ = flags.MarkHidden("agentEndOnError")
 	return

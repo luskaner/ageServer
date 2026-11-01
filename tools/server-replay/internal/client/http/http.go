@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	internalClient "github.com/luskaner/ageLANServer/server-replay/internal/client"
+	internalClient "github.com/luskaner/ageServer/server-replay/internal/client"
 )
 
 var pool map[string]*http.Client

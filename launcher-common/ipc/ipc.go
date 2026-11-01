@@ -3,8 +3,8 @@ package ipc
 import (
 	"net"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executables"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/executables"
 )
 
 const (
@@ -19,6 +19,7 @@ type (
 	SetupCommand struct {
 		IP                     net.IP
 		MacOsExclusiveMappings bool
+		CanUseInternet         bool
 		Certificate            []byte
 		GameId                 string
 	}

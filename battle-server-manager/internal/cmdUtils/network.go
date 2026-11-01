@@ -5,7 +5,51 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/luskaner/ageLANServer/common/logger"
+	"github.com/luskaner/ageServer/common/cmdlog"
+)
+
+var (
+	listenTCP = func(address string) (error, net.Listener) {
+		var addr *net.TCPAddr
+		var err error
+		addr, err = net.ResolveTCPAddr("tcp4", address)
+		if err != nil {
+			cmdlog.Fault("Could not resolve %s: %s", address, err)
+			return err, nil
+		}
+		var listener *net.TCPListener
+		listener, err = net.ListenTCP("tcp4", addr)
+		if err != nil {
+			cmdlog.Fault("Could not listen on %s: %s", address, err)
+			return err, nil
+		}
+		return nil, listener
+	}
+	findUnusedPorts = func(count int) ([]int, error) {
+		var ports []int
+		var listeners []net.Listener
+		address := net.JoinHostPort(netip.IPv4Unspecified().String(), "0")
+		var err error
+		for range count {
+			var listener net.Listener
+			err, listener = listenTCP(address)
+			if err != nil {
+				break
+			}
+			listeners = append(listeners, listener)
+			ports = append(ports, listener.Addr().(*net.TCPAddr).Port)
+		}
+
+		for _, l := range listeners {
+			_ = l.Close()
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		return ports, nil
+	}
 )
 
 func GeneratePortsAsNeeded(ports []int) (generatedPorts []int, err error) {
@@ -15,16 +59,14 @@ func GeneratePortsAsNeeded(ports []int) (generatedPorts []int, err error) {
 			missingIndexes = append(missingIndexes, i)
 		}
 	}
-	missingIndexesCount := len(missingIndexes)
-	if missingIndexesCount > 0 {
-		commonLogger.Println("Generating ports...")
-		generatedPorts, err = findUnusedPorts(missingIndexesCount)
+	if len(missingIndexes) > 0 {
+		cmdlog.Step("Generating ports...")
+		generatedPorts, err = findUnusedPorts(len(missingIndexes))
 		if err != nil {
 			return nil, err
 		}
-		for _, i := range missingIndexes {
-			missingIndexesCount--
-			ports[i] = generatedPorts[missingIndexesCount]
+		for idx, i := range missingIndexes {
+			ports[i] = generatedPorts[idx]
 		}
 	}
 	return ports, nil
@@ -38,45 +80,4 @@ func Available(port int) bool {
 	}
 	_ = listener.Close()
 	return true
-}
-
-func listenTCP(address string) (err error, listener net.Listener) {
-	var addr *net.TCPAddr
-	addr, err = net.ResolveTCPAddr("tcp4", address)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	listener, err = net.ListenTCP("tcp4", addr)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	return
-}
-
-func findUnusedPorts(count int) ([]int, error) {
-	var ports []int
-	var listeners []net.Listener
-	address := net.JoinHostPort(netip.IPv4Unspecified().String(), "0")
-	var err error
-	for i := 0; i < count; i++ {
-		var listener net.Listener
-		err, listener = listenTCP(address)
-		if err != nil {
-			break
-		}
-		listeners = append(listeners, listener)
-		ports = append(ports, listener.Addr().(*net.TCPAddr).Port)
-	}
-
-	for _, l := range listeners {
-		_ = l.Close()
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return ports, nil
 }

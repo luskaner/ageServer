@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common/executables"
-	"github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/game/executor/wine"
-	"github.com/luskaner/ageLANServer/common/game/steam"
+	"github.com/luskaner/ageServer/common/executables"
+	"github.com/luskaner/ageServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/game/executor/wine"
+	"github.com/luskaner/ageServer/common/game/steam"
 )
 
 type Game struct {

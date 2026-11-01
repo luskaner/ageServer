@@ -5,12 +5,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executor"
-	commonLogger "github.com/luskaner/ageLANServer/common/logger"
-	launcherCommonCmd "github.com/luskaner/ageLANServer/launcher-common/cmd/config"
-	"github.com/luskaner/ageLANServer/launcher-config/internal"
-	"github.com/luskaner/ageLANServer/launcher-config/internal/admin"
+	"github.com/luskaner/ageServer/common"
+	commonLogger "github.com/luskaner/ageServer/common/logger"
+	launcherCommonCmd "github.com/luskaner/ageServer/launcher-common/cmd/config"
+	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
+	"github.com/luskaner/ageServer/launcher-config/internal"
 )
 
 func runFlushCache(args []string) (err error, exitCode int) {
@@ -28,47 +27,47 @@ func runFlushCache(args []string) (err error, exitCode int) {
 		}
 	}()
 	if flushCacheValues.LogRoot != "" {
-		internal.Initialize(flushCacheValues.LogRoot)
+		initializeFn(flushCacheValues.LogRoot)
 	}
 	if flushCacheValues.IPs || flushCacheValues.Certs {
-		if executor.IsAdmin() {
-			err, exitCode = admin.RunFlushCache(flushCacheValues.LogRoot, flushCacheValues.IPs, flushCacheValues.Certs)
+		if isAdminFn() {
+			err, exitCode = runFlushCacheAdminFn(flushCacheValues.LogRoot, flushCacheValues.IPs, flushCacheValues.Certs)
 			if err == nil && exitCode == common.ErrSuccess {
-				commonLogger.Println("Successfully ran 'config-admin'")
+				commonLogger.Println(commonUi.Ok("Successfully ran config-admin"))
 			} else {
 				if err != nil {
-					commonLogger.Println("Received error:")
-					commonLogger.Println(err)
+					commonLogger.Println(commonUi.Fault("Received error:"))
+					commonLogger.Println(commonUi.Detail("%s", err))
 				}
 				if exitCode != common.ErrSuccess {
-					commonLogger.Println("Received exit code:")
-					commonLogger.Println(exitCode)
+					commonLogger.Println(commonUi.Fault("Received exit code:"))
+					commonLogger.Println(commonUi.Detail("%d", exitCode))
 				}
 				exitCode = internal.ErrAdminSetup
 			}
 		} else {
-			agentStarted := admin.ConnectAgentIfNeeded() == nil
+			agentStarted := connectAgentFn() == nil
 			if agentStarted {
 				exitCode = internal.ErrAgentAlreadyStarted
 				return
 			}
-			result := admin.StartAgent(flushCacheValues.IPs, flushCacheValues.Certs)
+			result := startAgentFn(flushCacheValues.IPs, flushCacheValues.Certs)
 			if !result.Success() {
-				commonLogger.Println("Failed to start 'config-admin-agent'")
+				commonLogger.Println(commonUi.Fail("Failed to start config-admin-agent"))
 				if result != nil {
 					if result.Err != nil {
-						commonLogger.Println(result.Err)
+						commonLogger.Println(commonUi.Detail("%s", result.Err))
 					}
 					if result.ExitCode != common.ErrSuccess {
-						commonLogger.Println(result.ExitCode)
+						commonLogger.Println(commonUi.Detail("%d", result.ExitCode))
 					}
 				}
 				exitCode = internal.ErrStartAgent
 			} else {
-				agentStarted = admin.ConnectAgentIfNeededWithRetries()
+				agentStarted = connectAgentRetriesFn()
 				if !agentStarted {
-					commonLogger.Println("Failed to connect to 'config-admin-agent' after starting it. Kill it using the task manager.")
-					_ = admin.StopAgentIfNeeded()
+					commonLogger.Println(commonUi.Fail("Failed to connect to config-admin-agent after starting it. Kill it using the task manager."))
+					_ = stopAgentIfNeededFn()
 					exitCode = internal.ErrStartAgentVerify
 				}
 			}

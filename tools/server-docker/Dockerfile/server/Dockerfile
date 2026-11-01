@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Compile
-FROM golang:1.26-alpine3.24 AS compiler
+FROM golang:1.27-alpine3.24 AS compiler
 WORKDIR /app
 COPY tools/server-docker/Dockerfile/server/go.work.template go.work
 COPY common common
@@ -25,7 +25,7 @@ EXPOSE 443/tcp
 EXPOSE 31978/udp
 VOLUME /app/server/resources/config
 VOLUME /app/server/resources/certificates
-VOLUME /tmp/ageLANServer/battle-servers
+VOLUME /tmp/ageServer/battle-servers
 WORKDIR /app/server
 COPY --from=compiler /app/build/resources resources
 COPY --from=compressor /app/server .

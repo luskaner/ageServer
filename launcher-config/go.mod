@@ -1,16 +1,11 @@
-module github.com/luskaner/ageLANServer/launcher-config
+module github.com/luskaner/ageServer/launcher-config
 
-go 1.26.0
+go 1.27.0
 
 require (
-	github.com/Microsoft/go-winio v0.6.3
-	github.com/deckarep/golang-set/v2 v2.9.0
+	github.com/Microsoft/go-winio v0.6.4
+	github.com/deckarep/golang-set/v3 v3.0.0
 	github.com/spf13/pflag v1.0.10
+	golang.org/x/sys v0.49.0
 )
 
-require (
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
-	go.mongodb.org/mongo-driver v1.17.10 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-)

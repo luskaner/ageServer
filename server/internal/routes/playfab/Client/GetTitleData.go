@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Client/shared"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Client/shared"
 )
 
 type getTitleDataResponseData struct {

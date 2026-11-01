@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/luskaner/ageLANServer/common"
-	commonLogger "github.com/luskaner/ageLANServer/common/logger"
+	"github.com/luskaner/ageServer/common"
+	commonLogger "github.com/luskaner/ageServer/common/logger"
 	"github.com/spf13/pflag"
 )
 
@@ -29,9 +29,13 @@ func (r *RootFlagSet) RegisterCommand(name string, h commandHandler) {
 }
 
 func (r *RootFlagSet) Execute(version string) (err error, exitCode int) {
+	return r.ExecuteWithArgs(version, os.Args[1:])
+}
+
+func (r *RootFlagSet) ExecuteWithArgs(version string, args []string) (err error, exitCode int) {
 	var showHelp, showVersion bool
 	addDefaultFlags(r.fs, &showHelp, &showVersion)
-	if err = r.fs.Parse(os.Args[1:]); err != nil {
+	if err = r.fs.Parse(args); err != nil {
 		exitCode = common.ErrSyntax
 		return
 	}
@@ -106,7 +110,11 @@ func (s *SingleFlagSet) Fs() *pflag.FlagSet {
 }
 
 func (s *SingleFlagSet) Execute() (err error, exitCode int) {
-	if err = s.fs.Parse(os.Args[1:]); err != nil {
+	return s.ExecuteWithArgs(os.Args[1:])
+}
+
+func (s *SingleFlagSet) ExecuteWithArgs(args []string) (err error, exitCode int) {
+	if err = s.fs.Parse(args); err != nil {
 		exitCode = common.ErrSyntax
 		return
 	}

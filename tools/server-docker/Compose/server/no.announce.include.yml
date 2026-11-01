@@ -1,4 +1,4 @@
 services:
   server:
     environment:
-      - AGELANSERVER_SERVER_Announcement_Enabled=false
+      - AGESERVER_SERVER_Announcement_Enabled=false

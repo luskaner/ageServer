@@ -3,7 +3,7 @@ package shared
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 type response struct {
@@ -25,11 +25,9 @@ type errResponse struct {
 
 func Respond(w *http.ResponseWriter, code int32, status string, data any) {
 	r := okResponse{
-		response: response{
-			Code:   code,
-			Status: status,
-		},
-		Data: data,
+		Code:   code,
+		Status: status,
+		Data:   data,
 	}
 	i.JSON(w, r)
 }
@@ -40,10 +38,8 @@ func RespondOK(w *http.ResponseWriter, data any) {
 
 func RespondError(w *http.ResponseWriter, code int32, status string, errorCode int32, error string, errorMessage string) {
 	r := errResponse{
-		response: response{
-			Code:   code,
-			Status: status,
-		},
+		Code:         code,
+		Status:       status,
 		ErrorCode:    errorCode,
 		Error:        error,
 		ErrorMessage: errorMessage,

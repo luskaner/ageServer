@@ -3,17 +3,17 @@ package router
 import (
 	"net/http"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Catalog"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Client"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/CloudScript"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Event"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Inventory"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/MultiplayerServer"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Party"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Catalog"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Client"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/CloudScript"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Event"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Inventory"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/MultiplayerServer"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Party"
 )
 
 type PlayfabApi struct {

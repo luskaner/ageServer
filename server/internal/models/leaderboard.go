@@ -1,6 +1,6 @@
 package models
 
-import i "github.com/luskaner/ageLANServer/server/internal"
+import i "github.com/luskaner/ageServer/server/internal"
 
 type LeaderboardDefinitions interface {
 	Initialize(leaderboards i.A)
@@ -20,14 +20,14 @@ func (l *MainLeaderboardDefinitions) AvatarStatDefinitions() AvatarStatDefinitio
 }
 
 func newAvatarStatDefinitions(leaderboards i.A) *MainAvatarStatDefinitions {
-	avatarStats := leaderboards[8].(i.A)
+	avatarStats := leaderboards[8].(i.A) // avatar stats
 	l := &MainAvatarStatDefinitions{
 		nameToId: make(map[string]int32, len(avatarStats)),
 		idToName: make(map[int32]string, len(avatarStats)),
 	}
 	for _, avatarStat := range avatarStats {
-		id := int32(avatarStat.(i.A)[0].(float64))
-		name := avatarStat.(i.A)[1].(string)
+		id := int32(avatarStat.(i.A)[0].(float64)) // id
+		name := avatarStat.(i.A)[1].(string)       // name
 		l.nameToId[name] = id
 		l.idToName[id] = name
 	}

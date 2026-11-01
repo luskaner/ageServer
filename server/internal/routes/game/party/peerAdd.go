@@ -3,9 +3,9 @@ package party
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/routes/game/party/shared"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/routes/game/party/shared"
 )
 
 func PeerAdd(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +30,7 @@ func PeerAdd(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		users := make([]models.User, length)
-		for j := 0; j < length; j++ {
+		for j := range length {
 			var u models.User
 			u, ok = gameUsers.GetUserById(profileIds[j])
 			if !ok {
@@ -41,7 +41,12 @@ func PeerAdd(w http.ResponseWriter, r *http.Request) {
 		advIp := adv.GetIp()
 		var addedUserIds []int32
 		for j, u := range users {
-			if peer := advertisements.UnsafeNewPeer(advId, advIp, u.GetId(), u.GetStatId(), -1, raceIds[j], teamIds[j]); peer != nil {
+			// Skip pre-existing peers: they must NOT be included in
+			// addedUserIds so the rollback below never evicts them.
+			if _, alreadyPeer := adv.GetPeers().Load(u.GetId()); alreadyPeer {
+				continue
+			}
+			if peer := advertisements.UnsafeNewPeer(advId, advIp, u.GetId(), u.GetStatGroupID(), -1, raceIds[j], teamIds[j]); peer != nil {
 				addedUserIds = append(addedUserIds, u.GetId())
 			} else {
 				break

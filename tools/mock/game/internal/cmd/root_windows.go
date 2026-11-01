@@ -12,11 +12,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/game"
-	processGame "github.com/luskaner/ageLANServer/common/process/game"
-	"github.com/luskaner/ageLANServer/common/server"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/game"
+	processGame "github.com/luskaner/ageServer/common/process/game"
+	"github.com/luskaner/ageServer/common/server"
+	"github.com/luskaner/ageServer/common/uuid"
 )
 
 var dataPath string
@@ -57,9 +57,9 @@ func rootCmd() error {
 			connectionInsecureErr = nil
 		}
 		var lanInsecure bool
-		lanSecure := server.LanServerHost(uuid.Nil, gameId, domain, false, rootCAs)
+		lanSecure := server.LanServerHost(uuid.Nil(), gameId, domain, false, rootCAs)
 		if !lanSecure {
-			lanInsecure = server.LanServerHost(uuid.Nil, gameId, domain, true, rootCAs)
+			lanInsecure = server.LanServerHost(uuid.Nil(), gameId, domain, true, rootCAs)
 		} else {
 			lanInsecure = true
 		}

@@ -6,15 +6,40 @@ import (
 	"iter"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/google/uuid"
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/battleServer"
-	"github.com/luskaner/ageLANServer/server/internal"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/battleServer"
+	"github.com/luskaner/ageServer/common/uuid"
+	"github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/logger"
 )
 
+// externalIPTimeout bounds the lookup of this machine's public address.
+//
+// It used to use http.DefaultClient, which has no timeout at all, followed by an
+// unbounded io.ReadAll. This runs during startup, before the server binds the
+// port the launcher polls to decide it came up, and the launcher's budget for
+// that is a handful of seconds: it then concludes the server failed and kills it.
+// A captive portal, a proxy or a half-open TLS path was therefore enough to get
+// the server killed by the launcher on the very machine that made it slow.
+const externalIPTimeout = 3 * time.Second
+
+// maxExternalIPBody caps the read so a misbehaving endpoint cannot stream for as
+// long as the client timeout happens to allow.
+const maxExternalIPBody = 64
+
+// externalIPClient is a var so tests can exercise the lookup without a network.
+var externalIPClient = &http.Client{Timeout: externalIPTimeout}
+
+// externalIPURL is a var so tests can point the lookup at a local server.
+var externalIPURL = "https://api.ipify.org/"
+
+// localIp returns the address of this machine the request reached us on, which
+// is by definition reachable for whoever sent it.
 func localIp(r *http.Request) (ip string) {
 	addr, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
 	if !ok {
@@ -31,31 +56,78 @@ func localIp(r *http.Request) (ip string) {
 	return
 }
 
+// notRoutablePrefixes are the IPv4 ranges that the net.IP predicates do not
+// cover and that, like RFC 1918, cannot be reached from the public internet:
+// 100.64.0.0/10 is carrier grade NAT (RFC 6598) and 240.0.0.0/4 is reserved,
+// up to and including the limited broadcast address.
+var notRoutablePrefixes = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+}
+
+// isNotRoutable reports whether an IPv4 address belongs to a range that can
+// neither be reached from nor reach the public internet.
+func isNotRoutable(ip4 net.IP) bool {
+	if ip4.IsLoopback() || ip4.IsPrivate() || ip4.IsUnspecified() ||
+		ip4.IsLinkLocalUnicast() || ip4.IsLinkLocalMulticast() ||
+		ip4.IsInterfaceLocalMulticast() || ip4.IsMulticast() {
+		return true
+	}
+	addr, ok := netip.AddrFromSlice(ip4)
+	if !ok {
+		return false
+	}
+	for _, prefix := range notRoutablePrefixes {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
 var localSubnets []*net.IPNet
 var publicIp string
 
-func CacheNetworkInterfaces() {
-	if internal.Connectivity {
-		if resp, err := http.Get("https://api.ipify.org/"); err == nil {
+func CacheNetworkInterfaces(externalIPAddress string) {
+	if externalIPAddress != "auto" {
+		if ip := net.ParseIP(externalIPAddress); ip != nil && ip.To4() != nil {
+			publicIp = externalIPAddress
+		}
+	} else if internal.CanUseInternet {
+		// Bounded on purpose: see externalIPTimeout. Failing here is fine, the
+		// public address is only used to pick subnets for LAN broadcast.
+		if resp, err := externalIPClient.Get(externalIPURL); err == nil {
 			defer func(Body io.ReadCloser) {
 				_ = Body.Close()
 			}(resp.Body)
-			if ipBytes, err := io.ReadAll(resp.Body); err == nil {
+			if ipBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxExternalIPBody)); err == nil {
 				ipStr := string(ipBytes)
 				if ip := net.ParseIP(ipStr); ip != nil && ip.To4() != nil {
 					publicIp = ipStr
 				}
 			}
 		}
-		if publicIp != "" {
-			if ifs, err := common.RunningNetworkInterfaces(); err == nil {
-				for _, ipNets := range ifs {
-					for _, ipNet := range ipNets {
-						localSubnets = append(localSubnets, ipNet)
-					}
-				}
-			}
-		}
+	}
+	if publicIp == "" && externalIPAddress == "auto" && internal.CanUseInternet {
+		logger.Warn("Could not determine the public IP address, battle servers left as 'auto' will only be reachable from the local networks. Set Internet.IP manually if other networks need to reach them.")
+	}
+	cacheLocalSubnets()
+}
+
+// cacheLocalSubnets records the subnets of the running network interfaces.
+//
+// It used to run only once a public address had been resolved, which tied two
+// unrelated facts together: a blocked, slow or captive-portalled lookup left the
+// list empty, and then every peer, the ones on the local networks included, was
+// mistaken for a remote one.
+func cacheLocalSubnets() {
+	localSubnets = nil
+	ifs, err := common.RunningNetworkInterfaces()
+	if err != nil {
+		return
+	}
+	for _, ipNets := range ifs {
+		localSubnets = append(localSubnets, ipNets...)
 	}
 }
 
@@ -75,6 +147,7 @@ type BattleServer interface {
 	EncodePorts() internal.A
 	EncodeAdvertisement(r *http.Request) internal.A
 	ResolveIPv4(r *http.Request) string
+	ResolveIPv4ForLocalIP(localIP string) string
 	String() string
 }
 
@@ -122,7 +195,7 @@ func (battleServer *MainBattleServer) LAN() bool {
 		battleServer.lanMu.Lock()
 		battleServer.lan = &lan
 		defer battleServer.lanMu.Unlock()
-		if guid, err := uuid.Parse(battleServer.Base.Region); err == nil && guid.Version() == 4 {
+		if _, err := uuid.Parse(battleServer.Base.Region); err == nil {
 			lan = true
 		}
 	} else {
@@ -182,16 +255,28 @@ func (battleServer *MainBattleServer) ResolveIPv4(r *http.Request) (ipV4 string)
 	if battleServer.IPv4 != "auto" {
 		return battleServer.IPv4
 	}
+	// Whatever else happens, the address the peer used to reach us is an address
+	// it can reach us back on, so it is the answer of last resort. Returning an
+	// empty one instead leaves the game stalled on it with nothing to report.
 	ipV4 = localIp(r)
 	remoteIPStr, _, _ := net.SplitHostPort(r.RemoteAddr)
 	remoteIP := net.ParseIP(remoteIPStr)
-	if remoteIP == nil || remoteIP.To4() == nil || !internal.Connectivity {
+	if remoteIP == nil || remoteIP.To4() == nil || !internal.CanUseInternet {
 		return
 	}
+	remoteIP4 := remoteIP.To4()
 	for _, subnet := range localSubnets {
-		if subnet.Contains(remoteIP) {
+		if subnet.Contains(remoteIP4) {
 			return
 		}
+	}
+	// Sitting on one of our own subnets is only one way of being local: a peer
+	// can be on a different and still private one, reaching us through a router,
+	// a second access point or a guest network. It did not come from the public
+	// internet, so handing it our public address would leave it unable to
+	// connect at all.
+	if isNotRoutable(remoteIP4) {
+		return
 	}
 	host := r.Host
 	if strings.Contains(host, ":") {
@@ -201,10 +286,21 @@ func (battleServer *MainBattleServer) ResolveIPv4(r *http.Request) (ipV4 string)
 	}
 	if ip := net.ParseIP(host); ip != nil && ip.To4() != nil {
 		ipV4 = host
-	} else {
+	} else if publicIp != "" {
 		ipV4 = publicIp
 	}
 	return
+}
+
+func (battleServer *MainBattleServer) ResolveIPv4ForLocalIP(localIP string) string {
+	if battleServer.IPv4 != "auto" {
+		return battleServer.IPv4
+	}
+	ip := net.ParseIP(localIP)
+	if ip == nil || ip.To4() == nil {
+		return ""
+	}
+	return localIP
 }
 
 func (battleServer *MainBattleServer) String() string {

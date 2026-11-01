@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/luskaner/ageLANServer/common/game"
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/routes/game/advertisement/shared"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/common/uuid"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/routes/game/advertisement/shared"
 )
 
 type ModDll struct {
@@ -44,6 +44,8 @@ type Advertisement interface {
 	GetParty() int32
 	UnsafeGetVisible() bool
 	UnsafeGetJoinable() bool
+	UnsafeIsAutomatch() bool
+	UnsafeSetAutomatch(automatch bool)
 	UnsafeGetAppBinaryChecksum() int32
 	UnsafeGetDataChecksum() int32
 	UnsafeGetMatchType() uint8
@@ -60,11 +62,12 @@ type Advertisement interface {
 	UnsafeMatchesTags(integer map[string]int32, text map[string]string) bool
 	UnsafeEncode(gameId string, clientLibVersion uint16, battleServers BattleServers) i.A
 	UnsafeUpdate(advFrom *shared.AdvertisementUpdateRequest)
+	UnsafeUpdateMatchmaking(advFrom *shared.AdvertisementUpdateRequest)
 	GetId() int32
 	GetIp() string
 	UnsafeGetHostId() int32
 	GetPeers() *i.SafeOrderedMap[int32, Peer]
-	MakeMessage(broadcast bool, content string, typeId uint8, metadata string, sender User, receivers []User) Message
+	MakeMessage(broadcast bool, content string, messageType uint8, metadata string, sender User, receivers []User) Message
 	StartObserving(userId int32)
 	StopObserving(userId int32)
 	EncodePeers() []i.A
@@ -92,6 +95,7 @@ type MainAdvertisement struct {
 	statGroup         int32
 	versionFlags      uint32
 	joinable          bool
+	automatch         bool
 	matchType         uint8
 	maxPlayers        uint8
 	options           string
@@ -117,10 +121,11 @@ func containsFilter[M ~map[K]V, K, V comparable](filter M, tags M) bool {
 type Advertisements interface {
 	Initialize(users Users, battleServers BattleServers)
 	Store(advFrom *shared.AdvertisementHostRequest, generateMetadata bool, gameId string) Advertisement
+	StoreWithId(advFrom *shared.AdvertisementHostRequest, id int32, generateMetadata bool, gameId string) (Advertisement, bool)
 	WithReadLock(id int32, action func())
 	WithWriteLock(id int32, action func())
 	GetAdvertisement(id int32) (Advertisement, bool)
-	UnsafeNewPeer(advertisementId int32, advertisementIp string, userId int32, userStatId int32, party int32, race int32, team int32) Peer
+	UnsafeNewPeer(advertisementId int32, advertisementIp string, userId int32, statGroupID int32, party int32, raceID int32, teamID int32) Peer
 	UnsafeRemovePeer(advertisementId int32, userId int32) bool
 	UnsafeDelete(adv Advertisement)
 	UnsafeFirstAdvertisement(matches func(adv Advertisement) bool) Advertisement
@@ -187,6 +192,19 @@ func (adv *MainAdvertisement) GetRelayRegion() string {
 // UnsafeGetJoinable requires advertisement read lock
 func (adv *MainAdvertisement) UnsafeGetJoinable() bool {
 	return adv.joinable
+}
+
+// UnsafeIsAutomatch requires advertisement read lock. It reports whether the
+// advertisement is the server-managed lobby created for a paired automatch2
+// match. SESSION_MATCH_KEY is also used by ordinary session/party lobbies, so
+// the description alone cannot identify a matchmaking advertisement.
+func (adv *MainAdvertisement) UnsafeIsAutomatch() bool {
+	return adv.automatch
+}
+
+// UnsafeSetAutomatch requires advertisement write lock
+func (adv *MainAdvertisement) UnsafeSetAutomatch(automatch bool) {
+	adv.automatch = automatch
 }
 
 // UnsafeGetVisible requires advertisement read lock
@@ -256,7 +274,7 @@ func (adv *MainAdvertisement) GetPeers() *i.SafeOrderedMap[int32, Peer] {
 	return adv.peers
 }
 
-func (advs *MainAdvertisements) Store(advFrom *shared.AdvertisementHostRequest, generateXboxSessionId bool, gameId string) Advertisement {
+func (advs *MainAdvertisements) newAdvertisement(advFrom *shared.AdvertisementHostRequest, generateXboxSessionId bool, gameId string) *MainAdvertisement {
 	adv := &MainAdvertisement{}
 	i.WithRng(func(rand *i.RandReader) {
 		adv.ip = fmt.Sprintf("/10.0.11.%d", rand.IntN(254)+1)
@@ -314,6 +332,11 @@ func (advs *MainAdvertisements) Store(advFrom *shared.AdvertisementHostRequest, 
 		SlotInfo:          advFrom.SlotInfo,
 		State:             advFrom.State,
 	})
+	return adv
+}
+
+func (advs *MainAdvertisements) Store(advFrom *shared.AdvertisementHostRequest, generateXboxSessionId bool, gameId string) Advertisement {
+	adv := advs.newAdvertisement(advFrom, generateXboxSessionId, gameId)
 	exists := true
 	var storedAdv Advertisement
 	for exists {
@@ -327,17 +350,31 @@ func (advs *MainAdvertisements) Store(advFrom *shared.AdvertisementHostRequest, 
 	return storedAdv
 }
 
-func (adv *MainAdvertisement) MakeMessage(broadcast bool, content string, typeId uint8, metadata string, sender User, receivers []User) Message {
+func (adv *MainAdvertisement) MakeMessage(broadcast bool, content string, messageType uint8, metadata string, sender User, receivers []User) Message {
 	return &MainMessage{
 		advertisementId: adv.GetId(),
 		time:            time.Now().UTC().Unix(),
 		broadcast:       broadcast,
 		content:         content,
-		typ:             typeId,
+		messageType:     messageType,
 		sender:          sender,
 		receivers:       receivers,
 		metadata:        metadata,
 	}
+}
+
+// StoreWithId stores a new advertisement using an externally allocated ID.
+// It returns false when the ID is already in use.
+func (advs *MainAdvertisements) StoreWithId(advFrom *shared.AdvertisementHostRequest, id int32, generateXboxSessionId bool, gameId string) (Advertisement, bool) {
+	adv := advs.newAdvertisement(advFrom, generateXboxSessionId, gameId)
+	adv.id = id
+	exists, storedAdv := advs.store.Store(id, adv, func(_ Advertisement) bool {
+		return false
+	})
+	if exists {
+		return nil, false
+	}
+	return storedAdv, true
 }
 
 func (advs *MainAdvertisements) WithReadLock(id int32, action func()) {
@@ -350,6 +387,27 @@ func (advs *MainAdvertisements) WithWriteLock(id int32, action func()) {
 	advs.locks.Lock(id)
 	defer advs.locks.Unlock(id)
 	action()
+}
+
+// UnsafeUpdateMatchmaking applies a host update without letting the dummy
+// matchmaking values (no_map, 8 players, matchtype 19) erase the settings that
+// the matchmaking server assigned to the advertisement.
+func (adv *MainAdvertisement) UnsafeUpdateMatchmaking(advFrom *shared.AdvertisementUpdateRequest) {
+	description := adv.description
+	mapName := adv.mapName
+	maxPlayers := adv.maxPlayers
+	matchType := adv.matchType
+	adv.UnsafeUpdate(advFrom)
+	adv.description = description
+	adv.mapName = mapName
+	adv.maxPlayers = maxPlayers
+	adv.matchType = matchType
+	adv.automatchPollId = -1
+	if adv.state != 1 {
+		// The join handshake must remain possible while the match is being
+		// set up, even if the client did not send joinable in this update.
+		adv.joinable = true
+	}
 }
 
 // UnsafeUpdate is safe only if adv has not been stored yet
@@ -383,12 +441,12 @@ func (advs *MainAdvertisements) GetAdvertisement(id int32) (Advertisement, bool)
 }
 
 // UnsafeNewPeer requires advertisement write lock
-func (advs *MainAdvertisements) UnsafeNewPeer(advertisementId int32, advertisementIp string, userId int32, userStatId int32, party int32, race int32, team int32) Peer {
+func (advs *MainAdvertisements) UnsafeNewPeer(advertisementId int32, advertisementIp string, userId int32, statGroupID int32, party int32, raceID int32, teamID int32) Peer {
 	adv, exists := advs.GetAdvertisement(advertisementId)
 	if !exists {
 		return nil
 	}
-	peer := NewPeer(advertisementId, advertisementIp, userId, userStatId, party, race, team)
+	peer := NewPeer(advertisementId, advertisementIp, userId, statGroupID, party, raceID, teamID)
 	_, storedPeer := adv.GetPeers().Store(peer.GetUserId(), peer, func(_ Peer) bool {
 		return false
 	})
@@ -438,10 +496,16 @@ func (adv *MainAdvertisement) UnsafeUpdatePlatformSessionId(sessionId uint64) {
 }
 
 func (adv *MainAdvertisement) StartObserving(userId int32) {
+	if adv.observers.userIds == nil {
+		adv.observers.userIds = i.NewSafeSet[int32]()
+	}
 	adv.observers.userIds.Store(userId)
 }
 
 func (adv *MainAdvertisement) StopObserving(userId int32) {
+	if adv.observers.userIds == nil {
+		adv.observers.userIds = i.NewSafeSet[int32]()
+	}
 	adv.observers.userIds.Delete(userId)
 }
 
@@ -476,8 +540,8 @@ func (adv *MainAdvertisement) UnsafeEncode(gameId string, clientLibVersion uint1
 		startTime = nil
 	}
 	response := i.A{
-		adv.id,
-		adv.platformSessionId,
+		adv.id,                // advertisement ID
+		adv.platformSessionId, // platform session ID
 	}
 	if gameId == game.AoE2 || i.SinceTheBalticPowers(gameId, clientLibVersion) || gameId == game.AoM || gameId == game.AoE4 {
 		// goodolggameslobbyid (GoG lobby ID), always 0
@@ -488,45 +552,47 @@ func (adv *MainAdvertisement) UnsafeEncode(gameId string, clientLibVersion uint1
 		}
 		response = append(
 			response,
-			"",
-			"",
+			"", // platform session ID (empty)
+			"", // platform match ID (empty)
 		)
 	}
 	response = append(
 		response,
-		adv.GetXboxSessionId(),
-		adv.hostId,
-		adv.state,
-		adv.description,
+		adv.GetXboxSessionId(), // xbox session ID
+		adv.hostId,             // host profile ID
+		adv.state,              // match state
+		adv.description,        // filtered description
 	)
 	if gameId == game.AoE2 || i.SinceTheBalticPowers(gameId, clientLibVersion) || gameId == game.AoM || gameId == game.AoE4 {
-		response = append(response, adv.description)
+		response = append(response, adv.description) // filtered description (repeated)
 	}
 	response = append(
 		response,
-		i.NewBoolMappedNumberFromBool(adv.visible),
-		adv.mapName,
-		adv.options,
-		i.NewBoolMappedNumberFromBool(adv.password.enabled),
-		adv.maxPlayers,
-		adv.slotInfo,
-		adv.matchType,
-		adv.EncodePeers(),
-		adv.observers.userIds.Len(),
-		0, // observermax, can it be 0 so it means without limit?
-		i.NewBoolMappedNumberFromBool(adv.observers.enabled),
-		adv.observers.delay,
-		// TODO: Ensure if the order of password and the next is correct
-		i.NewBoolMappedNumberFromBool(adv.observers.password != ""),
-		i.NewBoolMappedNumberFromBool(adv.lan),
-		startTime,
-		adv.relayRegion,
+		i.NewBoolMappedNumberFromBool(adv.visible), // visible (bool as 0/1)
+		adv.mapName, // map name
+		adv.options, // encoded options
+		i.NewBoolMappedNumberFromBool(adv.password.enabled), // password enabled (bool as 0/1)
+		adv.maxPlayers,              // max player count
+		adv.slotInfo,                // encoded slots
+		adv.matchType,               // match type ID
+		adv.EncodePeers(),           // match members
+		adv.observers.userIds.Len(), // observer count
+		0,                           // observermax, can it be 0 so it means without limit?
+		i.NewBoolMappedNumberFromBool(adv.observers.enabled), // observers enabled (bool as 0/1)
+		adv.observers.delay, // observer delay
+		i.NewBoolMappedNumberFromBool(adv.observers.password != ""), // observers password set (bool as 0/1)
+		i.NewBoolMappedNumberFromBool(adv.lan),                      // lan (bool as 0/1)
+		startTime,                                                   // match start time (nil if not started)
+		adv.relayRegion,                                             // match region
 	)
 	if adv.lan {
-		response = append(response, nil)
+		response = append(response, nil) // battle server name (nil for LAN)
 	} else {
-		battleServer, _ := battleServers.Get(adv.relayRegion)
-		battleServer.AppendName(&response)
+		if battleServer, ok := battleServers.Get(adv.relayRegion); ok && battleServer != nil {
+			battleServer.AppendName(&response) // battle server name
+		} else {
+			response = append(response, nil) // battle server name (nil if none)
+		}
 	}
 	return response
 }
@@ -557,7 +623,9 @@ func (advs *MainAdvertisements) LockedFindAdvertisementsEncoded(gameId string, c
 			}()
 		} else {
 			advs.WithReadLock(adv.GetId(), func() {
-				res = append(res, adv.UnsafeEncode(gameId, clientLibVersion, advs.battleServers))
+				if matches(adv) {
+					res = append(res, adv.UnsafeEncode(gameId, clientLibVersion, advs.battleServers))
+				}
 			})
 		}
 	}
@@ -567,10 +635,7 @@ func (advs *MainAdvertisements) LockedFindAdvertisementsEncoded(gameId string, c
 	if length == 0 {
 		length = len(res)
 	}
-	end := length + offset
-	if end > len(res) {
-		end = len(res)
-	}
+	end := min(length+offset, len(res))
 	return res[offset:end]
 }
 

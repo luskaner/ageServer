@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/handlers"
-	"github.com/luskaner/ageLANServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal"
 )
 
 type ConditionalHandler interface {

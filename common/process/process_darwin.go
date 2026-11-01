@@ -11,7 +11,7 @@ import (
 	"time"
 	"unsafe"
 
-	mapset "github.com/deckarep/golang-set/v2"
+	mapset "github.com/deckarep/golang-set/v3"
 	"github.com/ebitengine/purego"
 	"golang.org/x/sys/unix"
 )
@@ -141,7 +141,7 @@ func ProcessesByNames(names []string) map[string]*os.Process {
 	}
 	namesLeft := mapset.NewThreadUnsafeSet[string](names...)
 	var err error
-	for i := 0; namesLeft.Cardinality() > 0 && i < numPids; i++ {
+	for i := 0; !namesLeft.IsEmpty() && i < numPids; i++ {
 		pid := pidBuf[i]
 		if pid <= 0 {
 			continue

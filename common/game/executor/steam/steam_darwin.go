@@ -3,7 +3,7 @@ package steam
 import (
 	"runtime"
 
-	"github.com/luskaner/ageLANServer/common/game"
+	"github.com/luskaner/ageServer/common/game"
 )
 
 func NewExec(gameId string) (exec *Exec, ok bool) {

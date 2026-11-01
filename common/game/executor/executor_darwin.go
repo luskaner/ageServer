@@ -1,12 +1,12 @@
 package executor
 
 import (
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/common/game/executor/base"
-	"github.com/luskaner/ageLANServer/common/game/executor/custom"
-	"github.com/luskaner/ageLANServer/common/game/executor/steam"
-	"github.com/luskaner/ageLANServer/common/game/executor/steam/wine"
-	"github.com/luskaner/ageLANServer/common/game/executor/steam/wine/crossover"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/common/game/executor/base"
+	"github.com/luskaner/ageServer/common/game/executor/custom"
+	"github.com/luskaner/ageServer/common/game/executor/steam"
+	"github.com/luskaner/ageServer/common/game/executor/steam/wine"
+	"github.com/luskaner/ageServer/common/game/executor/steam/wine/crossover"
 )
 
 func MakeExec(gameId string, executable string) base.Executor {

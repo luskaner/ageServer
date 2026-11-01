@@ -4,12 +4,9 @@ tasks:
   prepare-launcher:
     platforms: [ linux, darwin ]
     internal: true
-    deps: [ ":build-server" ]
     method: checksum
     cmds:
       - task: prepare-server
-      - task: build-config-helper-amd64
-      - task: build-config-helper-arm64
   prepare-server:
     platforms: [ linux ]
     internal: true
@@ -37,6 +34,7 @@ tasks:
       - config-helper/**/*
     generates:
       - build/launcher/bin/config-helper_{{.GOARCH}}.exe
+      - build/battle-server-manager/bin/config-helper_{{.GOARCH}}.exe
     method: checksum
     cmds:
       - GOOS=windows GOARCH={{.GOARCH}} go build -o build/launcher/bin/config-helper_{{.GOARCH}}.exe ./config-helper

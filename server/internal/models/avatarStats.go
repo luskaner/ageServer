@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/luskaner/ageLANServer/common/game"
-	i "github.com/luskaner/ageLANServer/server/internal"
+	"github.com/luskaner/ageServer/common/game"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 type AvatarStat struct {
-	Id int32 `json:"-"`
+	StatID int32 `json:"-"`
 	// Read Value with AvatarStats.WithReadLock
 	Value int64
 	// Read Metadata with AvatarStats.WithReadLock
@@ -18,9 +18,9 @@ type AvatarStat struct {
 	LastUpdated time.Time
 }
 
-func NewAvatarStat(id int32, value int64) AvatarStat {
+func NewAvatarStat(statID int32, value int64) AvatarStat {
 	return AvatarStat{
-		Id:          id,
+		StatID:      statID,
 		Value:       value,
 		LastUpdated: time.Now().UTC(),
 	}
@@ -31,10 +31,10 @@ func (as *AvatarStat) SetValue(value int64) {
 	as.LastUpdated = time.Now().UTC()
 }
 
-func (as *AvatarStat) Encode(profileId int32) i.A {
+func (as *AvatarStat) Encode(profileID int32) i.A {
 	return i.A{
-		as.Id,
-		profileId,
+		as.StatID,
+		profileID,
 		as.Value,
 		as.Metadata,
 		as.LastUpdated.Unix(),
@@ -49,7 +49,7 @@ type AvatarStats struct {
 func (as *AvatarStats) MarshalJSON() ([]byte, error) {
 	data := make(map[int32]AvatarStat, as.values.Len())
 	for stat := range as.values.Values() {
-		data[stat.Id] = stat
+		data[stat.StatID] = stat
 	}
 	return json.Marshal(data)
 }
@@ -62,8 +62,8 @@ func (as *AvatarStats) UnmarshalJSON(b []byte) error {
 	as.values = i.NewSafeMap[int32, AvatarStat]()
 	as.locks = i.NewKeyRWMutex[int32]()
 	for id, stat := range data {
-		stat.Id = id
-		as.values.Store(stat.Id, stat, func(stored AvatarStat) bool {
+		stat.StatID = id
+		as.values.Store(stat.StatID, stat, func(stored AvatarStat) bool {
 			return true
 		})
 	}
@@ -76,7 +76,7 @@ func (as *AvatarStats) GetStat(id int32) (AvatarStat, bool) {
 
 // AddStat Must be ensured that the stat does not already exist
 func (as *AvatarStats) AddStat(avatarStat AvatarStat) {
-	as.values.Store(avatarStat.Id, avatarStat, func(stored AvatarStat) bool {
+	as.values.Store(avatarStat.StatID, avatarStat, func(stored AvatarStat) bool {
 		return false
 	})
 }
@@ -96,7 +96,7 @@ func newAvatarStats(values map[int32]int64) *AvatarStats {
 	}
 	for id, value := range values {
 		avatarStats.values.Store(id, AvatarStat{
-			Id:          id,
+			StatID:      id,
 			Value:       value,
 			LastUpdated: time.Now().UTC(),
 		}, func(stored AvatarStat) bool {

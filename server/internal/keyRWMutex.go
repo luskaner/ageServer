@@ -46,9 +46,14 @@ func (kl *KeyRWMutex[K]) getOrCreateLock(key K) *sync.RWMutex {
 	if ok {
 		return lock
 	}
-	newLock := &sync.RWMutex{}
 	kl.mu.Lock()
+	defer kl.mu.Unlock()
+	// Double-check: another goroutine may have inserted this key while we
+	// were waiting for the write lock.
+	if lock, ok := kl.mutexes[key]; ok {
+		return lock
+	}
+	newLock := &sync.RWMutex{}
 	kl.mutexes[key] = newLock
-	kl.mu.Unlock()
 	return newLock
 }

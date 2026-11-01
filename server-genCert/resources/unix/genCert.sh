@@ -3,4 +3,5 @@
 cd "$(dirname "$0")"
 ./genCert
 echo "Press any key to exit..."
-read dummy
+# shellcheck disable=SC2034
+read -r dummy

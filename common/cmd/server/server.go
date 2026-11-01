@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/cmd"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/cmd"
 	"github.com/spf13/pflag"
 )
 
 type Values struct {
 	*cmd.LogRootValues
+	CanUseInternet         bool
 	GameIds                []string
 	Id                     string
 	CfgFile                string
@@ -22,6 +23,7 @@ type Values struct {
 	AnnouncePort           int
 	AnnounceMulticast      string
 	AnnounceMulticastGroup string
+	StartBsIfMissing       string
 }
 
 func SingleFlagSet(version string, configPaths []string, runFn func(*pflag.FlagSet) (err error, exitCode int)) (values *Values, singleFs *cmd.SingleFlagSet) {
@@ -31,6 +33,7 @@ func SingleFlagSet(version string, configPaths []string, runFn func(*pflag.FlagS
 	}
 	flags := singleFs.Fs()
 	flags.StringVar(&values.CfgFile, "config", "", fmt.Sprintf(`config file (default config.toml in %s directories)`, strings.Join(configPaths, ", ")))
+	flags.BoolVar(&values.CanUseInternet, "internet", true, "Whether to allow the 'server' to use the internet to look up official domains and for authentication/public IP resolution. If false, only the statically known domains will be used.")
 	flags.StringVarP(&values.Announce, "announce", "a", "true", "Respond to discove 'server' in LAN. Disabling this will not allow launchers to discover it and will require specifying the host")
 	flags.IntVarP(&values.AnnouncePort, "announcePort", "p", common.AnnouncePort, "Port to respond to discovery requests. If changed, the 'launcher's will need to specify the port in Server.AnnouncePorts")
 	flags.StringVarP(&values.AnnounceMulticast, "announceMulticast", "m", "true", "Whether to respond to discovery queries using Multicast.")
@@ -42,5 +45,6 @@ func SingleFlagSet(version string, configPaths []string, runFn func(*pflag.FlagS
 	cmd.LogRootCommand(flags, &values.LogRoot)
 	flags.BoolVarP(&values.GeneratePlatformUserId, "generatePlatformUserId", "g", false, "Generate the Platform User Id based on the user's IP.")
 	flags.StringVar(&values.Id, "id", "", "Server instance ID to identify it.")
+	flags.StringVar(&values.StartBsIfMissing, "startBsIfMissing", "true", "Embedded battle server mode for all enabled games (true, false, required)")
 	return
 }

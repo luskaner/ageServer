@@ -17,7 +17,7 @@ func main() {
 	}
 	file, err := os.OpenFile(
 		filepath.Join(dir, time.Now().Format("2006-01-02_15-04-05"+".log")),
-		os.O_CREATE|os.O_WRONLY,
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
 		0666,
 	)
 	if err != nil {

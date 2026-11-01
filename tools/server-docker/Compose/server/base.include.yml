@@ -16,6 +16,7 @@ services:
     build:
       context: ../../../..
       dockerfile: tools/server-docker/Dockerfile/server/Dockerfile
+    restart: unless-stopped
     depends_on:
       gen-cert:
         condition: service_completed_successfully

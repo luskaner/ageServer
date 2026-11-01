@@ -4,9 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/google/uuid"
 	battleServerBroadcast "github.com/luskaner/ageLANServer/battle-server-broadcast"
-	"github.com/luskaner/ageLANServer/common/game"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/common/uuid"
 )
 
 const DefaultName = "My Server"
@@ -36,6 +36,7 @@ func ParseBroadcastMessage(data []byte, length int) (message *BroadcastMessage, 
 	restMsg = restMsg[2:]
 	if len(restMsg) != int(nameLength)+3*battleServerBroadcast.PortSize {
 		err = fmt.Errorf("invalid data size, expected %d, actual %d", int(nameLength)+3*battleServerBroadcast.PortSize, len(restMsg))
+		return
 	}
 	name := string(restMsg[:nameLength])
 	restMsg = restMsg[nameLength:]

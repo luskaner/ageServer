@@ -1,3 +1,4 @@
-go 1.10.8
+go 1.27.0
 
-module github.com/luskaner/ageLANServer/battle-server-broadcast
+module github.com/luskaner/ageServer/battle-server-broadcast
+

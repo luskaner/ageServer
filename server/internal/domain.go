@@ -22,8 +22,8 @@ func SplitDomain(domain string) (subdomain, mainDomain, tld string, err error) {
 	mainDomain = parts[0]
 	tld = parts[1]
 	subdomain = ""
-	if strings.HasSuffix(lowerDomain, "."+etldPlusOne) {
-		subdomain = strings.TrimSuffix(lowerDomain, "."+etldPlusOne)
+	if before, ok := strings.CutSuffix(lowerDomain, "."+etldPlusOne); ok {
+		subdomain = before
 	}
 	return
 }

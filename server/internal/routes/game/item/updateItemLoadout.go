@@ -3,9 +3,9 @@ package item
 import (
 	"net/http"
 
-	mapset "github.com/deckarep/golang-set/v2"
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	mapset "github.com/deckarep/golang-set/v3"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 type updateItemLoadoutRequest struct {
@@ -29,9 +29,14 @@ func UpdateItemLoadout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var itemLoadoutEncoded i.A
-	_ = u.GetItemLoadouts().WithReadWrite(func(data *models.MainItemLoadouts) error {
+	loadouts := u.GetItemLoadouts()
+	if loadouts == nil {
+		i.JSON(&w, i.A{2, i.A{}})
+		return
+	}
+	_ = loadouts.WithReadWrite(func(data *models.MainItemLoadouts) error {
 		if item := data.Get(req.Id); item != nil {
-			item.Update(req.Name, req.Type, mapset.NewThreadUnsafeSet(req.ItemOrLocIds...))
+			item.Update(req.Name, req.Type, mapset.NewThreadUnsafeSet(req.ItemOrLocIDs...))
 			itemLoadoutEncoded = item.Encode(userId)
 		}
 		return nil

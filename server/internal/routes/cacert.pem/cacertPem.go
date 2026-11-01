@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 func CacertPem(w http.ResponseWriter, r *http.Request) {

@@ -1,9 +1,9 @@
 package advertisement
 
 import (
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/routes/game/advertisement/shared"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/routes/game/advertisement/shared"
 
 	"net/http"
 )
@@ -16,15 +16,16 @@ func Leave(w http.ResponseWriter, r *http.Request) {
 	}
 	game := models.G(r)
 	advertisements := game.Advertisements()
+	sess := models.SessionOrPanic(r)
 	var success bool
 	advertisements.WithWriteLock(q.AdvertisementId, func() {
 		adv, ok := advertisements.GetAdvertisement(q.AdvertisementId)
 		if !ok {
 			return
 		}
-		sess := models.SessionOrPanic(r)
 		success = advertisements.UnsafeRemovePeer(adv.GetId(), sess.GetUserId())
 	})
+	game.Matchmaking().RemoveUser(sess.GetUserId())
 	if success {
 		i.JSON(&w, i.A{0})
 	} else {

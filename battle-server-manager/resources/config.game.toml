@@ -29,7 +29,7 @@ CertsPath = 'auto'
 # AoM: RT: will search for AoE II: DE executable instead, as the one included does not work.
 # AoE IV: AE: will search for AoE II: DE executable instead, as it is missing it.
 # Note: You may use environment variables.
-Path = 'auto'
+Path = 'E:\SteamLibrary\steamapps\common\AoE2DE\BattleServer\BattleServerReimpl.exe'
 # Extra arguments to pass to the corresponding 'BattleServer.exe' executable.
 # You must not pass these arguments as they are already passed by default:
 # -webSocketPort (Ports.WebSocket)

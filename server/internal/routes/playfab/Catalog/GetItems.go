@@ -3,11 +3,11 @@ package Catalog
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens"
-	"github.com/luskaner/ageLANServer/server/internal/models/playfab"
-	"github.com/luskaner/ageLANServer/server/internal/routes/playfab/Client/shared"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/models/athens"
+	"github.com/luskaner/ageServer/server/internal/models/playfab"
+	"github.com/luskaner/ageServer/server/internal/routes/playfab/Client/shared"
 )
 
 type getItemsRequest struct {
@@ -28,7 +28,13 @@ func GetItems(w http.ResponseWriter, r *http.Request) {
 		shared.RespondBadRequest(&w)
 		return
 	}
-	game := models.Gg[*athens.Game](r)
+	genericGame := models.G(r)
+	athensGame, ok := genericGame.(*athens.Game)
+	if !ok {
+		shared.RespondOK(&w, getItemsResponse{Items: []playfab.CatalogItem{}})
+		return
+	}
+	game := athensGame
 	catalogItemsMap := game.CatalogItems
 	var catalogItems []playfab.CatalogItem
 	for _, id := range req.Ids {

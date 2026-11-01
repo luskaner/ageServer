@@ -2,22 +2,19 @@ package cmd
 
 import (
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"runtime/debug"
 	"syscall"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/cmd"
-	"github.com/luskaner/ageLANServer/common/executor"
-	"github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/fileLock"
-	commonLogger "github.com/luskaner/ageLANServer/common/logger"
-	launcherCommon "github.com/luskaner/ageLANServer/launcher-common"
-	"github.com/luskaner/ageLANServer/launcher-common/cmd/config"
-	launcherCommonExecutor "github.com/luskaner/ageLANServer/launcher-common/executor"
-	"github.com/luskaner/ageLANServer/launcher-config-admin-agent/internal"
-	"github.com/luskaner/ageLANServer/launcher-config-admin-agent/internal/ipc"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/cmd"
+	"github.com/luskaner/ageServer/common/executor/exec"
+	launcherCommon "github.com/luskaner/ageServer/launcher-common"
+	"github.com/luskaner/ageServer/launcher-common/cmd/config"
+	"github.com/luskaner/ageServer/launcher-common/cmdlog"
+	"github.com/luskaner/ageServer/launcher-config-admin-agent/internal"
 	"github.com/spf13/pflag"
 )
 
@@ -33,28 +30,28 @@ func Execute() (err error, exitCode int) {
 }
 
 func runRoot(_ *pflag.FlagSet) (err error, exitCode int) {
-	commonLogger.Initialize(nil)
+	loggerInitFn(nil)
 	if values.LogRoot != "" {
-		internal.InitializeOrExit(values.LogRoot)
+		initializeOrExitFn(values.LogRoot)
 	}
-	lock := &fileLock.PidLock{}
-	if err = lock.Lock(); err != nil {
-		commonLogger.Println("Failed to lock pid file. Kill process 'config-admin-agent' if it is running in your task manager.")
-		commonLogger.CloseFileLog()
+	lock := newPidLockFn()
+	if err = pidLockFn(lock); err != nil {
+		cmdlog.Fail("Failed to lock pid file. Kill process config-admin-agent if it is running in your task manager.")
+		loggerCloseFn()
 		exitCode = common.ErrPidLock
 		return
 	}
 	defer func() {
-		commonLogger.CloseFileLog()
+		loggerCloseFn()
 		if r := recover(); r != nil {
-			commonLogger.Println(r)
-			commonLogger.Println(string(debug.Stack()))
+			cmdlog.Fail("%s", r)
+			cmdlog.Fault("%s", string(debug.Stack()))
 			exitCode = common.ErrGeneral
 		}
-		_ = lock.Unlock()
+		_ = pidUnlockFn(lock)
 	}()
-	if !executor.IsAdmin() {
-		commonLogger.Println("Program must be run as admin")
+	if !isAdminFn() {
+		cmdlog.Fail("Program must be run as admin")
 		exitCode = launcherCommon.ErrNotAdmin
 		return
 	}
@@ -63,23 +60,35 @@ func runRoot(_ *pflag.FlagSet) (err error, exitCode int) {
 	go func() {
 		_, ok := <-sigs
 		if ok {
-			commonLogger.CloseFileLog()
-			_ = lock.Unlock()
+			loggerCloseFn()
+			_ = pidUnlockFn(lock)
 			exitCode = common.ErrSignal
 		}
 	}()
+	// Create the pipe before the flush below. The flush runs ipconfig, which on a
+	// slow machine takes seconds, and the caller polls for this pipe for a couple
+	// of seconds after launching us. Listening last meant that on such a machine
+	// the caller gave up, killed an agent that was only still starting, and then
+	// the agent carried on and sat in Accept forever. The pid file is already
+	// written above, so the caller could see it alive the whole time.
+	var listener net.Listener
+	if listener, err = listenFn(); err != nil {
+		exitCode = internal.ErrListen
+		return
+	}
+	defer func() { _ = listener.Close() }()
 	if values.IPs || values.Certs {
 		if values.IPs {
-			commonLogger.Println("Flushing IP cache...")
+			cmdlog.Step("Flushing IP cache...")
 		}
 		if values.Certs {
-			commonLogger.Println("Flushing certificate cache...")
+			cmdlog.Step("Flushing certificate cache...")
 		}
 		var result *exec.Result
-		if buffErr := commonLogger.FileLogger.Buffer("config-admin_flushCache", func(writer io.Writer) {
-			_, result = launcherCommonExecutor.RunFlushCache(values.IPs, values.Certs, values.LogRoot, writer, func(options exec.Options) {
+		if buffErr := bufferFn("config-admin_flushCache", func(writer io.Writer) {
+			_, result = runFlushCacheFn(values.IPs, values.Certs, values.LogRoot, writer, func(options *exec.Options) {
 				if writer != nil {
-					commonLogger.Println("run config admin flushCache", options.String())
+					cmdlog.Println("run config admin flushCache", options.String())
 				}
 			})
 		}); buffErr != nil {
@@ -87,14 +96,16 @@ func runRoot(_ *pflag.FlagSet) (err error, exitCode int) {
 			return
 		}
 		if !result.Success() {
-			commonLogger.Println("Failed to flush cache with exit code: ", result.ExitCode)
+			cmdlog.Fail("Failed to flush cache with exit code: %d", result.ExitCode)
 			if result.Err != nil {
-				commonLogger.Println(result.Err.Error())
+				cmdlog.Fault("%s", result.Err.Error())
 			}
 			exitCode = internal.ErrFlushCache
 			return
 		}
 	}
-	exitCode = ipc.StartServer(values.LogRoot)
+	// Serve only now, so no command can race the flush, but the pipe has been
+	// answerable since before it started.
+	exitCode = serveFn(values.LogRoot, listener)
 	return
 }

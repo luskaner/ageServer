@@ -51,3 +51,7 @@ func FindProcessWithStartTime(pid int, expectedStartTime int64) (proc *os.Proces
 	}
 	return
 }
+
+// On this platform os.Process.Signal(os.Interrupt) works, so KillProc may try to
+// be polite before resorting to Kill.
+const platformSupportsGracefulSignal = true

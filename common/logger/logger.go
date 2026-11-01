@@ -11,13 +11,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/luskaner/ageLANServer/common"
+	"github.com/luskaner/ageServer/common"
 )
 
 var logger *log.Logger
 var file *os.File
 var FileLogger *Root
 var Buf bufferWrapper
+
+// ioCopyFn is injectable for tests.
+var ioCopyFn = io.Copy
+
+var (
+	filepathAbsFn = filepath.Abs
+	osMkdirAllFn  = os.MkdirAll
+)
 
 type Root struct {
 	root string
@@ -71,7 +79,12 @@ func Prefix(name string) {
 
 func CloseFileLog() {
 	if file != nil {
-		if _, err := file.Write(Buf.buffer.Bytes()); err != nil {
+		Buf.mu.Lock()
+		buffer := Buf.buffer
+		Buf.buffer = bytes.Buffer{}
+		Buf.mu.Unlock()
+		if _, err := file.Write(buffer.Bytes()); err != nil {
+			_ = file.Close()
 			return
 		}
 		_ = file.Sync()
@@ -123,11 +136,11 @@ func NewFile(root string, gameId string, finalRoot bool) (err error, l *Root) {
 	if !finalRoot {
 		folder = filepath.Join(logRootPrefix(root), gameId, date())
 	}
-	folder, err = filepath.Abs(folder)
+	folder, err = filepathAbsFn(folder)
 	if err != nil {
 		return err, nil
 	}
-	err = os.MkdirAll(folder, 0755)
+	err = osMkdirAllFn(folder, 0755)
 	if err != nil {
 		return err, nil
 	}
@@ -140,7 +153,7 @@ func (l *Root) Open(name string) (f *os.File, err error) {
 	}
 	return os.OpenFile(
 		filepath.Join(l.root, name+".txt"),
-		os.O_CREATE|os.O_WRONLY,
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
 		0666,
 	)
 }
@@ -167,7 +180,7 @@ func (l *Root) Buffer(name string, fn func(writer io.Writer)) error {
 		defer func(f *os.File) {
 			_ = f.Close()
 		}(f)
-		_, err = io.Copy(f, &buff)
+		_, err = ioCopyFn(f, &buff)
 		if err != nil {
 			return err
 		}

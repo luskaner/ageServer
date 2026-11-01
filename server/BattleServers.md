@@ -44,28 +44,28 @@ allow incoming connections to these ports.
 
 ### Examples
 
-The examples assume the server is installed in `C:\AgeLANServer`, the server certificate and key are already
+The examples assume the server is installed in `C:\AgeServer`, the server certificate and key are already
 generated and that you are located in the battle server directory using the `Powershell` interpreter.
 
 #### AoE: DE
 
-`& ".\BattleServer.exe" -simulationPeriod 25 -relayBroadcastPort 0 -region local -bsPort 30001 webSocketPort 30002 -sslKey C:\AgeLANServer\resources\certificates\key.pem -sslCert C:\AgeLANServer\resources\certificates\cert.pem`
+`& ".\BattleServer.exe" -simulationPeriod 25 -relayBroadcastPort 0 -region local -bsPort 30001 webSocketPort 30002 -sslKey C:\AgeServer\resources\certificates\key.pem -sslCert C:\AgeServer\resources\certificates\cert.pem`
 
 #### AoE II: DE
 
-`& ".\BattleServer.exe" -simulationPeriod 125 -relayBroadcastPort 0 -region local -name Local -bsPort 30003 webSocketPort 30004 -outOfBandPort 30005 -sslKey C:\AgeLANServer\resources\certificates\key.pem -sslCert C:\AgeLANServer\resources\certificates\cert.pem`
+`& ".\BattleServer.exe" -simulationPeriod 125 -relayBroadcastPort 0 -region local -name Local -bsPort 30003 webSocketPort 30004 -outOfBandPort 30005 -sslKey C:\AgeServer\resources\certificates\key.pem -sslCert C:\AgeServer\resources\certificates\cert.pem`
 
 #### AoE III: DE
 
-`& ".\BattleServer.exe" -simulationPeriod 50 -relayBroadcastPort 0 -region local -bsPort 30006 webSocketPort 30007 -outOfBandPort 30008 -sslKey C:\AgeLANServer\resources\certificates\key.pem -sslCert C:\AgeLANServer\resources\certificates\cert.pem`
+`& ".\BattleServer.exe" -simulationPeriod 50 -relayBroadcastPort 0 -region local -bsPort 30006 webSocketPort 30007 -outOfBandPort 30008 -sslKey C:\AgeServer\resources\certificates\key.pem -sslCert C:\AgeServer\resources\certificates\cert.pem`
 
 #### AoE IV: AE
 
-`& ".\BattleServer.exe" -simulationPeriod 50 -relayBroadcastPort 0 -region local -bsPort 30009 webSocketPort 30010 -outOfBandPort 30011 -sslKey C:\AgeLANServer\resources\certificates\key.pem -sslCert C:\AgeLANServer\resources\certificates\cert.pem`
+`& ".\BattleServer.exe" -simulationPeriod 50 -relayBroadcastPort 0 -region local -bsPort 30009 webSocketPort 30010 -outOfBandPort 30011 -sslKey C:\AgeServer\resources\certificates\key.pem -sslCert C:\AgeServer\resources\certificates\cert.pem`
 
 #### AoM: RT
 
-`& ".\BattleServer.exe" -simulationPeriod 50 -relayBroadcastPort 0 -region local -bsPort 30012 webSocketPort 30013 -outOfBandPort 30014 -sslKey C:\AgeLANServer\resources\certificates\key.pem -sslCert C:\AgeLANServer\resources\certificates\cert.pem`
+`& ".\BattleServer.exe" -simulationPeriod 50 -relayBroadcastPort 0 -region local -bsPort 30012 webSocketPort 30013 -outOfBandPort 30014 -sslKey C:\AgeServer\resources\certificates\key.pem -sslCert C:\AgeServer\resources\certificates\cert.pem`
 
 ## Configuring the Server
 
@@ -150,7 +150,7 @@ OutOfBandPort = 30014
 ### Assumptions
 
 * You will only run a single Battle Server instance per game at most.
-* The server is installed in `<server>`. E.g., `C:\AgeLANServer`.
+* The server is installed in `<server>`. E.g., `C:\AgeServer`.
 * The game is installed in `<game>`. E.g. `C:\Program Files (x86)\Steam\steamapps\common\AoE2DE`.
 
 Replace the placeholders with the actual paths.
@@ -244,3 +244,97 @@ Replace the placeholders with the actual paths.
       Multiplayer" then "Browse Games" and, observe games by enabling here "Spectator Mode".
     * AoM: RT: Click on "Multiplayer" and then on "Host", you may select the "Region", "local", or leave as default.
       Players can join games by going to "Multiplayer" then "Browse Games" (and observe games too).
+
+## Embedded Battle Server
+
+Instead of running a separate `BattleServer.exe` process, you can embed the battle server directly inside the ageLAN server process. This is configured per game under `Games.<game>.EmbeddedBattleServer`.
+
+### Configuration
+
+The embedded battle server mirrors the external battle server command-line options:
+
+| Battle Server argument | Server configuration key |
+|------------------------|--------------------------|
+| `-region`              | `Region`                 |
+| `-name`                | `Name`                   |
+| `-bsPort`              | `BsPort`                 |
+| `-webSocketPort`       | `WebSocketPort`          |
+| `-outOfBandPort`       | `OutOfBandPort`          |
+| `-simulationPeriod`    | `SimulationPeriod`       |
+| `-logLevel`            | `LogLevel`               |
+
+Additionally, `IPv4` should point to a user-accessible IP (e.g., `192.168.1.2` or `auto`).
+
+When `BsPort`, `WebSocketPort`, or `OutOfBandPort` is set to `0`, the server automatically assigns a free port.
+
+`SimulationPeriod` defaults by game when set to `0`:
+- `age1`: 25 ms
+- `age3` / `athens`: 50 ms
+- `age2` / `age4`: 125 ms
+
+`LogLevel` accepts: `none`, `error`, `warning`, `notice`, `info`, `debug`.
+
+**StartIfMissing** (default: `"true"`): Controls when the embedded battle server auto-starts if no external battle server is configured (`[[Games.<game>.BattleServers]]`) and none is detected by battle-server-manager. Accepted values:
+- `"true"` (default): always start if missing
+- `"false"`: never auto-start
+- `"required"`: start if missing for age4/athens, otherwise false
+
+### Example
+
+```toml
+[Games.age2.EmbeddedBattleServer]
+StartIfMissing = "true"
+Region = 'local-embedded'
+Name = 'Embedded Local'
+IPv4 = 'auto'
+BsPort = 0
+WebSocketPort = 0
+OutOfBandPort = 0
+SimulationPeriod = 0
+LogLevel = 'info'
+```
+
+### Battle Server Replays
+
+When enabled, the embedded battle server writes the recorded game data to self-describing `.replay` files. This is configured globally under `[BattleServerReplays]` and mirrors the `[CustomFiles]` settings:
+
+| Key            | Description |
+|----------------|-------------|
+| `Enabled`      | Whether to enable replay recording. |
+| `Folder`       | Folder where replay files are stored. Use `'auto'` for `<resources>/userData/<game>/replays`. |
+| `MaxFileSize`  | Maximum size of a single replay file (e.g., `32MB`). |
+| `MaxTotalSize` | Maximum accumulated size per game (e.g., `256MB`). |
+| `Expiry`       | How long a replay file is kept since its last write (e.g., `12h`). Set to `0` or negative (e.g., `-1`) to keep replay files forever (no TTL-based expiration). |
+
+```toml
+[BattleServerReplays]
+Enabled = true
+Folder = 'auto'
+MaxFileSize = '32MB'
+MaxTotalSize = '256MB'
+Expiry = '12h'
+```
+
+### Notes
+
+- The embedded battle server uses the same certificate logic as the external battle server: `cert.pem`/`key.pem` for `age4`/`athens`, `selfsigned_cert.pem`/`selfsigned_key.pem` for other games.
+- Relay broadcast is disabled. Lobby is disabled. Public port equals `BsPort`.
+- The embedded server appears in the game's battle server list alongside any external battle servers.
+- Replay files use a custom container format (`ALSBREPL` magic, version byte, JSON header, then timestamped records).
+- One file is kept per session (session ID 0 is ignored). Per-file TTL and total quota with oldest-file eviction are enforced.
+
+### StartIfMissing Behavior
+
+By default (`StartIfMissing = "true"`), the embedded battle server is **automatically started** for a game when:
+- The game is enabled in `[Games.Enabled]`
+- No battle servers are configured in `[[Games.<game>.BattleServers]]`
+- No battle servers are detected by the battle-server-manager (no `.toml` files in `<TEMP>/ageServer/battle-servers/<game>/`)
+
+This means you don't need to explicitly configure `[Games.<game>.EmbeddedBattleServer]` to get a working battle server - it will start automatically with sensible defaults (region = `<game>-embedded`, name = "Embedded Battle Server", IPv4 = "auto", auto-assigned ports).
+
+**Values**:
+- `"true"` (default): always start if missing
+- `"false"`: never auto-start
+- `"required"`: start if missing for age4/athens, otherwise false
+
+To disable this auto-start behavior, explicitly set `StartIfMissing = "false"` in `[Games.<game>.EmbeddedBattleServer]`, or configure an external battle server via `[[Games.<game>.BattleServers]]` or the battle-server-manager.

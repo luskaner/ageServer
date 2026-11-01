@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	mapset "github.com/deckarep/golang-set/v2"
+	mapset "github.com/deckarep/golang-set/v3"
 )
 
 var (
@@ -106,6 +106,10 @@ func (a Arm64) InstructionSet() mapset.Set[string] {
 	return set
 }
 
+// osArgs exists so tests can simulate command line arguments without
+// touching the real process arguments.
+var osArgs = os.Args
+
 type DefaultTool struct{}
 
 func (t DefaultTool) Tool() string {
@@ -123,7 +127,12 @@ type WindowsLegacy struct {
 }
 
 func (w WindowsLegacy) Tool() string {
-	return filepath.ToSlash(filepath.Join(os.Args[1], "bin", "go"))
+	if len(osArgs) < 2 {
+		// The legacy toolchain root is passed as the first positional
+		// argument; without it there is no legacy tool to point at.
+		return ""
+	}
+	return filepath.ToSlash(filepath.Join(osArgs[1], "bin", "go"))
 }
 
 func (w WindowsLegacy) Name() string {

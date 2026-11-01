@@ -1,8 +1,8 @@
 package resolver
 
 import (
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/common/game/appx"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/common/game/appx"
 )
 
 func xboxPath(gameId string, battleServerPath string) (path string) {

@@ -2,4 +2,6 @@
 
 package watch
 
-func rebroadcastBattleServer(_ *int, _ int) {}
+import "context"
+
+func rebroadcastBattleServer(_ context.Context, _ *ExitCode, _ int) {}

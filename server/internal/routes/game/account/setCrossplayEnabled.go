@@ -3,7 +3,7 @@ package account
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 func SetCrossplayEnabled(w http.ResponseWriter, r *http.Request) {

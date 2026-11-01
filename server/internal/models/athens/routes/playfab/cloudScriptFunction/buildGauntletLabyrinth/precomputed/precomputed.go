@@ -1,8 +1,8 @@
 package precomputed
 
 import (
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/luskaner/ageLANServer/server/internal/models/athens/routes/playfab"
+	mapset "github.com/deckarep/golang-set/v3"
+	"github.com/luskaner/ageServer/server/internal/models/athens/routes/playfab"
 )
 
 type Blessing struct {

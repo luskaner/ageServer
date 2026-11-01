@@ -3,7 +3,7 @@ package chat
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 func DeleteOfflineMessage(w http.ResponseWriter, _ *http.Request) {

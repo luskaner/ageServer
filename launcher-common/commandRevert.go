@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/executor/exec"
 )
 
 var RevertCommandStore = NewArgsStore(filepath.Join(os.TempDir(), common.Name+"_command_revert.txt"))
 
-func RunRevertCommand(out io.Writer, optionsFn func(options exec.Options)) (err error) {
+func (r *Reverter) RunRevertCommand(out io.Writer, optionsFn func(options *exec.Options)) (err error) {
 	var args []string
 	var cmd []string
 	err, cmd = RevertCommandStore.Load()
@@ -29,14 +29,22 @@ func RunRevertCommand(out io.Writer, optionsFn func(options exec.Options)) (err 
 		Args:           args,
 	}
 	if optionsFn != nil {
-		optionsFn(options)
+		optionsFn(&options)
 	}
 	if out != nil {
 		options.Stdout = out
 		options.Stderr = out
 	}
-	result := options.Exec()
+	result := r.deps.exec(options)
 	err = result.Err
-	_ = RevertCommandStore.Delete()
+	// Keep the stored command when execution failed so it can be retried,
+	// mirroring ConfigRevert's store handling.
+	if result.Success() {
+		_ = RevertCommandStore.Delete()
+	}
 	return
+}
+
+func RunRevertCommand(out io.Writer, optionsFn func(options *exec.Options)) (err error) {
+	return Default.RunRevertCommand(out, optionsFn)
 }

@@ -4,16 +4,17 @@ import (
 	"io"
 
 	"github.com/hairyhenderson/go-which"
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/executor/exec"
-	commonLogger "github.com/luskaner/ageLANServer/common/logger"
-	"github.com/luskaner/ageLANServer/launcher-config-admin/internal"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/executor/exec"
+	commonLogger "github.com/luskaner/ageServer/common/logger"
+	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
+	"github.com/luskaner/ageServer/launcher-config-admin/internal"
 )
 
 func FlushDns() (result *exec.Result) {
 	path := which.Which("resolvectl")
 	if path != "" {
-		commonLogger.Println("Flushing DNS cache...")
+		commonLogger.Println(commonUi.Step("Flushing DNS cache..."))
 		options := exec.Options{File: "systemctl", SpecialFile: true, UseWorkingPath: true, ExitCode: true, Wait: true, Args: []string{"restart", "systemd-resolved"}}
 		var suffix string
 		if internal.SetUp == nil {
@@ -27,7 +28,7 @@ func FlushDns() (result *exec.Result) {
 			if writer != nil {
 				options.Stdout = writer
 				options.Stderr = writer
-				commonLogger.Printf("run resolvectl: %s\n", options.String())
+				commonLogger.Println(commonUi.Detail("run resolvectl: %s", options.String()))
 			}
 			result = options.Exec()
 		}); err != nil {

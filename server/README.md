@@ -9,7 +9,7 @@ API requests. The server reimplements the minimum required API surface to allow 
 
 - **Windows**: 7 or equivalent (10 or higher recommended).
 - **Linux**: kernel 3.2 (5.10 or higher recommended, see [here](https://go.dev/wiki/Linux) for more details).
-- **macOS**: Monterey v12 (Sonoma v14 or higher recommended).
+- **macOS**: Ventura v13 (Sequoia v15 or higher recommended).
 
 Admin rights or firewall permission to listen on port 443 (https) will likely be required depending on the operating
 system.
@@ -21,7 +21,7 @@ system.
 - Solaris-based (Solaris and Illumos).
 - AIX.
 
-Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/MinimumRequirements) 1.26.
+Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/MinimumRequirements) 1.27.
 
 </details>
 
@@ -42,7 +42,8 @@ Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/Mi
 
 ### Partially proxied
 
-- `api.ageofempires.com`: except text moderation so it works normally even without internet.
+- `api.ageofempires.com`: except text moderation and the `MatchContent` endpoints (multiplayer savegame and
+  replay upload/download) so it works normally even without internet.
 - `cdn.ageofempires.com`: except server status so it always shows online.
 
 Note proxied domains only override part of the official functionality but retain the rest of it.
@@ -81,6 +82,30 @@ The configuration file sent to the client upon login is `login.json` inside the 
 Some options
 are
 easy to understand while others might require researching.
+
+### News
+
+The news returned by `/game/news/getNews` are defined per game in `resources/config/<game>/news.toml`.
+See [News](./news.md) for the file format and how to add items.
+
+### Custom files
+
+The `/api/MatchContent/` endpoints serve multiplayer savegames and replays: the host uploads the file, the
+remaining players download it to restore the match. Without them the game fails with "Failed to upload/download
+custom files".
+
+Files are stored under a per-game folder (by default `<TEMP>\ageServer\custom-files\<game>`), evicted least
+recently first to stay under the accumulated quota, and swept after the configured TTL. A `.part` file is used
+while uploading; it is renamed into place once the `matchId` is known, so a crash mid-upload leaves at most an
+orphan `.part` that is purged on the next startup.
+
+The TTL is what removes a file, not a clean exit: stopping the server leaves the payloads on disk, and a later
+startup removes whatever it finds older than the TTL. The index is not persisted, so after a restart those
+leftovers are no longer reachable and are only reclaimed by that later startup. Up to `MaxFileSize` the endpoints
+run outside the global body-size cap, and the upload raises the read deadline for its own request; bodies larger
+than 4 KiB are left out of the communication log rather than base64-encoded into a multi-megabyte line.
+
+See the `[CustomFiles]` section of [`config.toml`](resources/config/config.toml).
 
 ### Cloud
 
@@ -188,6 +213,28 @@ the [`responses`](resources/responses) base directory.
 
 See [Battle Servers](./BattleServers.md) for how to set up and start manually-configured Online-like Battle-servers.
 See [Battle Server Manager](../battle-server-manager) for how to do so automatically.
+
+### Embedded Battle Server
+
+The server can run a battle server internally (embedded) instead of as a separate process. This is configured per game
+under `Games.<game>.EmbeddedBattleServer` in `config.toml`. See [Battle Servers](./BattleServers.md#embedded-battle-server)
+for details.
+
+When started, the embedded battle server starts on server startup and stops on shutdown. It appears in the game's battle
+server list like any external battle server.
+
+**StartIfMissing** (default: `"true"`): Controls when the embedded battle server auto-starts if no external battle server
+is configured (via `[[Games.<game>.BattleServers]]`) and none is detected by the battle-server-manager. Accepted values:
+- `"true"` (default): always start if missing
+- `"false"`: never auto-start
+- `"required"`: start if missing for age4/athens, otherwise false
+
+No explicit configuration is needed - it will use sensible defaults. To disable, set `StartIfMissing = "false"` in
+`[Games.<game>.EmbeddedBattleServer]` or configure an external battle server.
+
+Replay recording for embedded battle servers is configured under `[BattleServerReplays]` and mirrors the `[CustomFiles]`
+settings for folder, size limits, and expiry. Set `Expiry` to `0` or a negative value (e.g., `-1`) to keep replay files
+forever (no TTL-based expiration).
 
 ## Command Line
 

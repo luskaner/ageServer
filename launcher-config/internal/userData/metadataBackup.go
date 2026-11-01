@@ -1,7 +1,7 @@
 package userData
 
 import (
-	commonUserData "github.com/luskaner/ageLANServer/launcher-common/userData"
+	commonUserData "github.com/luskaner/ageServer/launcher-common/userData"
 )
 
 func Metadata(path *commonUserData.Path) Data {

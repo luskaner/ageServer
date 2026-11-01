@@ -3,7 +3,7 @@ package playerreport
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 func ReportUser(w http.ResponseWriter, _ *http.Request) {

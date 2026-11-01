@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/server/internal/routes/cdnAgeOfEmpires/aoe/serverStatus"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/server/internal/routes/cdnAgeOfEmpires/aoe/serverStatus"
 )
 
 type CdnAgeOfEmpires struct {

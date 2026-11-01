@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 type itemRequest struct {
@@ -43,22 +43,22 @@ func MoveItem(w http.ResponseWriter, r *http.Request) {
 	itemsEncoded := make([]i.A, minLength)
 	_ = u.GetItems().WithReadWrite(func(data *map[int32]*models.MainItem) error {
 		for j, itemId := range req.ItemIds.Data {
-			itemLocationId := req.LocationIds.Data[j]
-			positionId := req.PositionIds.Data[j]
-			slotId := req.SlotIds.Data[j]
+			locationID := req.LocationIds.Data[j]
+			positionID := req.PositionIds.Data[j]
+			slotID := req.SlotIds.Data[j]
 			if item, exists := (*data)[itemId]; !exists {
 				errorCodes[j] = 2
 				itemsEncoded[j] = i.A{}
 			} else {
 				errorCodes[j] = 0
-				if itemLocationId != -1 {
-					item.SetLocationId(itemLocationId)
+				if locationID != -1 {
+					item.SetLocationID(locationID)
 				}
-				if positionId != -1 {
+				if positionID != -1 {
 					// TODO: Handle position if any game sends it
 				}
-				if slotId != -1 {
-					item.GetMetadata().UpdateOther("eslot", strconv.FormatInt(int64(slotId), 10))
+				if slotID != -1 {
+					item.GetMetadata().UpdateOther("eslot", strconv.FormatInt(int64(slotID), 10))
 				}
 				item.IncrementVersion()
 				itemsEncoded[j] = item.Encode(sess.GetUserId())

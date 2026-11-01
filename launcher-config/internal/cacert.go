@@ -6,10 +6,11 @@ import (
 	"io"
 	"os"
 
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/luskaner/ageLANServer/common"
-	launcherCommonCert "github.com/luskaner/ageLANServer/common/game/cert"
-	"github.com/luskaner/ageLANServer/common/logger"
+	mapset "github.com/deckarep/golang-set/v3"
+	"github.com/luskaner/ageServer/common"
+	launcherCommonCert "github.com/luskaner/ageServer/common/game/cert"
+	"github.com/luskaner/ageServer/common/logger"
+	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
 )
 
 type CACert struct {
@@ -32,7 +33,7 @@ func (c *CACert) Backup() (err error) {
 	if _, err = os.Stat(backupPath); err == nil {
 		return
 	}
-	commonLogger.Printf("Opening %s\n", originalPath)
+	commonLogger.Println(commonUi.Step("Opening %s", originalPath))
 	originalFile, err := os.Open(originalPath)
 	if err != nil {
 		return
@@ -40,7 +41,7 @@ func (c *CACert) Backup() (err error) {
 	defer func(originalFile *os.File) {
 		_ = originalFile.Close()
 	}(originalFile)
-	commonLogger.Printf("Creating %s\n", backupPath)
+	commonLogger.Println(commonUi.Step("Creating %s", backupPath))
 	backupFile, err := os.Create(backupPath)
 	if err != nil {
 		return
@@ -48,7 +49,7 @@ func (c *CACert) Backup() (err error) {
 	defer func(backupFile *os.File) {
 		_ = backupFile.Close()
 	}(backupFile)
-	commonLogger.Printf("Copying data from %s to %s\n", originalPath, backupPath)
+	commonLogger.Println(commonUi.Step("Copying data from %s to %s", originalPath, backupPath))
 	_, err = io.Copy(backupFile, originalFile)
 	if err != nil {
 		_ = backupFile.Close()
@@ -74,12 +75,12 @@ func (c *CACert) Restore() (err error, removedCerts []*x509.Certificate) {
 		err = fmt.Errorf("temporary file %s already exists", tmpPath)
 		return
 	}
-	commonLogger.Printf("Renaming/Moving %s to %s\n", originalPath, tmpPath)
+	commonLogger.Println(commonUi.Step("Renaming/Moving %s to %s", originalPath, tmpPath))
 	err = os.Rename(originalPath, tmpPath)
 	if err != nil {
 		return
 	}
-	commonLogger.Printf("Renaming/Moving %s to %s\n", backupPath, originalPath)
+	commonLogger.Println(commonUi.Step("Renaming/Moving %s to %s", backupPath, originalPath))
 	err = os.Rename(backupPath, originalPath)
 	if err != nil {
 		_ = os.Rename(tmpPath, originalPath)
@@ -90,19 +91,19 @@ func (c *CACert) Restore() (err error, removedCerts []*x509.Certificate) {
 		_ = os.Rename(tmpPath, originalPath)
 		return
 	}
-	commonLogger.Printf("Reading %s certificates\n", tmpPath)
+	commonLogger.Println(commonUi.Step("Reading %s certificates", tmpPath))
 	backupHashes, backupHashToIndex, backupCerts, err := common.ReadFromFile(tmpPath)
 	if err != nil {
 		revert()
 		return
 	}
-	commonLogger.Printf("Reading %s certificates\n", originalPath)
+	commonLogger.Println(commonUi.Step("Reading %s certificates", originalPath))
 	originalHashes, _, _, err := common.ReadFromFile(originalPath)
 	if err != nil {
 		revert()
 		return
 	}
-	commonLogger.Printf("Deleting %s\n", tmpPath)
+	commonLogger.Println(commonUi.Step("Deleting %s", tmpPath))
 	if err = os.Remove(tmpPath); err != nil {
 		revert()
 		return
@@ -123,7 +124,7 @@ func (c *CACert) Append(certs []*x509.Certificate) (err error) {
 	if _, err = os.Stat(originalPath); err != nil {
 		return
 	}
-	commonLogger.Printf("Opening %s\n", originalPath)
+	commonLogger.Println(commonUi.Step("Opening %s", originalPath))
 	file, err := os.OpenFile(originalPath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return
@@ -131,7 +132,7 @@ func (c *CACert) Append(certs []*x509.Certificate) (err error) {
 	defer func(file *os.File) {
 		_ = file.Close()
 	}(file)
-	commonLogger.Println("Writing certs data")
+	commonLogger.Println(commonUi.Step("Writing certs data"))
 	for _, cert := range certs {
 		if err = common.WriteAsPem(cert.Raw, file); err != nil {
 			return

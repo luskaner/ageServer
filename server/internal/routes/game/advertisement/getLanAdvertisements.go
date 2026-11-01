@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 type lanQuery struct {

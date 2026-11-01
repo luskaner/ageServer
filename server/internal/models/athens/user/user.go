@@ -1,8 +1,9 @@
 package user
 
 import (
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/server/internal/logger"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 var storyMissions = []string{
@@ -55,18 +56,23 @@ func (users *Users) Initialize() {
 }
 
 func (users *Users) Generate(_ string, persistentData *models.PersistentStringJsonMap, itemDefinitions models.Items, avatarStatsDefinitions models.AvatarStatDefinitions, identifier string, isXbox bool, platformUserId uint64, alias string) models.User {
-	d, err := models.NewPersistentJsonData[*Data](
+	// A playfab document that cannot be opened leaves the field nil and the
+	// player still logs in, rather than failing the whole account over it.
+	playfabData := models.OpenPersistentJsonData[*Data](
 		persistentData,
+		identifier,
 		"playfab",
 		NewAvatarStatsUpgradableDefaultData(),
 	)
-	if err != nil {
+	mainUser := users.MainUsers.Generate(game.AoM, persistentData, itemDefinitions, avatarStatsDefinitions, identifier, isXbox, platformUserId, alias)
+	main, ok := mainUser.(*models.MainUser)
+	if !ok {
+		logger.Fail("User %s: could not be created", identifier)
 		return nil
 	}
-	mainUser := users.MainUsers.Generate(game.AoM, persistentData, itemDefinitions, avatarStatsDefinitions, identifier, isXbox, platformUserId, alias)
 	return &User{
-		MainUser:    mainUser.(*models.MainUser),
-		PlayfabData: d,
+		MainUser:    main,
+		PlayfabData: playfabData,
 	}
 }
 

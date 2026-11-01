@@ -218,7 +218,7 @@ type safeOrderedMapData[K comparable, V any] struct {
 type SafeOrderedMap[K comparable, V any] struct {
 	lock sync.Mutex
 	data *safeOrderedMapData[K, V]
-	ro   atomic.Value
+	ro   atomic.Pointer[baseSafeOrderedMapData[K, V]]
 }
 
 func NewSafeOrderedMap[K comparable, V any]() *SafeOrderedMap[K, V] {
@@ -262,13 +262,13 @@ func (m *SafeOrderedMap[K, V]) store(key K, value V, replace func(stored V) bool
 }
 
 func (m *SafeOrderedMap[K, V]) Load(key K) (value V, ok bool) {
-	ro := m.ro.Load().(*baseSafeOrderedMapData[K, V])
+	ro := m.ro.Load()
 	value, ok = ro.internal[key]
 	return
 }
 
 func (m *SafeOrderedMap[K, V]) Len() int {
-	ro := m.ro.Load().(*baseSafeOrderedMapData[K, V])
+	ro := m.ro.Load()
 	return len(ro.keys)
 }
 
@@ -316,7 +316,7 @@ func (m *baseSafeOrderedMapData[K, V]) iter() (int, iter.Seq2[K, V]) {
 }
 
 func (m *SafeOrderedMap[K, V]) Keys() (int, iter.Seq[K]) {
-	ro := m.ro.Load().(*baseSafeOrderedMapData[K, V])
+	ro := m.ro.Load()
 	return len(ro.keys), func(yield func(K) bool) {
 		for _, key := range ro.keys {
 			if !yield(key) {
@@ -327,7 +327,7 @@ func (m *SafeOrderedMap[K, V]) Keys() (int, iter.Seq[K]) {
 }
 
 func (m *SafeOrderedMap[K, V]) Values() (int, iter.Seq[V]) {
-	ro := m.ro.Load().(*baseSafeOrderedMapData[K, V])
+	ro := m.ro.Load()
 	return len(ro.keys), func(yield func(V) bool) {
 		for _, key := range ro.keys {
 			if !yield(ro.internal[key]) {
@@ -338,12 +338,12 @@ func (m *SafeOrderedMap[K, V]) Values() (int, iter.Seq[V]) {
 }
 
 func (m *SafeOrderedMap[K, V]) Iter() (int, iter.Seq2[K, V]) {
-	ro := m.ro.Load().(*baseSafeOrderedMapData[K, V])
+	ro := m.ro.Load()
 	return ro.iter()
 }
 
 func (m *SafeOrderedMap[K, V]) First() (key K, value V, ok bool) {
-	ro := m.ro.Load().(*baseSafeOrderedMapData[K, V])
+	ro := m.ro.Load()
 	if len(ro.keys) == 0 {
 		return
 	}

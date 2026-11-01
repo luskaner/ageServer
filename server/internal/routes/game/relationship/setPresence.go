@@ -3,9 +3,9 @@ package relationship
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
-	"github.com/luskaner/ageLANServer/server/internal/routes/wss"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/routes/wss"
 )
 
 func ChangePresence(clientLibVersion uint16, sessions models.Sessions, users models.Users, user models.User, presenceDefinitions models.PresenceDefinitions, presence int32) {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/luskaner/ageLANServer/common/fileLock"
-	commonHosts "github.com/luskaner/ageLANServer/common/hosts"
-	"github.com/luskaner/ageLANServer/common/hosts/text"
+	"github.com/luskaner/ageServer/common/fileLock"
+	commonHosts "github.com/luskaner/ageServer/common/hosts"
+	"github.com/luskaner/ageServer/common/hosts/text"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/transform"
 )

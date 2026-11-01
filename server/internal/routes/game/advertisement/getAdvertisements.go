@@ -2,16 +2,15 @@ package advertisement
 
 import (
 	"net/http"
-	"slices"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	i "github.com/luskaner/ageServer/server/internal"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 func getAdvResp(errorCode int, advs i.A) i.A {
 	return i.A{
-		errorCode,
-		advs,
+		errorCode, // resultCode
+		advs,      // advertisements
 	}
 }
 
@@ -30,9 +29,24 @@ func GetAdvertisements(w http.ResponseWriter, r *http.Request) {
 	title := game.Title()
 	sess := models.SessionOrPanic(r)
 	advertisements := game.Advertisements()
-	advs := advertisements.LockedFindAdvertisementsEncoded(title, sess.GetClientLibVersion(), 0, 0, false, func(adv models.Advertisement) bool {
-		return slices.Contains(req.MatchIDs.Data, adv.GetId())
-	})
+	if len(req.MatchIDs.Data) > 0 {
+		matchIDs := req.MatchIDs.Data
+		advs := advertisements.LockedFindAdvertisementsEncoded(title, sess.GetClientLibVersion(), 0, 0, true, func(adv models.Advertisement) bool {
+			for _, id := range matchIDs {
+				if adv.GetId() == id {
+					return true
+				}
+			}
+			return false
+		})
+		if advs == nil {
+			i.JSON(&w, getAdvResp(0, i.A{}))
+		} else {
+			i.JSON(&w, getAdvResp(0, advs))
+		}
+		return
+	}
+	advs := advertisements.LockedFindAdvertisementsEncoded(title, sess.GetClientLibVersion(), 0, 0, false, func(models.Advertisement) bool { return true })
 	if advs == nil {
 		i.JSON(&w, getAdvResp(0, i.A{}))
 	} else {

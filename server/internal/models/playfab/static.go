@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/luskaner/ageLANServer/common/game"
-	"github.com/luskaner/ageLANServer/server/internal/models"
+	"github.com/luskaner/ageServer/common/game"
+	"github.com/luskaner/ageServer/server/internal/models"
 )
 
 type target struct {
@@ -51,8 +51,8 @@ func init() {
 		},
 	}
 	_ = filepath.Walk(BaseDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+		if err != nil || info == nil {
+			return nil
 		}
 		if info.IsDir() {
 			id, err := strconv.Atoi(info.Name())

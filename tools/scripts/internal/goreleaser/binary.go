@@ -1,6 +1,6 @@
 package goreleaser
 
-import mapset "github.com/deckarep/golang-set/v2"
+import mapset "github.com/deckarep/golang-set/v3"
 
 type BinaryTargets map[OperatingSystem]map[Architecture]mapset.Set[string]
 

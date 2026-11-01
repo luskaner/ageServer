@@ -1,4 +1,4 @@
-name: ageLANServer-server-full-all-bridge
+name: ageServer-server-full-all-bridge
 include:
   - ./battle-server-manager/base.include.yml
   - ./server.bridge.yml

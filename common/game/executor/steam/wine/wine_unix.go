@@ -3,10 +3,10 @@
 package wine
 
 import (
-	commonExecutor "github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/game/executor/steam"
-	"github.com/luskaner/ageLANServer/common/game/executor/wine"
-	wineSteam "github.com/luskaner/ageLANServer/common/game/wine/steam"
+	commonExecutor "github.com/luskaner/ageServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/game/executor/steam"
+	"github.com/luskaner/ageServer/common/game/executor/wine"
+	wineSteam "github.com/luskaner/ageServer/common/game/wine/steam"
 )
 
 type Exec struct {

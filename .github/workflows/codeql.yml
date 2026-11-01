@@ -26,8 +26,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.9'
-
+          go-version: '1.27.3'
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -48,14 +47,13 @@ jobs:
             "./launcher-config-admin-agent|launcher/bin/config-admin-agent"
             "./battle-server-manager|battle-server-manager/battle-server-manager"
             "./tools/server-replay|tools/server-replay"
-            "./tools/scripts/cmd/copyBattleServerManagerResources.go|tools/scripts/copyBattleServerManagerResources"
-            "./tools/scripts/cmd/copyLauncherResources.go|tools/scripts/copyLauncherResources"
-            "./tools/scripts/cmd/copyServerResources.go|tools/scripts/copyServerResources"
-            "./tools/scripts/cmd/createServerResourcesFolder.go|tools/scripts/createServerResourcesFolder"
-            "./tools/scripts/cmd/generateGoreleaserConfig.go|tools/scripts/generateGoreleaserConfig"
+            "./tools/scripts/cmd/copyBattleServerManagerResources|tools/scripts/copyBattleServerManagerResources"
+            "./tools/scripts/cmd/copyLauncherResources|tools/scripts/copyLauncherResources"
+            "./tools/scripts/cmd/copyServerResources|tools/scripts/copyServerResources"
+            "./tools/scripts/cmd/createServerResourcesFolder|tools/scripts/createServerResourcesFolder"
+            "./tools/scripts/cmd/generateGoreleaserConfig|tools/scripts/generateGoreleaserConfig"
           )
           windows_targets=(
-            "./tools/mock/battle-server/main_windows.go|tools/battle-server"
             "./tools/mock/launcher/main.go|tools/launcher"
             "./tools/mock/game/main_windows.go|tools/game"
           )

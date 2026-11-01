@@ -3,7 +3,7 @@ package textmoderation
 import (
 	"net/http"
 
-	i "github.com/luskaner/ageLANServer/server/internal"
+	i "github.com/luskaner/ageServer/server/internal"
 )
 
 type textModerationRequest struct {

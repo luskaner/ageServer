@@ -4,8 +4,8 @@ package wine
 
 import (
 	"github.com/hairyhenderson/go-which"
-	commonExecutor "github.com/luskaner/ageLANServer/common/executor/exec"
-	"github.com/luskaner/ageLANServer/common/game/wine"
+	commonExecutor "github.com/luskaner/ageServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common/game/wine"
 )
 
 type CustomExec interface {

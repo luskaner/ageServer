@@ -1,6 +1,6 @@
 package game
 
-import mapset "github.com/deckarep/golang-set/v2"
+import mapset "github.com/deckarep/golang-set/v3"
 
 type Locatable interface {
 	Path() string

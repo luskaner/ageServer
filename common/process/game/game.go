@@ -1,7 +1,7 @@
 package game
 
 import (
-	commonGame "github.com/luskaner/ageLANServer/common/game"
+	commonGame "github.com/luskaner/ageServer/common/game"
 )
 
 var gameToSteamProcess map[string]string

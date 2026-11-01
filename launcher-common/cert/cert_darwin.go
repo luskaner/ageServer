@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/luskaner/ageLANServer/common"
-	"github.com/luskaner/ageLANServer/common/certStore"
-	"github.com/luskaner/ageLANServer/common/executor/exec"
+	"github.com/luskaner/ageServer/common"
+	"github.com/luskaner/ageServer/common/certStore"
+	"github.com/luskaner/ageServer/common/executor/exec"
 )
 
 func TrustCertificates(userStore bool, certs []*x509.Certificate) error {

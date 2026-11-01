@@ -20,7 +20,7 @@ type CloudfilesIndex struct {
 }
 
 type CloudFiles struct {
-	baseFolder  string
+	root        *os.Root
 	Value       map[string]CloudfilesIndex
 	Credentials Credentials
 }
@@ -39,7 +39,7 @@ func (m *CloudFiles) ReadFile(name string) ([]byte, error) {
 	if !ok {
 		return nil, os.ErrInvalid
 	}
-	return os.ReadFile(filepath.Join(m.baseFolder, name))
+	return m.root.ReadFile(name)
 }
 
 func BuildCloudfilesIndex(configFolder string, baseFolder string) *CloudFiles {
@@ -47,8 +47,12 @@ func BuildCloudfilesIndex(configFolder string, baseFolder string) *CloudFiles {
 	if err != nil {
 		return nil
 	}
+	root, err := os.OpenRoot(baseFolder)
+	if err != nil {
+		panic(err)
+	}
 	index := CloudFiles{
-		baseFolder:  baseFolder,
+		root:        root,
 		Credentials: NewCredentials(),
 	}
 	err = json.Unmarshal(data, &index.Value)

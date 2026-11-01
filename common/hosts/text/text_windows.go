@@ -13,10 +13,19 @@ import (
 	"golang.org/x/text/encoding/unicode"
 )
 
+var getACPFn = windows.GetACP
+
+// SetGetACP replaces the ANSI code page provider for tests.
+func SetGetACP(fn func() uint32) (restore func()) {
+	orig := getACPFn
+	getACPFn = fn
+	return func() { getACPFn = orig }
+}
+
 // AnsiToUtf8Decoder returns the encoding corresponding to the Windows ANSI Code Page (ACP).
 // Filtered to support code pages present in Windows 7 or higher.
 func ansiToUtf8Encoding() encoding.Encoding {
-	acp := windows.GetACP()
+	acp := getACPFn()
 	switch acp {
 	// Windows-125x series (Standard ANSI in modern Windows)
 	case 1250:

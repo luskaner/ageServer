@@ -2,21 +2,44 @@ package fileLock
 
 import (
 	"encoding/binary"
+	"errors"
 	"os"
 
-	"github.com/luskaner/ageLANServer/common/process"
+	"github.com/luskaner/ageServer/common/process"
+)
+
+// Locker is the seam used by launcher to make PidLock testable without touching filesystem.
+type Locker interface {
+	Lock() error
+	Unlock() error
+}
+
+var ErrAlreadyRunning = errors.New("another instance is already running")
+
+var (
+	openFileFn = openFile
+	writePidFn = writePid
+	// Injectables for tests.
+	osExecutableFn   = os.Executable
+	processProcessFn = process.Process
+	fileTruncateFn   = func(f *os.File, size int64) error { return f.Truncate(size) }
+	fileWriteFn      = func(f *os.File, data []byte) (int, error) { return f.Write(data) }
 )
 
 func openFile() (err error, f *os.File) {
 	var exe string
-	exe, err = os.Executable()
+	exe, err = osExecutableFn()
 	if err != nil {
 		return
 	}
 	var pidPath string
 	var proc *os.Process
-	pidPath, proc, err = process.Process(exe)
-	if err == nil && proc != nil {
+	pidPath, proc, err = processProcessFn(exe)
+	if err != nil {
+		return
+	}
+	if proc != nil {
+		err = ErrAlreadyRunning
 		return
 	}
 	f, err = os.OpenFile(pidPath, os.O_CREATE|os.O_WRONLY, 0644)
@@ -33,11 +56,11 @@ func writePid(f *os.File) error {
 	binary.LittleEndian.PutUint64(data[0:8], uint64(pid))
 	binary.LittleEndian.PutUint64(data[8:16], uint64(startTime))
 
-	err := f.Truncate(int64(len(data)))
+	err := fileTruncateFn(f, int64(len(data)))
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(data)
+	_, err = fileWriteFn(f, data)
 	if err != nil {
 		return err
 	}
@@ -58,7 +81,7 @@ type PidLock struct {
 
 func (l *PidLock) Lock() error {
 	//goland:noinspection ALL
-	err, file := openFile()
+	err, file := openFileFn()
 	if err != nil {
 		return err
 	}
@@ -66,7 +89,7 @@ func (l *PidLock) Lock() error {
 	if err != nil {
 		return err
 	}
-	err = writePid(file)
+	err = writePidFn(file)
 	if err != nil {
 		l.fileLock.clean()
 		return err
@@ -75,15 +98,13 @@ func (l *PidLock) Lock() error {
 }
 
 func (l *PidLock) Unlock() error {
+	if l.fileLock.BaseLock == nil || l.fileLock.BaseLock.File == nil {
+		return nil
+	}
 	name := l.fileLock.BaseLock.File.Name()
-	err := l.fileLock.Unlock()
-	if err != nil {
+	defer l.fileLock.clean()
+	if err := l.fileLock.Unlock(); err != nil {
 		return err
 	}
-	err = removeFile(name)
-	if err != nil {
-		return err
-	}
-	l.fileLock.clean()
-	return nil
+	return removeFile(name)
 }
