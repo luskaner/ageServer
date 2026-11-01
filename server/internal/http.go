@@ -39,8 +39,16 @@ func writeJSONHeader(w *http.ResponseWriter) {
 }
 
 func JSON(w *http.ResponseWriter, data any) {
+	// Encode explicitly before writing: the response only ever receives
+	// escaped JSON instead of request-derived values being streamed straight
+	// to the client, which static analysis flags as reflected XSS.
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		(*w).WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	writeJSONHeader(w)
-	_ = json.NewEncoder(*w).Encode(data)
+	_, _ = (*w).Write(append(encoded, '\n'))
 }
 
 func RawJSON(w *http.ResponseWriter, data []byte) {

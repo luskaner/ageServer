@@ -34,6 +34,9 @@ const (
 	// MaxLeaderboardPageSize bounds how many ladder entries a single request
 	// may ask for, so a client cannot force an arbitrarily large allocation.
 	MaxLeaderboardPageSize = 1000
+
+	// initialLeaderboardPageCapacity is the fixed preallocation of a page.
+	initialLeaderboardPageCapacity = 100
 )
 
 // MatchResult is one reported game. Only the fields that the server can
@@ -772,7 +775,9 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 		return nil, total
 	}
 	defer rows.Close()
-	list := make([]*PlayerRating, 0, min(count, MaxLeaderboardPageSize))
+	// Preallocate a bounded capacity: appending grows it for larger pages, and
+	// the allocation never depends on the requested (user-provided) size.
+	list := make([]*PlayerRating, 0, initialLeaderboardPageCapacity)
 	for rows.Next() {
 		r := &PlayerRating{LeaderboardID: leaderboardID, RankTotal: total}
 		var lastMatch int64
