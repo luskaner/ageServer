@@ -51,6 +51,9 @@ func generate(currentWindowsOS OperatingSystem) error {
 	serverArchive.AddMainBinary(server)
 	serverGenCert := NewBinary("./server-genCert", Targets3264)
 	serverArchive.AddAuxiliarBinary(serverGenCert)
+	// GUI config (Wails app) - ships with Windows server archives
+	guiConfig := NewBinary("./gui/server/config", TargetsWindowsGuiConfig)
+	serverArchive.AddAuxiliarBinary(guiConfig)
 	// Battle Server Manager Archive
 	battleServerManagerArchive := NewArchive("battle-server-manager", Targets64, overrideWindowsName)
 	battleServerManagerArchive.AddDocFiles("docs", nil, nil, "battle-server-manager/README.md")

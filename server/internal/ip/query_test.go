@@ -71,9 +71,8 @@ func TestQueryConnectionsErrorFromResolver(t *testing.T) {
 	}
 }
 
-// localTestIPv4 returns an IPv4 address assigned to a local interface so
-// net.ListenUDP can bind to it (binding to a non-local IP fails), preferring a
-// non-loopback address and falling back to loopback.
+// localTestIPv4 returns an IPv4 address that net.ListenUDP can bind to,
+// preferring non-loopback addresses and falling back to loopback.
 func localTestIPv4(t *testing.T) net.IP {
 	t.Helper()
 	addrs, err := net.InterfaceAddrs()
@@ -91,7 +90,11 @@ func localTestIPv4(t *testing.T) net.IP {
 				fallback = ip4
 				continue
 			}
-			return ip4
+			conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: ip4})
+			if err == nil {
+				_ = conn.Close()
+				return ip4
+			}
 		}
 	}
 	return fallback
@@ -119,6 +122,35 @@ func TestQueryConnectionsWithMulticast(t *testing.T) {
 	}
 	for _, c := range conns {
 		c.Close()
+	}
+}
+
+func TestQueryConnectionsKeepsListenerOpenWithMulticast(t *testing.T) {
+	iface := &net.Interface{Index: 1, Name: "lo", Flags: net.FlagUp | net.FlagMulticast}
+	ipNet := &net.IPNet{IP: net.IPv4(127, 0, 0, 1), Mask: net.CIDRMask(8, 32)}
+	restore := common.SetResolver(&mockResolverIP{
+		interfaces: map[*net.Interface][]*net.IPNet{
+			iface: {ipNet},
+		},
+	})
+	defer restore()
+
+	addr := netip.MustParseAddr("127.0.0.1")
+	groups := mapset.NewThreadUnsafeSet[netip.Addr](netip.MustParseAddr("239.0.0.1"))
+	err, conns := QueryConnections(addr, groups, 0)
+	if err != nil {
+		t.Fatalf("QueryConnections failed: %v", err)
+	}
+	if len(conns) == 0 {
+		t.Fatal("expected at least one conn")
+	}
+	defer func() {
+		for _, conn := range conns {
+			_ = conn.Close()
+		}
+	}()
+	if err := conns[0].SetReadDeadline(time.Now().Add(time.Millisecond)); err != nil {
+		t.Fatalf("listener was closed before being returned: %v", err)
 	}
 }
 

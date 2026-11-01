@@ -95,7 +95,7 @@ func processedServers(r launcher.Reporter, gameTitle string, servers map[uuid.UU
 	return processed
 }
 
-func DiscoverServersAndSelectBestIpAddr(r launcher.Reporter, stdin io.Reader, gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (id uuid.UUID, ip net.IP) {
+func DiscoverServersAndSelectBestIpAddr(r launcher.Reporter, stdin io.Reader, gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (id uuid.UUID, ip net.IP, canceled bool) {
 	id = uuid.Nil()
 	servers := make(map[uuid.UUID]*server.AnnounceMessage)
 	// The search takes a couple of seconds and prints nothing until it is over,
@@ -127,6 +127,10 @@ func DiscoverServersAndSelectBestIpAddr(r launcher.Reporter, stdin io.Reader, ga
 				selectedServer := procServers[i]
 				ip = selectedServer.Ip
 				id = selectedServer.id
+			} else if !ok {
+				// El usuario declinó activamente (X / Cancelar / "Start own").
+				// No es "no hay servidores": es una cancelación expresa.
+				canceled = true
 			}
 		}
 	}

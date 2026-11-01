@@ -598,7 +598,7 @@ type runRootOverrides struct {
 	configNativeMacOsGameFnVal        func(base.Executor, bool) bool
 	configBattleServerRequiredFnVal   func(base.Executor) bool
 	newConfigFlushCacheOptionsFnVal   func(bool, string, bool, bool) *executor.ConfigFlushCacheOptions
-	discoverServersFnVal              func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP)
+	discoverServersFnVal              func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, bool)
 	netipParseAddrFnVal               func(string) (netip.Addr, error)
 	serverFilterServerIPsFnVal        func(uuid.UUID, string, string, mapset.Set[netip.Addr]) (uuid.UUID, []server.MesuredIpAddress, *commonServer.AnnounceMessageDataSupportedLatest)
 	serverGetExecutablePathFnVal      func(string) string
@@ -763,8 +763,8 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	if o.discoverServersFnVal != nil {
 		discoverServersFn = o.discoverServersFnVal
 	} else {
-		discoverServersFn = func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP) {
-			return uuid.Nil(), nil
+		discoverServersFn = func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
+			return uuid.Nil(), nil, false
 		}
 	}
 	if o.netipParseAddrFnVal != nil {
@@ -1000,8 +1000,8 @@ func TestRunRootServerFoundByDiscovery(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP) {
-			return discoveredUUID, net.ParseIP("192.168.1.100")
+		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
+			return discoveredUUID, net.ParseIP("192.168.1.100"), false
 		},
 		serverReadCACertFnVal: func(host string) *x509.Certificate {
 			return &x509.Certificate{}
@@ -1332,8 +1332,8 @@ func TestRunRootServerNotFoundNoServerHost(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP) {
-			return uuid.Nil(), nil
+		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
+			return uuid.Nil(), nil, false
 		},
 		serverGetExecutablePathFnVal: func(s string) string { return s },
 		serverReadCACertFnVal: func(host string) *x509.Certificate {
