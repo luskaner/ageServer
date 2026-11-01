@@ -240,7 +240,7 @@ supported operating systems.
             * ARMv6 (sometimes called armhf): ...\_server\_*A.B.C*_linux_arm-6.tar.gz
         * **x86-64**: ...\_server\_*A.B.C*_linux_x86-64.tar.gz
         * **x86-32**: ...\_server\_*A.B.C*_linux_x86-32.tar.gz
-    * macOS - Monterey (v12): ...\_server\_*A.B.C*_mac.tar.gz
+    * macOS - Ventura (v13): ...\_server\_*A.B.C*_mac.tar.gz
 
 </details>
 
