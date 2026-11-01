@@ -30,6 +30,10 @@ const (
 
 	// eloK controls how much a single result can move a rating.
 	eloK = 32.0
+
+	// MaxLeaderboardPageSize bounds how many ladder entries a single request
+	// may ask for, so a client cannot force an arbitrarily large allocation.
+	MaxLeaderboardPageSize = 1000
 )
 
 // MatchResult is one reported game. Only the fields that the server can
@@ -746,6 +750,9 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 	if count <= 0 {
 		count = 100
 	}
+	if count > MaxLeaderboardPageSize {
+		count = MaxLeaderboardPageSize
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -765,7 +772,7 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 		return nil, total
 	}
 	defer rows.Close()
-	list := make([]*PlayerRating, 0, count)
+	list := make([]*PlayerRating, 0, min(count, MaxLeaderboardPageSize))
 	for rows.Next() {
 		r := &PlayerRating{LeaderboardID: leaderboardID, RankTotal: total}
 		var lastMatch int64
@@ -952,15 +959,15 @@ func (s *MatchHistoryStore) BackfillProfiles(userDataDir string) {
 			continue
 		}
 
-		platformUserID := uint64(0)
+		platformUserID := int64(0)
 		isXbox := 0
 		if strings.HasPrefix(name, "XBOX_") {
 			isXbox = 1
 		} else if strings.HasPrefix(name, "STEAM_") {
 			// extract steam id
 			if idStr := strings.TrimPrefix(name, "STEAM_"); idStr != "" {
-				if id, err := strconv.ParseUint(idStr, 10, 64); err == nil {
-					platformUserID = id
+				if id, err := strconv.ParseUint(idStr, 10, 64); err == nil && id <= math.MaxInt64 {
+					platformUserID = int64(id)
 				}
 			}
 		}
@@ -978,7 +985,7 @@ func (s *MatchHistoryStore) BackfillProfiles(userDataDir string) {
 			profileID,
 			statGroupID,
 			alias,
-			int64(platformUserID),
+			platformUserID,
 			isXbox,
 			avatarMeta,
 			0, 1, 0,

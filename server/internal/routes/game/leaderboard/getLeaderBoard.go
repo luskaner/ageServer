@@ -53,6 +53,9 @@ func GetLeaderBoard(w http.ResponseWriter, r *http.Request) {
 	if q.Count <= 0 {
 		q.Count = 100
 	}
+	if q.Count > models.MaxLeaderboardPageSize {
+		q.Count = models.MaxLeaderboardPageSize
+	}
 
 	game := models.G(r)
 	page, total := game.MatchHistory().GetLeaderboardPage(q.LeaderboardID, q.Start-1, q.Count)

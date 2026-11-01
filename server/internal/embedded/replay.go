@@ -23,6 +23,10 @@ const (
 	replayFormatVersion = 1
 	replaySuffix        = ".replay"
 	autoFolder          = "auto"
+
+	// maxReplayHeaderSize bounds the JSON header (it embeds user-provided
+	// server metadata) before it is prefixed with its length.
+	maxReplayHeaderSize = 1 << 20
 )
 
 // ReplayMeta is the provenance written at the top of every replay file.
@@ -271,12 +275,15 @@ func (m *ReplayStore) headerBytes(sessionID uint64, started time.Time) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	out := make([]byte, 0, len(replayMagic)+1+4+len(header))
+	if len(header) > maxReplayHeaderSize {
+		return nil, fmt.Errorf("replay header too large: %d bytes", len(header))
+	}
+	// Build the frame with appends so the allocation size never relies on
+	// adding up lengths that could overflow (the header contains user data).
+	out := make([]byte, 0, len(replayMagic)+5)
 	out = append(out, replayMagic...)
 	out = append(out, replayFormatVersion)
-	var length [4]byte
-	binary.LittleEndian.PutUint32(length[:], uint32(len(header)))
-	out = append(out, length[:]...)
+	out = binary.LittleEndian.AppendUint32(out, uint32(len(header)))
 	out = append(out, header...)
 	return out, nil
 }
