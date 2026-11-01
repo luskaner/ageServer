@@ -224,8 +224,7 @@ func TestGenerateConfigIncludesAllPlatforms(t *testing.T) {
 		"server_win10_arm64",
 		"server_linux_amd64",
 		"server_linux_arm64",
-		"server_mac_amd64",
-		"server_mac_arm64",
+		"server_mac",
 	}
 	if err := GenerateConfig(archive); err != nil {
 		t.Fatalf("GenerateConfig failed: %v", err)
@@ -257,6 +256,150 @@ func TestGenerateConfigIncludesAllPlatforms(t *testing.T) {
 	}
 	if len(project.UniversalBinaries) == 0 {
 		t.Error("full config should still declare the macOS universal binaries")
+	}
+}
+
+// TestGenerateConfigUniversalMacOS guards the macOS packaging: a release ships
+// one universal archive per package (ageServer_server_2.0.0_mac.tar.gz) instead
+// of one archive per architecture.
+func TestGenerateConfigUniversalMacOS(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(orig)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	macTargets := NewBinaryTargets()
+	macTargets.AddTarget(OSMacOS, ArchAmd64)
+	macTargets.AddTarget(OSMacOS, ArchArm64)
+	archive := NewArchive("server", macTargets, nil)
+	archive.AddMainBinary(NewBinary("./server", macTargets))
+	if err := GenerateConfig(archive); err != nil {
+		t.Fatalf("GenerateConfig failed: %v", err)
+	}
+	data, err := os.ReadFile(".goreleaser.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var project struct {
+		Builds []struct {
+			ID     string   `yaml:"id"`
+			Goos   []string `yaml:"goos"`
+			Goarch []string `yaml:"goarch"`
+		} `yaml:"builds"`
+		Archives []struct {
+			ID           string   `yaml:"id"`
+			IDs          []string `yaml:"ids"`
+			NameTemplate string   `yaml:"name_template"`
+			Builds       []string `yaml:"builds"`
+		} `yaml:"archives"`
+		UniversalBinaries []struct {
+			ID string `yaml:"id"`
+		} `yaml:"universal_binaries"`
+	}
+	if err := yaml.Unmarshal(data, &project); err != nil {
+		t.Fatal(err)
+	}
+
+	var macBuilds []string
+	for _, build := range project.Builds {
+		if !strings.Contains(build.ID, "_mac") {
+			continue
+		}
+		macBuilds = append(macBuilds, build.ID)
+		if build.ID != "server_mac" {
+			t.Errorf("macOS build %q is not the merged universal build", build.ID)
+			continue
+		}
+		if strings.Join(build.Goos, ",") != "darwin" {
+			t.Errorf("merged macOS build goos = %v, want [darwin]", build.Goos)
+		}
+		if strings.Join(build.Goarch, ",") != "amd64,arm64" {
+			t.Errorf("merged macOS build goarch = %v, want [amd64 arm64]", build.Goarch)
+		}
+	}
+	if strings.Join(macBuilds, ",") != "server_mac" {
+		t.Errorf("macOS builds = %v, want [server_mac]", macBuilds)
+	}
+
+	if len(project.Archives) != 1 {
+		t.Fatalf("archives = %d, want 1 universal macOS archive", len(project.Archives))
+	}
+	gotArchive := project.Archives[0]
+	if gotArchive.ID != "server_mac" {
+		t.Errorf("archive id = %q, want %q", gotArchive.ID, "server_mac")
+	}
+	wantName := `{{ .ProjectName }}_server_{{ .RawVersion }}_mac`
+	if gotArchive.NameTemplate != wantName {
+		t.Errorf("archive name_template = %q, want %q", gotArchive.NameTemplate, wantName)
+	}
+	if strings.Join(gotArchive.Builds, ",") != "" {
+		t.Errorf("archive builds = %v, want none (universal archives use ids)", gotArchive.Builds)
+	}
+	archiveIDs := make(map[string]bool, len(gotArchive.IDs))
+	for _, id := range gotArchive.IDs {
+		archiveIDs[id] = true
+	}
+	if !archiveIDs["server_mac"] || len(archiveIDs) != 1 {
+		t.Errorf("archive ids = %v, want exactly server_mac", gotArchive.IDs)
+	}
+
+	if len(project.UniversalBinaries) != 1 || project.UniversalBinaries[0].ID != "server_mac" {
+		t.Errorf("universal_binaries = %+v, want a single server_mac entry", project.UniversalBinaries)
+	}
+}
+
+// TestGenerateConfigReplacesDraft guards release idempotency: re-running the
+// workflow for a tag must not reuse a draft left behind by a previous run,
+// otherwise GitHub answers 422 already_exists for every asset.
+func TestGenerateConfigReplacesDraft(t *testing.T) {
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(orig)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := NewArchive("server", Targets3264, nil)
+	archive.AddMainBinary(NewBinary("./server", Targets3264))
+	if err := GenerateConfig(archive); err != nil {
+		t.Fatalf("GenerateConfig failed: %v", err)
+	}
+	data, err := os.ReadFile(".goreleaser.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var project struct {
+		Release struct {
+			Draft                    bool `yaml:"draft"`
+			ReplaceExistingDraft     bool `yaml:"replace_existing_draft"`
+			UseExistingDraft         bool `yaml:"use_existing_draft"`
+			ReplaceExistingArtifacts bool `yaml:"replace_existing_artifacts"`
+		} `yaml:"release"`
+	}
+	if err := yaml.Unmarshal(data, &project); err != nil {
+		t.Fatal(err)
+	}
+
+	release := project.Release
+	if !release.Draft {
+		t.Error("release.draft = false, want true")
+	}
+	if !release.ReplaceExistingDraft {
+		t.Error("release.replace_existing_draft = false, want true")
+	}
+	if release.UseExistingDraft {
+		t.Error("release.use_existing_draft = true, want false")
+	}
+	if !release.ReplaceExistingArtifacts {
+		t.Error("release.replace_existing_artifacts = false, want true")
 	}
 }
 

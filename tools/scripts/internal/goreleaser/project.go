@@ -48,7 +48,15 @@ func generateConfig(currentWindowsOS OperatingSystem, archives ...*Archive) erro
 		Version: 2,
 	}
 	for _, a := range archives {
-		archiveBuilds := a.Builds() // Get all builds, then filter
+		// A regular release ships a single universal macOS archive per
+		// package, so the per-architecture macOS builds are merged into one
+		// multi-architecture build (and universalized below). Single-target
+		// builds (build-current) keep one build per host architecture.
+		var mergedOSes []OperatingSystem
+		if operatingSystem == nil {
+			mergedOSes = []OperatingSystem{OSMacOS}
+		}
+		archiveBuilds := a.Builds(mergedOSes...)
 		if operatingSystem != nil {
 			archiveBuilds = slices.DeleteFunc(archiveBuilds, func(build config.Build) bool {
 				// Build IDs use OS.Name() (e.g., "linux", "mac", "win7", "win10")
@@ -147,9 +155,13 @@ func generateConfig(currentWindowsOS OperatingSystem, archives ...*Archive) erro
 		},
 	}
 	project.Release = config.Release{
-		Draft:                    true,
-		ReplaceExistingDraft:     false,
-		UseExistingDraft:         true,
+		Draft: true,
+		// Re-running the workflow for the same tag must not reuse a draft that
+		// already holds assets from a previous run: GitHub rejects those
+		// uploads with 422 already_exists and GoReleaser has to delete and
+		// re-upload each one. Replacing the draft keeps every run idempotent.
+		ReplaceExistingDraft:     true,
+		UseExistingDraft:         false,
 		ReplaceExistingArtifacts: true,
 		Prerelease:               `auto`,
 	}
