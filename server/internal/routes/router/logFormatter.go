@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"strconv"
@@ -49,7 +50,7 @@ func logFormatter(writer io.Writer, params handlers.LogFormatterParams) {
 	buf.WriteString(" - ")
 	buf.WriteString(params.Request.Method)
 	buf.WriteString(" ")
-	buf.WriteString(uri)
+	buf.WriteString(html.EscapeString(uri))
 	buf.WriteString(" - ")
 	buf.WriteString(strconv.Itoa(params.StatusCode))
 	buf.WriteString(" ")
