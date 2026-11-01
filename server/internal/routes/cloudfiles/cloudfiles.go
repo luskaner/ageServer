@@ -1,6 +1,7 @@
 package cloudfiles
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -74,7 +75,10 @@ func Cloudfiles(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("x-ms-server-encrypted", "true")
 		w.Header().Set("Date", time.Now().Format(time.RFC1123))
 		w.Header().Set("Content-Type", file.Type)
-		_, _ = w.Write(data)
+		// Serve the indexed payload through the standard file-serving helper:
+		// the bytes come from disk, so they must not be treated as a verbatim
+		// copy of the request into the response.
+		http.ServeContent(w, r, filename, time.Time{}, bytes.NewReader(data))
 		return
 	}
 
