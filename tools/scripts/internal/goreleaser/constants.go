@@ -10,6 +10,7 @@ var Targets64 *BinaryTargets
 var Targets32 *BinaryTargets
 var Targets3264 *BinaryTargets
 var Targets64Windows *BinaryTargets
+var TargetsWindowsGuiConfig *BinaryTargets
 var x64Architectures = []Architecture{ArchAmd64, ArchArm64}
 var x86Architectures = []Architecture{Arch386, ArchArm32}
 
@@ -17,6 +18,7 @@ func init() {
 	Targets32 = NewBinaryTargets()
 	Targets64 = NewBinaryTargets()
 	Targets64Windows = NewBinaryTargets()
+	TargetsWindowsGuiConfig = NewBinaryTargets()
 	for os := range operatingSystems.Iter() {
 		for _, arch := range x86Architectures {
 			if os.Archs().ContainsOne(arch) {
@@ -32,6 +34,10 @@ func init() {
 				Targets64.AddTarget(os, arch)
 				if os == OSWindowsModern {
 					Targets64Windows.AddTarget(os, arch)
+				}
+				if os == OSWindowsLegacy || os == OSWindowsModern {
+					// GUI config (Wails app) builds for both Windows versions
+					TargetsWindowsGuiConfig.AddTarget(os, arch)
 				}
 			}
 		}
