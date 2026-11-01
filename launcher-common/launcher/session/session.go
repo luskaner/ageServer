@@ -251,7 +251,7 @@ var (
 	executablesNativeFileNameFn  = executables.NativeFileName
 	configRunSetupCommandFn      = config.RunSetupCommand
 	netipParseAddrFn             = netip.ParseAddr
-	discoverServersFn            = func(gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (uuid.UUID, net.IP) {
+	discoverServersFn            = func(gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
 		return ops.DiscoverServersAndSelectBestIpAddr(reportOrDiscard(), promptInput(), gameTitle, singleAutoSelect, multicastGroups, targetPorts)
 	}
 	serverGetExecutablePathFn = server.GetExecutablePath
@@ -814,12 +814,17 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 				return
 			}
 		}
-		serverId, selectedServerIp := discoverServersFn(
+		serverId, selectedServerIp, canceled := discoverServersFn(
 			gameId,
 			cfg.Server.SingleAutoSelect,
 			multicastIPs,
 			ports,
 		)
+		if canceled {
+			reportOrDiscard().Fail("Canceled starting the server.")
+			atomicExitCode.Store(int32(launcher.ErrServerStartCanceled))
+			return
+		}
 		if serverId != uuidNilFn() {
 			serverIP = selectedServerIp.String()
 			serverStart = "false"
