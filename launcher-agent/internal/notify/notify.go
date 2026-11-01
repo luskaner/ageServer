@@ -20,7 +20,7 @@ import (
 )
 
 // Title is the notification's title on every platform.
-const Title = "AgeLAN Server"
+const Title = "Age Server"
 
 // SessionEnded says the game closed and the configuration went back to how it was
 // before the launcher touched it.

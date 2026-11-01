@@ -15,7 +15,7 @@ type BattleServer struct {
 	battleServer.Base `koanf:",squash"`
 }
 
-// EmbeddedBattleServer configures a battle server that runs inside the ageLAN
+// EmbeddedBattleServer configures a battle server that runs inside the age
 // server process instead of as a separate BattleServer executable. It mirrors
 // the options the external battle-server manager passes on the command line,
 // except the simulation period: the game's own default is always used.

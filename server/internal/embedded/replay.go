@@ -1,4 +1,4 @@
-// Package embedded runs ageBattleServer inside the ageLAN server process and
+// Package embedded runs ageBattleServer inside the age server process and
 // optionally stores the replay data it records.
 package embedded
 
@@ -263,7 +263,7 @@ func (m *ReplayStore) sessionFileLocked(sessionID uint64) *replayFile {
 
 func (m *ReplayStore) headerBytes(sessionID uint64, started time.Time) ([]byte, error) {
 	header, err := json.Marshal(replayHeader{
-		Format:    "ageLANServer-battle-server-replay",
+		Format:    "ageServer-battle-server-replay",
 		Version:   replayFormatVersion,
 		Game:      m.meta.GameID,
 		SessionID: sessionID,

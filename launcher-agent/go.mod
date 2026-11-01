@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/gogpu/systray v0.3.0
-	github.com/luskaner/ageLANServer/battle-server-broadcast v1.3.2
+	github.com/luskaner/ageServer/battle-server-broadcast v1.3.2
 	github.com/ncruces/zenity v0.10.15
 	github.com/spf13/pflag v1.0.10
 )

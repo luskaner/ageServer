@@ -247,7 +247,7 @@ Replace the placeholders with the actual paths.
 
 ## Embedded Battle Server
 
-Instead of running a separate `BattleServer.exe` process, you can embed the battle server directly inside the ageLAN server process. This is configured per game under `Games.<game>.EmbeddedBattleServer`.
+Instead of running a separate `BattleServer.exe` process, you can embed the battle server directly inside the age server process. This is configured per game under `Games.<game>.EmbeddedBattleServer`.
 
 ### Configuration
 

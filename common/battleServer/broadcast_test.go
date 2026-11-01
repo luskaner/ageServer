@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	battleServerBroadcast "github.com/luskaner/ageLANServer/battle-server-broadcast"
+	battleServerBroadcast "github.com/luskaner/ageServer/battle-server-broadcast"
 	"github.com/luskaner/ageServer/common/game"
 	"github.com/luskaner/ageServer/common/uuid"
 )

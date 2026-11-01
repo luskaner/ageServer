@@ -124,7 +124,7 @@ export interface GameSectionProps {
  * lists its regions the same way (they are unique within the game) and
  * expanding lists each server's address/ports with a delete button. Adding a
  * server opens a single-entry dialog. Embedded Battle Server configures the
- * built-in battle server that runs inside the ageLAN server process.
+ * built-in battle server that runs inside the age server process.
  */
 export const GameSection: React.FC<GameSectionProps> = ({
     game,
@@ -332,7 +332,7 @@ export const GameSection: React.FC<GameSectionProps> = ({
             <SettingCard
                 icon={<IconCpu size={20} stroke={1.6} />}
                 title="Embedded"
-                description="Battle server that runs inside the ageLAN server process, so the game works without a separate battle server program."
+                description="Battle server that runs inside the age server process, so the game works without a separate battle server program."
                 value={embeddedBattleServerSummary(ebs, regionDefault)}
                 disabled={disabled}
                 error={ebsError}

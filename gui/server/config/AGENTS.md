@@ -83,7 +83,7 @@ the game name and the header carries its enabled switch. The page holds the
   delete button. "Add battle server" opens the single-entry dialog. Its panel
   uses the opaque Win11-style surface from `style.css` (`.app-modal-*`), never
   the translucent card fill.
-- **Embedded**: the built-in battle server that runs inside the ageLAN server
+- **Embedded**: the built-in battle server that runs inside the age server
   process (`[Games.<game>.EmbeddedBattleServer]`). The summary reads
   `region · auto-start mode`; expanding groups the fields under Startup,
   Address, Ports and Behaviour. It states up front whether the game already has

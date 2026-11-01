@@ -105,7 +105,7 @@ MaxTotalSize = '256MB'
 Expiry = '12h'
 
 # CONFIGURING EMBEDDED BATTLE SERVER
-# Runs a battle server inside the ageLAN server process instead of as a
+# Runs a battle server inside the age server process instead of as a
 # separate executable. Configure per game under Games.<game>.EmbeddedBattleServer.
 # The server starts the battle server on startup and stops it on shutdown.
 # The battle server appears in the game's battle server list like any

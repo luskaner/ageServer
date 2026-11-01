@@ -13,7 +13,7 @@ require (
 	github.com/knadh/koanf/providers/posflag v1.0.2
 	github.com/knadh/koanf/v2 v2.4.1
 	github.com/luskaner/ageBattleServer v1.0.0
-	github.com/luskaner/ageLANServer/battle-server-broadcast v1.3.2
+	github.com/luskaner/ageServer/battle-server-broadcast v1.3.2
 	github.com/miekg/dns v1.1.73
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/spf13/pflag v1.0.10

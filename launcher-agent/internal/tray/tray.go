@@ -42,7 +42,7 @@ import (
 // Title is what the tooltip and the notification area attribute the icon to. It
 // is the product rather than the binary: an icon called "agent" tells a user
 // nothing about which of their programs is asking them to stop something.
-const Title = "AgeLAN Server"
+const Title = "Age Server"
 
 // ExitLabel is the row that asks for the teardown.
 //

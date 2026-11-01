@@ -1,4 +1,4 @@
-// Package embedded runs ageBattleServer inside the ageLAN server process and
+// Package embedded runs ageBattleServer inside the age server process and
 // optionally stores the replay data it records.
 package embedded
 
