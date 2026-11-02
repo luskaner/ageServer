@@ -77,6 +77,15 @@ is in maintenance or is eventually shutdown.
 
 </details>
 
+### AoE IV: AE
+
+<details>
+<summary>List of features</summary>
+  
+- 🏛️Crucible Co-Op
+
+</details>
+
 ### AoM: RT
 
 <details>
