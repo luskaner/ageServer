@@ -416,6 +416,49 @@ func TestCreateMainGame(t *testing.T) {
 	}
 }
 
+func TestNewAoE2UserIsPersistedOnLeaderboardAtDefaultRating(t *testing.T) {
+	isolateUserData(t)
+	i.InitializeRng(42)
+	g := CreateMainGame("age2", &CreateMainGameOpts{
+		Instances: &InstanceOpts{Resources: &fakeResources{}},
+	})
+	history, ok := g.MatchHistory().(*MatchHistoryStore)
+	if !ok {
+		t.Fatal("match history is not the persistent store")
+	}
+	t.Cleanup(func() { _ = history.Close() })
+
+	u := g.Users().GetOrCreateUser(
+		g.Title(),
+		g.Items(),
+		g.LeaderboardDefinitions().AvatarStatDefinitions(),
+		"192.168.1.25:1234",
+		"00:11:22:33:44:55",
+		false,
+		76561198000000001,
+		"new-player",
+	)
+	if u == nil {
+		t.Fatal("new user was not created")
+	}
+	if got := u.GetRating(); got != DefaultRating {
+		t.Fatalf("new user's cached rating = %d, want %d", got, DefaultRating)
+	}
+
+	ratings := history.GetRatingsForLeaderboard(SoloRMRanked, []int32{u.GetId()})
+	if rating := ratings[u.GetId()]; rating == nil || rating.Rating != DefaultRating {
+		t.Fatalf("persisted rating = %+v, want %d", rating, DefaultRating)
+	}
+	profiles := history.GetProfiles([]int32{u.GetId()})
+	if profile := profiles[u.GetId()]; profile == nil || profile.Alias != "new-player" {
+		t.Fatalf("persisted profile = %+v, want alias %q", profile, "new-player")
+	}
+	page, total := history.GetLeaderboardPage(SoloRMRanked, 0, 10)
+	if total != 1 || len(page) != 1 || page[0].ProfileID != u.GetId() || page[0].Rating != DefaultRating {
+		t.Fatalf("leaderboard page = %+v, total=%d; want new user at %d", page, total, DefaultRating)
+	}
+}
+
 func TestGameHelpers(t *testing.T) {
 	i.InitializeRng(42)
 	g := CreateMainGame("age2", &CreateMainGameOpts{

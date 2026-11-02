@@ -50,17 +50,7 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		reportResults := make(i.A, 0, len(match.PlayerStats))
 		memberStats := make(i.A, 0, len(match.PlayerStats))
 		for _, player := range match.PlayerStats {
-			reportResults = append(reportResults, i.A{
-				match.MatchID,    // matchHistoryID
-				player.ProfileID, // profileID
-				player.Result,    // resultType (1 = win)
-				player.TeamID,    // teamID
-				player.RaceID,    // raceID
-				player.XPGained,  // xpGained
-				"{}",             // counters
-				`{"itemUpdates":[],"challengeUpdates":[],"clientUpdates":{}}`, // customUpdates
-				match.StartedAt.Unix(), // matchStartDate
-			})
+			reportResults = append(reportResults, matchHistoryReportResult(match, player))
 
 			statGroupID := int32(0)
 			var wins, losses, streak int32
@@ -131,6 +121,39 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		len(history),
 	)
 	i.JSON(&w, i.A{0, history})
+}
+
+func matchHistoryReportResult(match models.MatchResult, player models.MatchPlayer) i.A {
+	return i.A{
+		match.MatchID,    // matchHistoryID
+		player.ProfileID, // profileID
+		player.Result,    // resultType (1 = win)
+		player.TeamID,    // teamID
+		player.RaceID,    // raceID
+		player.XPGained,  // xpGained
+		matchPlayerCounters(player),
+		matchPlayerCustomUpdates(player),
+		match.StartedAt.Unix(), // matchStartDate
+	}
+}
+
+func matchPlayerCounters(player models.MatchPlayer) string {
+	if player.Counters == "" {
+		return "{}"
+	}
+	return player.Counters
+}
+
+func matchPlayerCustomUpdates(player models.MatchPlayer) string {
+	if player.CustomUpdates == "" {
+		return `{"itemUpdates":[],"challengeUpdates":[],"eventChallengeUpdates":[],"clientUpdates":{}}`
+	}
+	return player.CustomUpdates
+}
+
+// GetCommunityRecentMatchHistory serves the locally recorded public match history.
+func GetCommunityRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
+	GetRecentMatchHistory(w, r)
 }
 
 // normalizeProfileIDs drops the placeholder identifiers the client appends to

@@ -2,6 +2,7 @@ package hosts
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -121,10 +122,15 @@ func missingIpMappings(mappings *HostMappings, hostFile *os.File) (restLines []L
 		lineIp := lineParsed.IP()
 		hosts := lineParsed.Hosts()
 		indexesToAvoid := mapset.NewThreadUnsafeSet[int]()
+		indexesToRemove := mapset.NewThreadUnsafeSet[int]()
+		removedOwnedHostMapping := false
 		for i, lineHost := range hosts {
 			if ip, ok := mappings.Get(lineHost); ok {
 				if ip.Equal(lineIp) {
 					mappings.Delete(lineHost)
+				} else if lineParsed.Own() {
+					indexesToRemove.Add(i)
+					removedOwnedHostMapping = true
 				} else {
 					indexesToAvoid.Add(i)
 				}
@@ -133,7 +139,7 @@ func missingIpMappings(mappings *HostMappings, hostFile *os.File) (restLines []L
 		var keptHosts []Host
 		var removedHosts bool
 		for i := range hosts {
-			if indexesToAvoid.ContainsOne(i) || commentHost(hosts[i]) {
+			if indexesToRemove.ContainsOne(i) || indexesToAvoid.ContainsOne(i) || commentHost(hosts[i]) {
 				removedHosts = true
 			} else {
 				keptHosts = append(keptHosts, hosts[i])
@@ -146,9 +152,24 @@ func missingIpMappings(mappings *HostMappings, hostFile *os.File) (restLines []L
 			}
 		}
 		if removedHosts {
-			var nl Line
-			if ok, nl = lineParsed.Commented(); ok {
-				restLines = append(restLines, nl.WithOwnMarking())
+			if removedOwnedHostMapping {
+				preservedHosts := make([]Host, 0, len(hosts))
+				for i, host := range hosts {
+					if !indexesToRemove.ContainsOne(i) {
+						preservedHosts = append(preservedHosts, host)
+					}
+				}
+				if len(preservedHosts) > 0 {
+					preservedLine := Line{ip: lineIp, hosts: preservedHosts, comments: lineParsed.comments}
+					if nlOk, nl := preservedLine.Commented(); nlOk {
+						restLines = append(restLines, nl.WithOwnMarking())
+					}
+				}
+			} else {
+				var nl Line
+				if ok, nl = lineParsed.Commented(); ok {
+					restLines = append(restLines, nl.WithOwnMarking())
+				}
 			}
 		}
 		if len(keptHosts) > 0 {
@@ -255,6 +276,46 @@ func UpdateHosts(hostsLock *fileLock.Lock, updater func(file *os.File) error, fl
 	return err
 }
 
+func readHostsContents(file *os.File) ([]byte, error) {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	contents, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return contents, nil
+}
+
+func containsOwnedHostMapping(contents []byte) (bool, error) {
+	decoded, _, err := text.Decode(contents)
+	if err != nil {
+		return false, err
+	}
+	scanner := bufio.NewScanner(strings.NewReader(decoded))
+	for scanner.Scan() {
+		ok, _, parsedLine := ParseLine(scanner.Text(), true)
+		if ok && parsedLine.Own() && !parsedLine.OnlyComments() {
+			return true, nil
+		}
+	}
+	return false, scanner.Err()
+}
+
+func reusableHostsBackup(current, backup []byte) (bool, error) {
+	if _, _, err := text.Decode(backup); err != nil {
+		return false, fmt.Errorf("existing hosts backup has invalid encoding: %w", err)
+	}
+	hasOwnedMappings, err := containsOwnedHostMapping(current)
+	if err != nil {
+		return false, fmt.Errorf("failed to inspect current hosts mappings: %w", err)
+	}
+	return hasOwnedMappings || bytes.Equal(current, backup), nil
+}
+
 func AddHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() (result *exec.Result)) (ok bool, err error) {
 	var systemHosts bool
 	if hostFilePath == "" {
@@ -297,34 +358,61 @@ func AddHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, 
 	}
 	err = UpdateHosts(hostsFileLock, func(f *os.File) error {
 		if systemHosts {
-			var bakLock *fileLock.Lock
-			bakLock, err = OpenLockedBackup(os.O_RDWR | os.O_CREATE | os.O_EXCL)
-			if err != nil {
-				if errors.Is(err, os.ErrExist) {
-					return fmt.Errorf("failed to create hosts backup %q: file already exists (delete it after verifying its contents if the previous run failed): %w", filepath.Join(filepath.Dir(Path()), "hosts.bak"), err)
+			bakLock, backupErr := OpenLockedBackup(os.O_RDONLY)
+			if backupErr == nil {
+				defer func() { _ = bakLock.Unlock() }()
+				info, statErr := bakLock.File.Stat()
+				if statErr != nil {
+					return fmt.Errorf("failed to inspect existing hosts backup %q: %w", bakLock.File.Name(), statErr)
 				}
-				return fmt.Errorf("failed to create hosts backup %q: %w", filepath.Join(filepath.Dir(Path()), "hosts.bak"), err)
-			}
-			clearBakFunc := func() {
-				filePath := bakLock.File.Name()
+				if !info.Mode().IsRegular() {
+					return fmt.Errorf("existing hosts backup %q is not a regular file", bakLock.File.Name())
+				}
+				current, readErr := readHostsContents(f)
+				if readErr != nil {
+					return fmt.Errorf("failed to read current hosts contents before reusing backup: %w", readErr)
+				}
+				backup, readErr := readHostsContents(bakLock.File)
+				if readErr != nil {
+					return fmt.Errorf("failed to read existing hosts backup %q: %w", bakLock.File.Name(), readErr)
+				}
+				reusable, reuseErr := reusableHostsBackup(current, backup)
+				if reuseErr != nil {
+					return fmt.Errorf("failed to validate existing hosts backup %q: %w", bakLock.File.Name(), reuseErr)
+				}
+				if !reusable {
+					return fmt.Errorf("existing hosts backup %q does not match the current hosts file and no AgeServer mappings were found; refusing to overwrite it", bakLock.File.Name())
+				}
+			} else {
+				if !errors.Is(backupErr, os.ErrNotExist) {
+					return fmt.Errorf("failed to open existing hosts backup %q: %w", filepath.Join(filepath.Dir(pathFn()), "hosts.bak"), backupErr)
+				}
+				bakLock, backupErr = OpenLockedBackup(os.O_RDWR | os.O_CREATE | os.O_EXCL)
+				if backupErr != nil {
+					if errors.Is(backupErr, os.ErrExist) {
+						return fmt.Errorf("failed to create hosts backup %q: file already exists; retry setup so the existing backup can be validated", filepath.Join(filepath.Dir(pathFn()), "hosts.bak"))
+					}
+					return fmt.Errorf("failed to create hosts backup %q: %w", filepath.Join(filepath.Dir(pathFn()), "hosts.bak"), backupErr)
+				}
+				clearBakFunc := func() {
+					filePath := bakLock.File.Name()
+					_ = bakLock.Unlock()
+					_ = os.Remove(filePath)
+				}
+				if _, backupErr = f.Seek(0, io.SeekStart); backupErr != nil {
+					clearBakFunc()
+					return fmt.Errorf("failed to seek temp hosts file before backup: %w", backupErr)
+				}
+				if _, backupErr = io.Copy(bakLock.File, f); backupErr != nil {
+					clearBakFunc()
+					return fmt.Errorf("failed to copy hosts contents to backup: %w", backupErr)
+				}
+				if _, backupErr = f.Seek(0, io.SeekStart); backupErr != nil {
+					clearBakFunc()
+					return fmt.Errorf("failed to seek temp hosts file after backup: %w", backupErr)
+				}
 				_ = bakLock.Unlock()
-				_ = os.Remove(filePath)
 			}
-			_, err = f.Seek(0, io.SeekStart)
-			if err != nil {
-				clearBakFunc()
-				return fmt.Errorf("failed to seek temp hosts file before backup: %w", err)
-			}
-			if _, err = io.Copy(bakLock.File, f); err != nil {
-				clearBakFunc()
-				return fmt.Errorf("failed to copy hosts contents to backup: %w", err)
-			}
-			_, err = f.Seek(0, io.SeekStart)
-			if err != nil {
-				clearBakFunc()
-				return fmt.Errorf("failed to seek temp hosts file after backup: %w", err)
-			}
-			_ = bakLock.Unlock()
 		}
 		for _, line := range restLines {
 			if _, err = f.WriteString(line.String()); err != nil {
