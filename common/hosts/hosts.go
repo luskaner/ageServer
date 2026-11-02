@@ -247,6 +247,18 @@ func UpdateHosts(hostsLock *fileLock.Lock, updater func(file *os.File) error, fl
 	}
 
 	if err = updater(tmpLock.File); err == nil {
+		// Truncate temp file to the actual written size before copying back.
+		// Otherwise, if the updater wrote fewer bytes than the original content
+		// (e.g. stale owned mappings removed), the tail of the old temp file
+		// survives and gets copied back as stale active mappings.
+		pos, seekErr := tmpLock.File.Seek(0, io.SeekCurrent)
+		if seekErr != nil {
+			return fmt.Errorf("failed to get temp hosts file position: %w", seekErr)
+		}
+		if err = tmpLock.File.Truncate(pos); err != nil {
+			return fmt.Errorf("failed to truncate temp hosts file: %w", err)
+		}
+
 		_, err = tmpLock.File.Seek(0, io.SeekStart)
 		if err != nil {
 			return fmt.Errorf("failed to seek temp hosts file: %w", err)
@@ -308,6 +320,12 @@ func containsOwnedHostMapping(contents []byte) (bool, error) {
 func reusableHostsBackup(current, backup []byte) (bool, error) {
 	if _, _, err := text.Decode(backup); err != nil {
 		return false, fmt.Errorf("existing hosts backup has invalid encoding: %w", err)
+	}
+	// Reject empty backups: a 0-byte backup would decode successfully but
+	// restoring it would truncate hosts to 0. Also reject backups that are
+	// implausibly small (less than one plausible line).
+	if len(backup) == 0 || len(backup) < len("#ageServer\n") {
+		return false, fmt.Errorf("existing hosts backup is empty or too small; refusing to reuse")
 	}
 	hasOwnedMappings, err := containsOwnedHostMapping(current)
 	if err != nil {
@@ -406,6 +424,10 @@ func AddHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, 
 				if _, backupErr = io.Copy(bakLock.File, f); backupErr != nil {
 					clearBakFunc()
 					return fmt.Errorf("failed to copy hosts contents to backup: %w", backupErr)
+				}
+				if backupErr = bakLock.File.Sync(); backupErr != nil {
+					clearBakFunc()
+					return fmt.Errorf("failed to sync hosts backup: %w", backupErr)
 				}
 				if _, backupErr = f.Seek(0, io.SeekStart); backupErr != nil {
 					clearBakFunc()
