@@ -37,8 +37,8 @@ text = "Second text"
 image_url = "https://example.com/second.jpg"
 body = "Second body"
 metadata = "{ \"version\": 2 }"
-date_visible = "1793294401"
-date_expiry = "1798480801"
+date_visible = 1793294401
+date_expiry = 1798480801
 
 [1]
 category = "first"
@@ -75,6 +75,12 @@ func TestInitializeNews_LoadsEntriesInOrder(t *testing.T) {
 	}
 	if got := resources.news[1][0]; got != 2 {
 		t.Fatalf("second news id = %v, want 2", got)
+	}
+	if got := resources.news[1][8]; got != "1793294401" {
+		t.Errorf("second news visible date = %v, want string timestamp %q", got, "1793294401")
+	}
+	if got := resources.news[1][9]; got != "1798480801" {
+		t.Errorf("second news expiry date = %v, want string timestamp %q", got, "1798480801")
 	}
 }
 
