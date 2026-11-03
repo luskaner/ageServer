@@ -247,6 +247,16 @@ For documentation on how what each endpoints does, please refer
 to [LibreMatch documentation](https://wiki.librematch.org/rlink/game/start). Other endpoints are mostly
 self-explanatory.
 
+## Ranked ladder
+
+For Age of Empires II: Definitive Edition the 1.16.0 client expects a profile
+to appear in the 1v1 ranked ladder as soon as it logs in. The server therefore
+creates the corresponding ladder row with the default rating (1000) and 0 games
+for every profile that logs in. The ladder listing and its `rankTotal` include
+those rows: a profile with 0 games is shown at the default rating until it
+plays its first ranked match. This is a deliberate product decision, not a
+missing filter.
+
 ## Docker
 
 See [Docker](../tools/server-docker) for information.

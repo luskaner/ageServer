@@ -416,6 +416,11 @@ func TestCreateMainGame(t *testing.T) {
 	}
 }
 
+// Product decision: every AoE2 profile that logs in gets a 1v1 RM row at the
+// default rating with 0 games, because the 1.16.0 client expects to find
+// itself in the ladder right after logging in. The ladder list therefore
+// includes those rows and rankTotal counts them. This test pins that
+// behaviour; changing it requires a deliberate decision plus new expectations.
 func TestNewAoE2UserIsPersistedOnLeaderboardAtDefaultRating(t *testing.T) {
 	isolateUserData(t)
 	i.InitializeRng(42)

@@ -41,7 +41,7 @@ func logHostsDiagnostics() {
 		commonLogger.Println(commonUi.Detail("Hosts backup stat: %v", statErr))
 	} else {
 		commonLogger.Println(commonUi.Detail("Hosts backup info: size=%d mode=%v isDir=%v", info.Size(), info.Mode(), info.IsDir()))
-		commonLogger.Println(commonUi.Detail("If the backup already exists from a previous failed run, delete it after verifying its contents and retry."))
+		commonLogger.Println(commonUi.Detail("If the backup was created by a previous run, setup validates it and, when it does not match the current hosts file, renames it to hosts.bak.old-<timestamp> instead of deleting it. Do not delete it manually unless you want to discard it."))
 	}
 }
 
