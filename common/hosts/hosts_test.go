@@ -1,6 +1,8 @@
 package hosts
 
 import (
+	"bufio"
+	"bytes"
 	"net"
 	"os"
 	"path/filepath"
@@ -412,6 +414,133 @@ func TestAddHostsSystemHosts(t *testing.T) {
 		t.Errorf("backup not created: %v", err)
 	}
 	_ = os.Remove(fpath + ".bak")
+}
+
+func TestAddHostsReusesValidBackupAndReplacesOwnedMapping(t *testing.T) {
+	dir := t.TempDir()
+	fpath := filepath.Join(dir, "hosts")
+	bakPath := fpath + ".bak"
+	backup := []byte("127.0.0.1 localhost\n")
+	oldIP := net.ParseIP("127.0.0.1")
+	mappings := Mappings("age2", oldIP, false)
+	var oldHost Host
+	for host := range mappings {
+		oldHost = host
+		break
+	}
+	if oldHost == "" {
+		t.Fatal("age2 mappings should not be empty")
+	}
+	current := []byte("127.0.0.1\t" + oldHost.String() + " #ageServer\n127.0.0.1 localhost\n")
+	if err := os.WriteFile(fpath, current, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bakPath, backup, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origPathFn := pathFn
+	pathFn = func() string { return fpath }
+	defer func() { pathFn = origPathFn }()
+
+	newIP := net.ParseIP("10.99.0.1")
+	ok, err := AddHosts(newIP, "age2", "", "\n", false, nil)
+	if err != nil {
+		t.Fatalf("AddHosts with a prior AgeServer backup: %v", err)
+	}
+	if !ok {
+		t.Fatal("AddHosts should report success")
+	}
+
+	gotBackup, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatalf("read preserved backup: %v", err)
+	}
+	if !bytes.Equal(gotBackup, backup) {
+		t.Fatalf("backup was changed: got %q, want %q", gotBackup, backup)
+	}
+	gotHosts, err := os.ReadFile(fpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(gotHosts)))
+	foundNew := false
+	for scanner.Scan() {
+		ok, _, parsed := ParseLine(scanner.Text(), true)
+		if !ok {
+			continue
+		}
+		for _, host := range parsed.Hosts() {
+			if host == oldHost {
+				if parsed.IP().Equal(oldIP) {
+					t.Fatalf("stale owned mapping remains: %q", scanner.Text())
+				}
+				if parsed.IP().Equal(newIP) {
+					foundNew = true
+				}
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !foundNew {
+		t.Fatalf("new mapping for %q not found in %q", oldHost, gotHosts)
+	}
+}
+
+func TestAddHostsRotatesUnrelatedBackup(t *testing.T) {
+	dir := t.TempDir()
+	fpath := filepath.Join(dir, "hosts")
+	bakPath := fpath + ".bak"
+	current := []byte("127.0.0.1 localhost\n")
+	backup := []byte("127.0.0.1 original.example\n")
+	if err := os.WriteFile(fpath, current, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bakPath, backup, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	origPathFn := pathFn
+	pathFn = func() string { return fpath }
+	defer func() { pathFn = origPathFn }()
+
+	// An unrelated backup must not block setup: it is rotated instead.
+	if ok, err := AddHosts(net.ParseIP("10.99.0.1"), "age2", "", "\n", false, nil); err != nil || !ok {
+		t.Fatalf("AddHosts should rotate an unrelated backup: ok=%t err=%v", ok, err)
+	}
+	rotated, err := filepath.Glob(bakPath + ".old-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rotated) != 1 {
+		t.Fatalf("rotated backups = %v, want exactly one", rotated)
+	}
+	rotatedBackup, err := os.ReadFile(rotated[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rotatedBackup, backup) {
+		t.Fatalf("rotated backup = %q, want %q", rotatedBackup, backup)
+	}
+	gotHosts, err := os.ReadFile(fpath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(gotHosts, []byte("localhost")) {
+		t.Fatalf("user content lost: %q", gotHosts)
+	}
+	if !bytes.Contains(gotHosts, []byte("10.99.0.1")) {
+		t.Fatalf("new mapping missing: %q", gotHosts)
+	}
+	gotBackup, err := os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotBackup) != "127.0.0.1\tlocalhost\n" {
+		t.Fatalf("new backup = %q, want the clean pre-state", gotBackup)
+	}
 }
 
 func TestLineWithoutOwnMarkingNoMarking(t *testing.T) {

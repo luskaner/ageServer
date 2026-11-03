@@ -53,6 +53,8 @@ type MatchResult struct {
 	Results       []int32       `json:"results"`
 	Races         []int32       `json:"races"`
 	XPGained      []int32       `json:"xpGained"`
+	Counters      []string      `json:"counters"`
+	CustomUpdates []string      `json:"customUpdates"`
 	WinnerTeam    int32         `json:"winnerTeam"`
 	StartedAt     time.Time     `json:"startedAt"`
 	FinishedAt    time.Time     `json:"finishedAt"`
@@ -62,14 +64,17 @@ type MatchResult struct {
 
 // MatchPlayer is the per-profile part of a reported match.
 type MatchPlayer struct {
-	ProfileID    int32 `json:"profileId"`
-	TeamID       int32 `json:"teamId"`
-	Result       int32 `json:"result"`
-	RaceID       int32 `json:"raceId"`
-	XPGained     int32 `json:"xpGained"`
-	RatingBefore int32 `json:"ratingBefore"`
-	RatingAfter  int32 `json:"ratingAfter"`
-	RatingDelta  int32 `json:"ratingDelta"`
+	ProfileID     int32  `json:"profileId"`
+	TeamID        int32  `json:"teamId"`
+	Result        int32  `json:"result"`
+	RaceID        int32  `json:"raceId"`
+	XPGained      int32  `json:"xpGained"`
+	ReportOrder   int32  `json:"reportOrder"`
+	Counters      string `json:"counters"`
+	CustomUpdates string `json:"customUpdates"`
+	RatingBefore  int32  `json:"ratingBefore"`
+	RatingAfter   int32  `json:"ratingAfter"`
+	RatingDelta   int32  `json:"ratingDelta"`
 }
 
 // PlayerRating is a profile's standing on one ladder.
@@ -102,6 +107,20 @@ type StoredProfile struct {
 	XP             uint32
 	Level          uint16
 	Region         uint8
+}
+
+// ResolveStatGroupID picks the stat group id used to render a match member.
+// The connected user wins, then the profile stored in the database, then the
+// ladder rating row. Sharing this precedence keeps the match notification and
+// the recent-match history consistent, especially for offline players.
+func ResolveStatGroupID(user, stored, ratingStatID int32) int32 {
+	if user != 0 {
+		return user
+	}
+	if stored != 0 {
+		return stored
+	}
+	return ratingStatID
 }
 
 // MatchHistoryStore persists matches and ladder ratings in an SQLite database
@@ -192,6 +211,9 @@ func migrate(db *sql.DB) error {
 			result        INTEGER NOT NULL DEFAULT -1,
 			race_id       INTEGER NOT NULL DEFAULT 0,
 			xp_gained     INTEGER NOT NULL DEFAULT 0,
+			player_order  INTEGER NOT NULL DEFAULT 0,
+			counters      TEXT    NOT NULL DEFAULT '',
+			custom_updates TEXT   NOT NULL DEFAULT '',
 			rating_before INTEGER NOT NULL DEFAULT 0,
 			rating_after  INTEGER NOT NULL DEFAULT 0,
 			rating_delta  INTEGER NOT NULL DEFAULT 0,
@@ -232,7 +254,56 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 	}
+	for _, column := range []struct {
+		name       string
+		definition string
+	}{
+		{name: "player_order", definition: "INTEGER NOT NULL DEFAULT 0"},
+		{name: "counters", definition: "TEXT NOT NULL DEFAULT ''"},
+		{name: "custom_updates", definition: "TEXT NOT NULL DEFAULT ''"},
+	} {
+		if err := ensureColumn(db, "match_players", column.name, column.definition); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func ensureColumn(db *sql.DB, table, column, definition string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var (
+			cid          int
+			name         string
+			columnType   string
+			notNull      int
+			defaultValue sql.NullString
+			primaryKey   int
+		)
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if name == column {
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if found {
+		return nil
+	}
+	_, err = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition)
+	return err
 }
 
 // RecordPendingMatch stores the pairing information as soon as the map has
@@ -273,10 +344,10 @@ func (s *MatchHistoryStore) RecordPendingMatch(m MatchResult) {
 			result = m.Results[i]
 		}
 		if _, err = tx.Exec(
-			`INSERT INTO match_players (match_id, profile_id, team_id, result)
-			 VALUES (?, ?, ?, ?)
+			`INSERT INTO match_players (match_id, profile_id, team_id, result, player_order)
+			 VALUES (?, ?, ?, ?, ?)
 			 ON CONFLICT(match_id, profile_id) DO NOTHING`,
-			m.MatchID, profile, team, result,
+			m.MatchID, profile, team, result, i,
 		); err != nil {
 			logger.Printf("matchHistory: pending player %d/%d: %s\n", m.MatchID, profile, err)
 			return
@@ -362,15 +433,26 @@ func (s *MatchHistoryStore) ApplyResult(m MatchResult) (map[int32]*PlayerRating,
 		if i < len(m.XPGained) {
 			xp = m.XPGained[i]
 		}
+		counters, customUpdates := "", ""
+		if i < len(m.Counters) {
+			counters = m.Counters[i]
+		}
+		if i < len(m.CustomUpdates) {
+			customUpdates = m.CustomUpdates[i]
+		}
 		if _, err = tx.Exec(
-			`INSERT INTO match_players (match_id, profile_id, team_id, result, race_id, xp_gained)
-			 VALUES (?, ?, ?, ?, ?, ?)
+			`INSERT INTO match_players (match_id, profile_id, team_id, result, race_id, xp_gained,
+			                            player_order, counters, custom_updates)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(match_id, profile_id) DO UPDATE SET
 			   team_id   = excluded.team_id,
 			   result    = excluded.result,
 			   race_id   = excluded.race_id,
-			   xp_gained = excluded.xp_gained`,
-			m.MatchID, profile, team, result, race, xp,
+			   xp_gained = excluded.xp_gained,
+			   player_order = excluded.player_order,
+			   counters = CASE WHEN excluded.counters <> '' THEN excluded.counters ELSE match_players.counters END,
+			   custom_updates = CASE WHEN excluded.custom_updates <> '' THEN excluded.custom_updates ELSE match_players.custom_updates END`,
+			m.MatchID, profile, team, result, race, xp, i, counters, customUpdates,
 		); err != nil {
 			logger.Printf("matchHistory: player %d/%d: %s\n", m.MatchID, profile, err)
 			return map[int32]*PlayerRating{}, false
@@ -712,8 +794,9 @@ func scanMatch(rows *sql.Rows) (MatchResult, error) {
 
 func (s *MatchHistoryStore) loadPlayersLocked(m MatchResult) MatchResult {
 	rows, err := s.db.Query(
-		`SELECT profile_id, team_id, result, race_id, xp_gained, rating_before, rating_after, rating_delta
-		 FROM match_players WHERE match_id = ? ORDER BY team_id, profile_id`, m.MatchID,
+		`SELECT profile_id, team_id, result, race_id, xp_gained, player_order, counters, custom_updates,
+		        rating_before, rating_after, rating_delta
+		 FROM match_players WHERE match_id = ? ORDER BY player_order, team_id, profile_id`, m.MatchID,
 	)
 	if err != nil {
 		return m
@@ -722,6 +805,7 @@ func (s *MatchHistoryStore) loadPlayersLocked(m MatchResult) MatchResult {
 	for rows.Next() {
 		var p MatchPlayer
 		if err = rows.Scan(&p.ProfileID, &p.TeamID, &p.Result, &p.RaceID, &p.XPGained,
+			&p.ReportOrder, &p.Counters, &p.CustomUpdates,
 			&p.RatingBefore, &p.RatingAfter, &p.RatingDelta); err != nil {
 			continue
 		}

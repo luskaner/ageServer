@@ -50,33 +50,24 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		reportResults := make(i.A, 0, len(match.PlayerStats))
 		memberStats := make(i.A, 0, len(match.PlayerStats))
 		for _, player := range match.PlayerStats {
-			reportResults = append(reportResults, i.A{
-				match.MatchID,    // matchHistoryID
-				player.ProfileID, // profileID
-				player.Result,    // resultType (1 = win)
-				player.TeamID,    // teamID
-				player.RaceID,    // raceID
-				player.XPGained,  // xpGained
-				"{}",             // counters
-				`{"itemUpdates":[],"challengeUpdates":[],"clientUpdates":{}}`, // customUpdates
-				match.StartedAt.Unix(), // matchStartDate
-			})
+			reportResults = append(reportResults, matchHistoryReportResult(match, player))
 
-			statGroupID := int32(0)
+			var userStatGroupID, storedStatGroupID int32
 			var wins, losses, streak int32
 			if user, ok := users.GetUserById(player.ProfileID); ok {
-				statGroupID = user.GetStatGroupID()
-			} else if stored, ok := storedProfiles[player.ProfileID]; ok {
-				statGroupID = stored.StatGroupID
+				userStatGroupID = user.GetStatGroupID()
 			}
+			if stored, ok := storedProfiles[player.ProfileID]; ok && stored != nil {
+				storedStatGroupID = stored.StatGroupID
+			}
+			var ratingStatGroupID int32
 			if rating, ok := ratings[player.ProfileID]; ok && rating != nil {
-				if rating.StatID != 0 && statGroupID == 0 {
-					statGroupID = rating.StatID
-				}
+				ratingStatGroupID = rating.StatID
 				wins = rating.Wins
 				losses = rating.Losses
 				streak = rating.Streak
 			}
+			statGroupID := models.ResolveStatGroupID(userStatGroupID, storedStatGroupID, ratingStatGroupID)
 			memberStats = append(memberStats, i.A{
 				match.MatchID,       // matchHistoryID
 				player.ProfileID,    // profileID
@@ -131,6 +122,34 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		len(history),
 	)
 	i.JSON(&w, i.A{0, history})
+}
+
+func matchHistoryReportResult(match models.MatchResult, player models.MatchPlayer) i.A {
+	return i.A{
+		match.MatchID,    // matchHistoryID
+		player.ProfileID, // profileID
+		player.Result,    // resultType (1 = win)
+		player.TeamID,    // teamID
+		player.RaceID,    // raceID
+		player.XPGained,  // xpGained
+		matchPlayerCounters(player),
+		matchPlayerCustomUpdates(player),
+		match.StartedAt.Unix(), // matchStartDate
+	}
+}
+
+func matchPlayerCounters(player models.MatchPlayer) string {
+	if player.Counters == "" {
+		return "{}"
+	}
+	return player.Counters
+}
+
+func matchPlayerCustomUpdates(player models.MatchPlayer) string {
+	if player.CustomUpdates == "" {
+		return `{"itemUpdates":[],"challengeUpdates":[],"eventChallengeUpdates":[],"clientUpdates":{}}`
+	}
+	return player.CustomUpdates
 }
 
 // normalizeProfileIDs drops the placeholder identifiers the client appends to

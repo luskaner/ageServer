@@ -3,6 +3,7 @@ package models
 import (
 	"net/http"
 
+	commonGame "github.com/luskaner/ageServer/common/game"
 	"github.com/luskaner/ageServer/server/internal"
 )
 
@@ -180,6 +181,15 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 					}
 					return nil
 				})
+			}
+			if gameId == commonGame.AoE2 {
+				// Deliberate product decision: the 1.16.0 client expects to
+				// appear in the 1v1 RM ladder as soon as it logs in, so every
+				// AoE2 profile gets a default-rating row (0 games) on login.
+				// See server/README.md ("Ranked ladder").
+				if rating := history.EnsureRating(u.GetId(), u.GetStatGroupID()); rating != nil {
+					u.SetRating(rating.Rating)
+				}
 			}
 			history.UpsertProfile(profile)
 		})
