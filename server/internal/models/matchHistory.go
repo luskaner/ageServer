@@ -109,6 +109,20 @@ type StoredProfile struct {
 	Region         uint8
 }
 
+// ResolveStatGroupID picks the stat group id used to render a match member.
+// The connected user wins, then the profile stored in the database, then the
+// ladder rating row. Sharing this precedence keeps the match notification and
+// the recent-match history consistent, especially for offline players.
+func ResolveStatGroupID(user, stored, ratingStatID int32) int32 {
+	if user != 0 {
+		return user
+	}
+	if stored != 0 {
+		return stored
+	}
+	return ratingStatID
+}
+
 // MatchHistoryStore persists matches and ladder ratings in an SQLite database
 // that lives next to the per-profile JSON files
 // (resources/userData/<gameId>/automatch2.db). The database and its schema are

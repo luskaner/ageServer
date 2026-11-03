@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -149,11 +150,11 @@ func (r *MainResources) initializeNews(gameId string) {
 	r.news = make([]i.A, 0, len(entries))
 	for _, id := range ids {
 		entry := entries[id]
-		dateVisible, err := newsTimestampString(entry.DateVisible)
+		dateVisible, err := newsTimestampString("date_visible", entry.DateVisible)
 		if err != nil {
 			panic(fmt.Errorf("invalid date_visible in news item %s for game %s: %w", id, gameId, err))
 		}
-		dateExpiry, err := newsTimestampString(entry.DateExpiry)
+		dateExpiry, err := newsTimestampString("date_expiry", entry.DateExpiry)
 		if err != nil {
 			panic(fmt.Errorf("invalid date_expiry in news item %s for game %s: %w", id, gameId, err))
 		}
@@ -176,14 +177,28 @@ func (r *MainResources) initializeNews(gameId string) {
 	}
 }
 
-func newsTimestampString(value any) (string, error) {
-	switch value := value.(type) {
+// newsTimestampString converts a news timestamp to the decimal string the
+// client expects. A missing key (nil) means "no date" and is not an error:
+// only genuinely invalid values abort startup.
+func newsTimestampString(key string, value any) (string, error) {
+	switch v := value.(type) {
+	case nil:
+		return "", nil
 	case string:
-		return value, nil
+		return strings.TrimSpace(v), nil
 	case int64:
-		return strconv.FormatInt(value, 10), nil
+		return strconv.FormatInt(v, 10), nil
+	case int:
+		return strconv.Itoa(v), nil
+	case float64:
+		// TOML does not reliably distinguish 1 from 1.0, so integral floats are
+		// accepted while fractional ones are a configuration error.
+		if v == math.Trunc(v) && !math.IsInf(v, 0) && !math.IsNaN(v) {
+			return strconv.FormatInt(int64(v), 10), nil
+		}
+		return "", fmt.Errorf("%s: expected an integer timestamp, got %v", key, v)
 	default:
-		return "", fmt.Errorf("expected a string or integer timestamp, got %T", value)
+		return "", fmt.Errorf("%s: expected a string or integer timestamp, got %T", key, value)
 	}
 }
 

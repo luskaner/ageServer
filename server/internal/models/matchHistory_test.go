@@ -254,6 +254,95 @@ func TestCustomMatchDoesNotChangeRating(t *testing.T) {
 	}
 }
 
+func TestApplyResultKeepsStoredCountersOnRepeat(t *testing.T) {
+	store := newTestStore(t)
+	store.ApplyResult(MatchResult{
+		MatchID:  200,
+		Players:  []int32{10, 20},
+		Teams:    []int32{0, 1},
+		Results:  []int32{1, 0},
+		Counters: []string{`{"villagers":12}`, `{"villagers":3}`},
+	})
+	// A re-report without counters sends empty values, which must preserve the
+	// stored document instead of overwriting it with "{}".
+	store.ApplyResult(MatchResult{
+		MatchID:  200,
+		Players:  []int32{10, 20},
+		Teams:    []int32{0, 1},
+		Results:  []int32{1, 0},
+		Counters: []string{"", ""},
+	})
+
+	matches := store.GetRecentForProfiles([]int32{10}, 10)
+	if len(matches) != 1 {
+		t.Fatalf("matches = %d, want 1", len(matches))
+	}
+	for _, player := range matches[0].PlayerStats {
+		want := `{"villagers":12}`
+		if player.ProfileID == 20 {
+			want = `{"villagers":3}`
+		}
+		if player.Counters != want {
+			t.Fatalf("profile %d counters = %q, want %q", player.ProfileID, player.Counters, want)
+		}
+	}
+}
+
+func TestApplyResultKeepsStoredCustomUpdatesOnRepeat(t *testing.T) {
+	store := newTestStore(t)
+	updates := []string{
+		`{"itemUpdates":["item"],"challengeUpdates":[],"eventChallengeUpdates":[],"clientUpdates":{}}`,
+		`{"itemUpdates":[],"challengeUpdates":[],"eventChallengeUpdates":[],"clientUpdates":{}}`,
+	}
+	store.ApplyResult(MatchResult{
+		MatchID:       201,
+		Players:       []int32{10, 20},
+		Teams:         []int32{0, 1},
+		Results:       []int32{1, 0},
+		CustomUpdates: updates,
+	})
+	store.ApplyResult(MatchResult{
+		MatchID:       201,
+		Players:       []int32{10, 20},
+		Teams:         []int32{0, 1},
+		Results:       []int32{1, 0},
+		CustomUpdates: []string{"", ""},
+	})
+
+	matches := store.GetRecentForProfiles([]int32{10}, 10)
+	if len(matches) != 1 {
+		t.Fatalf("matches = %d, want 1", len(matches))
+	}
+	for index, player := range matches[0].PlayerStats {
+		if player.CustomUpdates != updates[index] {
+			t.Fatalf("profile %d custom updates = %q, want %q", player.ProfileID, player.CustomUpdates, updates[index])
+		}
+	}
+}
+
+func TestResolveStatGroupIDPrecedence(t *testing.T) {
+	cases := []struct {
+		name         string
+		user         int32
+		stored       int32
+		ratingStatID int32
+		want         int32
+	}{
+		{name: "user wins", user: 11, stored: 22, ratingStatID: 33, want: 11},
+		{name: "stored when offline", user: 0, stored: 22, ratingStatID: 33, want: 22},
+		{name: "rating fallback", user: 0, stored: 0, ratingStatID: 33, want: 33},
+		{name: "nothing known", user: 0, stored: 0, ratingStatID: 0, want: 0},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := ResolveStatGroupID(testCase.user, testCase.stored, testCase.ratingStatID); got != testCase.want {
+				t.Fatalf("ResolveStatGroupID(%d, %d, %d) = %d, want %d",
+					testCase.user, testCase.stored, testCase.ratingStatID, got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestLeaderboardPage(t *testing.T) {
 	store := newTestStore(t)
 	for i, matchID := range []int64{1, 2, 3} {

@@ -19,32 +19,34 @@ import (
 )
 
 // reportMatchRequest mirrors the form the client posts. The list fields travel
-// as JSON arrays, which i.Json decodes transparently.
+// as JSON arrays, which i.Json decodes transparently. ItemUpdates is kept as
+// raw text so one malformed value cannot fail the whole bind.
 type reportMatchRequest struct {
-	MatchID     int64            `schema:"match_id"`
-	ProfileIDs  i.Json[[]int32]  `schema:"profile_ids"`
-	Results     i.Json[[]int32]  `schema:"results"`
-	TeamIDs     i.Json[[]int32]  `schema:"teamIDs"`
-	RaceIDs     i.Json[[]int32]  `schema:"race_ids"`
-	XPGained    i.Json[[]int32]  `schema:"xpGained"`
-	CountersZip string           `schema:"countersZip"`
-	ItemUpdates i.Json[[]string] `schema:"itemUpdates"`
+	MatchID     int64           `schema:"match_id"`
+	ProfileIDs  i.Json[[]int32] `schema:"profile_ids"`
+	Results     i.Json[[]int32] `schema:"results"`
+	TeamIDs     i.Json[[]int32] `schema:"teamIDs"`
+	RaceIDs     i.Json[[]int32] `schema:"race_ids"`
+	XPGained    i.Json[[]int32] `schema:"xpGained"`
+	CountersZip string          `schema:"countersZip"`
+	ItemUpdates string          `schema:"itemUpdates"`
 }
 
 const maxReportCountersSize = 1 << 20
-
-const emptyMatchCustomUpdates = `{"itemUpdates":[],"challengeUpdates":[],"eventChallengeUpdates":[],"clientUpdates":{}}`
 
 const (
 	rankedAutomatchQueueID int32 = 6
 	rankedAutomatchTypeID  int32 = 4
 )
 
-type matchCustomUpdates struct {
-	ItemUpdates           json.RawMessage `json:"itemUpdates"`
-	ChallengeUpdates      json.RawMessage `json:"challengeUpdates"`
-	EventChallengeUpdates json.RawMessage `json:"eventChallengeUpdates"`
-	ClientUpdates         json.RawMessage `json:"clientUpdates"`
+// defaultMatchCustomUpdate holds the empty document used for a key the client
+// did not send. Unknown keys are kept as received so client-side data such as
+// customScoring survives a round trip through the server.
+var defaultMatchCustomUpdate = map[string]string{
+	"itemUpdates":           "[]",
+	"challengeUpdates":      "[]",
+	"eventChallengeUpdates": "[]",
+	"clientUpdates":         "{}",
 }
 
 // reportMatchResponse matches the official positional response. A successful
@@ -55,10 +57,9 @@ func reportMatchResponse(resultCode int) i.A {
 }
 
 func decodeReportCounters(encoded string, playerCount int) ([]string, error) {
+	// An empty value means "keep whatever is stored": the SQL upsert only
+	// replaces a column when the new value is not empty.
 	counters := make([]string, playerCount)
-	for idx := range counters {
-		counters[idx] = "{}"
-	}
 	if strings.TrimSpace(encoded) == "" {
 		return counters, nil
 	}
@@ -98,10 +99,8 @@ func decodeReportCounters(encoded string, playerCount int) ([]string, error) {
 }
 
 func normalizeMatchCustomUpdates(updates []string, playerCount int) ([]string, error) {
+	// An empty value means "keep whatever is stored".
 	normalized := make([]string, playerCount)
-	for idx := range normalized {
-		normalized[idx] = emptyMatchCustomUpdates
-	}
 	if len(updates) == 0 {
 		return normalized, nil
 	}
@@ -111,24 +110,23 @@ func normalizeMatchCustomUpdates(updates []string, playerCount int) ([]string, e
 
 	var firstErr error
 	for idx, raw := range updates {
-		var decoded matchCustomUpdates
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		var decoded map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
-		if len(decoded.ItemUpdates) == 0 {
-			decoded.ItemUpdates = json.RawMessage("[]")
+		if decoded == nil {
+			decoded = make(map[string]json.RawMessage)
 		}
-		if len(decoded.ChallengeUpdates) == 0 {
-			decoded.ChallengeUpdates = json.RawMessage("[]")
-		}
-		if len(decoded.EventChallengeUpdates) == 0 {
-			decoded.EventChallengeUpdates = json.RawMessage("[]")
-		}
-		if len(decoded.ClientUpdates) == 0 {
-			decoded.ClientUpdates = json.RawMessage("{}")
+		for key, value := range defaultMatchCustomUpdate {
+			if len(decoded[key]) == 0 {
+				decoded[key] = json.RawMessage(value)
+			}
 		}
 		encoded, err := json.Marshal(decoded)
 		if err != nil {
@@ -175,7 +173,12 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 		logger.Printf("party.reportMatch: match=%d invalid countersZip: %s\n", req.MatchID, err)
 	}
 	result.Counters = counters
-	customUpdates, err := normalizeMatchCustomUpdates(req.ItemUpdates.Data, len(result.Players))
+	var parsedUpdates i.Json[[]string]
+	if parseErr := parsedUpdates.UnmarshalText([]byte(req.ItemUpdates)); parseErr != nil && strings.TrimSpace(req.ItemUpdates) != "" {
+		// A malformed itemUpdates must not prevent the match from being stored.
+		logger.Printf("party.reportMatch: match=%d invalid itemUpdates, using defaults: %s\n", req.MatchID, parseErr)
+	}
+	customUpdates, err := normalizeMatchCustomUpdates(parsedUpdates.Data, len(result.Players))
 	if err != nil {
 		logger.Printf("party.reportMatch: match=%d invalid itemUpdates: %s\n", req.MatchID, err)
 	}
@@ -195,15 +198,23 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	users := models.G(r).Users()
+	storedProfiles := history.GetProfiles(result.Players)
 	var updates []string
 	statGroupIDs := make(map[int32]int32, len(result.Players))
 	for _, profile := range result.Players {
-		statGroupID := int32(0)
+		var userStatGroupID, storedStatGroupID, ratingStatGroupID int32
 		if user, found := users.GetUserById(profile); found {
-			statGroupID = user.GetStatGroupID()
+			userStatGroupID = user.GetStatGroupID()
 		}
-		statGroupIDs[profile] = statGroupID
-		if rating, ok := ratings[profile]; ok && rating != nil {
+		if stored, ok := storedProfiles[profile]; ok && stored != nil {
+			storedStatGroupID = stored.StatGroupID
+		}
+		rating := ratings[profile]
+		if rating != nil {
+			ratingStatGroupID = rating.StatID
+		}
+		statGroupIDs[profile] = models.ResolveStatGroupID(userStatGroupID, storedStatGroupID, ratingStatGroupID)
+		if rating != nil {
 			// Refresh the cached rating so the next profile encode shows the
 			// new value without waiting for another database read.
 			if user, found := users.GetUserById(profile); found {

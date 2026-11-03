@@ -15,15 +15,15 @@ import (
 	"github.com/luskaner/ageServer/server/internal/models"
 )
 
-func TestReportMatchResponseResultCodes(t *testing.T) {
-	for _, resultCode := range []int{0, 2} {
-		response := reportMatchResponse(resultCode)
-		if len(response) != 16 {
-			t.Fatalf("response has %d fields, want 16", len(response))
-		}
-		if got := response[0]; got != resultCode {
-			t.Errorf("result code = %v, want %d", got, resultCode)
-		}
+// The success code is part of the wire protocol with the client: it must be a
+// single value, not a range.
+func TestReportMatchResponseSuccessCode(t *testing.T) {
+	response := reportMatchResponse(0)
+	if len(response) != 16 {
+		t.Fatalf("response has %d fields, want 16", len(response))
+	}
+	if response[0] != 0 {
+		t.Fatalf("success code = %v, want 0 (verified against client 1.16.0)", response[0])
 	}
 }
 
@@ -45,8 +45,48 @@ func TestReportMatchRequestBindsClientReportFields(t *testing.T) {
 	if err := i.Bind(request, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.MatchID != 42 || len(got.ProfileIDs.Data) != 2 || len(got.ItemUpdates.Data) != 2 || got.CountersZip != `"H4sI"` {
+	if got.MatchID != 42 || len(got.ProfileIDs.Data) != 2 || got.CountersZip != `"H4sI"` {
 		t.Fatalf("bound request = %+v", got)
+	}
+	var parsed i.Json[[]string]
+	if err := parsed.UnmarshalText([]byte(got.ItemUpdates)); err != nil {
+		t.Fatalf("itemUpdates did not parse: %v", err)
+	}
+	if len(parsed.Data) != 2 {
+		t.Fatalf("itemUpdates = %v", parsed.Data)
+	}
+}
+
+// A malformed itemUpdates must not fail the bind nor drop the match: the
+// handler logs it and falls back to "no update", which preserves what is
+// stored.
+func TestReportMatchToleratesMalformedItemUpdates(t *testing.T) {
+	form := url.Values{
+		"match_id":    {"43"},
+		"profile_ids": {"[1]"},
+		"results":     {"[1]"},
+		"teamIDs":     {"[0]"},
+		"race_ids":    {"[4]"},
+		"xpGained":    {"[1]"},
+		"itemUpdates": {"not-json"},
+	}
+	request := httptest.NewRequest("POST", "/game/party/reportMatch", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	var got reportMatchRequest
+	if err := i.Bind(request, &got); err != nil {
+		t.Fatalf("bind must tolerate a malformed itemUpdates: %v", err)
+	}
+	var parsed i.Json[[]string]
+	if err := parsed.UnmarshalText([]byte(got.ItemUpdates)); err == nil {
+		t.Fatal("expected a parse error for the malformed itemUpdates")
+	}
+	updates, err := normalizeMatchCustomUpdates(parsed.Data, 1)
+	if err != nil {
+		t.Fatalf("normalizeMatchCustomUpdates: %v", err)
+	}
+	if len(updates) != 1 || updates[0] != "" {
+		t.Fatalf("custom updates = %#v, want one empty value (keep stored)", updates)
 	}
 }
 
@@ -73,16 +113,61 @@ func TestDecodeReportCounters(t *testing.T) {
 	}
 }
 
-func TestNormalizeMatchCustomUpdatesMatchesHistoryProtocol(t *testing.T) {
+func TestDecodeReportCountersReturnsEmptyWhenAbsent(t *testing.T) {
+	got, err := decodeReportCounters("", 2)
+	if err != nil {
+		t.Fatalf("decodeReportCounters: %v", err)
+	}
+	if len(got) != 2 || got[0] != "" || got[1] != "" {
+		t.Fatalf("counters = %#v, want two empty values so the stored ones are kept", got)
+	}
+}
+
+func TestDecodeReportCountersReturnsEmptyOnMalformed(t *testing.T) {
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write([]byte(`["{}"]`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(base64.StdEncoding.EncodeToString(compressed.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wrong player count: the error is reported but the values stay empty so
+	// the stored counters are preserved.
+	got, err := decodeReportCounters(string(encoded), 2)
+	if err == nil {
+		t.Fatal("expected an error for a counter count mismatch")
+	}
+	if len(got) != 2 || got[0] != "" || got[1] != "" {
+		t.Fatalf("counters = %#v, want empty values (not \"{}\")", got)
+	}
+}
+
+func TestNormalizeMatchCustomUpdatesPreservesUnknownKeys(t *testing.T) {
 	got, err := normalizeMatchCustomUpdates([]string{
 		`{"itemUpdates":["item"],"challengeUpdates":[],"clientUpdates":{},"customScoring":{"points":2}}`,
 	}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"itemUpdates":["item"],"challengeUpdates":[],"eventChallengeUpdates":[],"clientUpdates":{}}`
+	want := `{"challengeUpdates":[],"clientUpdates":{},"customScoring":{"points":2},"eventChallengeUpdates":[],"itemUpdates":["item"]}`
 	if got[0] != want {
 		t.Fatalf("normalized custom updates = %s, want %s", got[0], want)
+	}
+}
+
+func TestNormalizeMatchCustomUpdatesReturnsEmptyWhenAbsent(t *testing.T) {
+	got, err := normalizeMatchCustomUpdates(nil, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "" || got[1] != "" {
+		t.Fatalf("custom updates = %#v, want empty values so the stored ones are kept", got)
 	}
 }
 
