@@ -41,8 +41,8 @@ type newsEntry struct {
 	ImageURL    string `toml:"image_url"`
 	Body        string `toml:"body"`
 	Metadata    string `toml:"metadata"`
-	DateVisible string `toml:"date_visible"`
-	DateExpiry  string `toml:"date_expiry"`
+	DateVisible any    `toml:"date_visible"`
+	DateExpiry  any    `toml:"date_expiry"`
 }
 
 type Resources interface {
@@ -149,6 +149,14 @@ func (r *MainResources) initializeNews(gameId string) {
 	r.news = make([]i.A, 0, len(entries))
 	for _, id := range ids {
 		entry := entries[id]
+		dateVisible, err := newsTimestampString(entry.DateVisible)
+		if err != nil {
+			panic(fmt.Errorf("invalid date_visible in news item %s for game %s: %w", id, gameId, err))
+		}
+		dateExpiry, err := newsTimestampString(entry.DateExpiry)
+		if err != nil {
+			panic(fmt.Errorf("invalid date_expiry in news item %s for game %s: %w", id, gameId, err))
+		}
 		newsID := any(id)
 		if numericID, err := strconv.Atoi(id); err == nil {
 			newsID = numericID
@@ -162,9 +170,20 @@ func (r *MainResources) initializeNews(gameId string) {
 			entry.ImageURL,
 			entry.Body,
 			entry.Metadata,
-			entry.DateVisible,
-			entry.DateExpiry,
+			dateVisible,
+			dateExpiry,
 		})
+	}
+}
+
+func newsTimestampString(value any) (string, error) {
+	switch value := value.(type) {
+	case string:
+		return value, nil
+	case int64:
+		return strconv.FormatInt(value, 10), nil
+	default:
+		return "", fmt.Errorf("expected a string or integer timestamp, got %T", value)
 	}
 }
 

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -70,6 +71,48 @@ func TestMatchHistoryCreatesSchemaAndReopens(t *testing.T) {
 	}
 }
 
+func TestMatchHistoryAddsReportColumnsToExistingDatabase(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "automatch2.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE matches (
+			match_id INTEGER PRIMARY KEY, map_id INTEGER NOT NULL DEFAULT 0, map_name TEXT NOT NULL DEFAULT '',
+			leaderboard_id INTEGER NOT NULL DEFAULT 0, queue_type TEXT NOT NULL DEFAULT '',
+			winner_team INTEGER NOT NULL DEFAULT -1, reported INTEGER NOT NULL DEFAULT 0,
+			rated INTEGER NOT NULL DEFAULT 0, started_at INTEGER NOT NULL DEFAULT 0, finished_at INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE TABLE match_players (
+			match_id INTEGER NOT NULL, profile_id INTEGER NOT NULL, team_id INTEGER NOT NULL DEFAULT 0,
+			result INTEGER NOT NULL DEFAULT -1, race_id INTEGER NOT NULL DEFAULT 0, xp_gained INTEGER NOT NULL DEFAULT 0,
+			rating_before INTEGER NOT NULL DEFAULT 0, rating_after INTEGER NOT NULL DEFAULT 0,
+			rating_delta INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (match_id, profile_id)
+		)`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store := NewMatchHistoryStore(dir)
+	if store.db == nil {
+		t.Fatal("expected legacy database to open after migration")
+	}
+	defer store.Close()
+	rows, err := store.db.Query(`SELECT player_order, counters, custom_updates FROM match_players`)
+	if err != nil {
+		t.Fatalf("report columns were not migrated: %v", err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestApplyResultIsIdempotent(t *testing.T) {
 	store := newTestStore(t)
 	result := MatchResult{
@@ -95,6 +138,36 @@ func TestApplyResultIsIdempotent(t *testing.T) {
 	}
 	if !store.HasMatch(7) {
 		t.Fatal("match should be reported")
+	}
+}
+
+func TestApplyResultMatchesOfficialRatingDelta(t *testing.T) {
+	store := newTestStore(t)
+	for profileID, rating := range map[int32]int32{10: 716, 20: 717} {
+		if _, err := store.db.Exec(
+			`INSERT INTO ratings (leaderboard_id, profile_id, rating, highest_rating)
+			 VALUES (?, ?, ?, ?)`,
+			SoloRMRanked, profileID, rating, rating,
+		); err != nil {
+			t.Fatalf("seed rating for profile %d: %v", profileID, err)
+		}
+	}
+
+	ratings, rated := store.ApplyResult(MatchResult{
+		MatchID:       8,
+		Players:       []int32{10, 20},
+		Teams:         []int32{0, 1},
+		Results:       []int32{1, 0},
+		LeaderboardID: SoloRMRanked,
+	})
+	if !rated {
+		t.Fatal("ranked result was not rated")
+	}
+	if ratings[10].Rating != 732 || ratings[20].Rating != 701 {
+		t.Fatalf("ratings = %d and %d, want 732 and 701", ratings[10].Rating, ratings[20].Rating)
+	}
+	if ratings[10].RatingDelta != 16 || ratings[20].RatingDelta != -16 {
+		t.Fatalf("rating deltas = %d and %d, want +16 and -16", ratings[10].RatingDelta, ratings[20].RatingDelta)
 	}
 }
 
@@ -124,6 +197,38 @@ func TestApplyResultKeepsPendingMap(t *testing.T) {
 	}
 	if len(matches[0].PlayerStats) != 2 {
 		t.Fatalf("player stats = %+v", matches[0].PlayerStats)
+	}
+}
+
+func TestApplyResultPersistsClientReportDetailsInReportOrder(t *testing.T) {
+	store := newTestStore(t)
+	store.RecordPendingMatch(MatchResult{
+		MatchID:       100,
+		MapName:       "Arabian Desert.rms",
+		LeaderboardID: SoloRMRanked,
+		QueueType:     "automatch2-6",
+		Players:       []int32{10, 20},
+		Teams:         []int32{0, 1},
+	})
+	store.ApplyResult(MatchResult{
+		MatchID:       100,
+		Players:       []int32{20, 10},
+		Teams:         []int32{1, 0},
+		Results:       []int32{0, 1},
+		Counters:      []string{`{"units":2}`, `{"units":3}`},
+		CustomUpdates: []string{`{"itemUpdates":["b"]}`, `{"itemUpdates":["a"]}`},
+	})
+
+	matches := store.GetRecentForProfiles([]int32{10}, 10)
+	if len(matches) != 1 || len(matches[0].PlayerStats) != 2 {
+		t.Fatalf("matches = %+v", matches)
+	}
+	first, second := matches[0].PlayerStats[0], matches[0].PlayerStats[1]
+	if first.ProfileID != 20 || first.ReportOrder != 0 || first.Counters != `{"units":2}` || first.CustomUpdates != `{"itemUpdates":["b"]}` {
+		t.Errorf("first reported player = %+v", first)
+	}
+	if second.ProfileID != 10 || second.ReportOrder != 1 || second.Counters != `{"units":3}` || second.CustomUpdates != `{"itemUpdates":["a"]}` {
+		t.Errorf("second reported player = %+v", second)
 	}
 }
 

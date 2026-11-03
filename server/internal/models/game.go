@@ -3,6 +3,7 @@ package models
 import (
 	"net/http"
 
+	commonGame "github.com/luskaner/ageServer/common/game"
 	"github.com/luskaner/ageServer/server/internal"
 )
 
@@ -180,6 +181,11 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 					}
 					return nil
 				})
+			}
+			if gameId == commonGame.AoE2 {
+				if rating := history.EnsureRating(u.GetId(), u.GetStatGroupID()); rating != nil {
+					u.SetRating(rating.Rating)
+				}
 			}
 			history.UpsertProfile(profile)
 		})

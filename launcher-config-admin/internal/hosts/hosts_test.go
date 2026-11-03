@@ -1,11 +1,14 @@
 package hosts
 
 import (
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	commonHosts "github.com/luskaner/ageServer/common/hosts"
 	"github.com/luskaner/ageServer/launcher-config-admin/internal"
 )
 
@@ -122,6 +125,53 @@ func TestRemoveHostsWithBackupOlderDoesInPlace(t *testing.T) {
 	data, _ := os.ReadFile(hostsPath)
 	if contains(string(data), "owned2.com") {
 		t.Fatalf("owned2 should be removed, got %q", string(data))
+	}
+}
+
+func TestStaleAgeServerBackupCanBeReusedAndReverted(t *testing.T) {
+	hostsPath, bakPath := setupHostsEnv(t)
+	backup := "127.0.0.1\tlocalhost\r\n"
+	mappings := commonHosts.Mappings("age2", net.ParseIP("127.0.0.1"), false)
+	var oldHost string
+	for host := range mappings {
+		oldHost = host.String()
+		break
+	}
+	if oldHost == "" {
+		t.Fatal("age2 mappings should not be empty")
+	}
+	current := "127.0.0.1\t" + oldHost + " #ageServer\r\n" + backup
+	if err := os.WriteFile(hostsPath, []byte(current), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bakPath, []byte(backup), 0644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := os.Chtimes(bakPath, now.Add(-2*time.Second), now.Add(-2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := commonHosts.AddHosts(net.ParseIP("172.30.224.1"), "age2", "", "", false, nil)
+	if err != nil || !ok {
+		t.Fatalf("AddHosts with a stale backup: ok=%t err=%v", ok, err)
+	}
+	if err := RemoveHosts(); err != nil {
+		t.Fatalf("RemoveHosts after retry: %v", err)
+	}
+
+	got, err := os.ReadFile(hostsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), oldHost) || strings.Contains(string(got), "#ageServer") {
+		t.Fatalf("stale AgeServer mappings remain after teardown: %q", got)
+	}
+	if string(got) != backup {
+		t.Fatalf("hosts after teardown = %q, want original %q", got, backup)
+	}
+	if _, err := os.Stat(bakPath); !os.IsNotExist(err) {
+		t.Fatalf("backup should be removed after teardown, err=%v", err)
 	}
 }
 
