@@ -489,7 +489,7 @@ func TestAddHostsReusesValidBackupAndReplacesOwnedMapping(t *testing.T) {
 	}
 }
 
-func TestAddHostsDoesNotOverwriteUnrelatedBackup(t *testing.T) {
+func TestAddHostsRotatesUnrelatedBackup(t *testing.T) {
 	dir := t.TempDir()
 	fpath := filepath.Join(dir, "hosts")
 	bakPath := fpath + ".bak"
@@ -506,22 +506,40 @@ func TestAddHostsDoesNotOverwriteUnrelatedBackup(t *testing.T) {
 	pathFn = func() string { return fpath }
 	defer func() { pathFn = origPathFn }()
 
-	if ok, err := AddHosts(net.ParseIP("10.99.0.1"), "age2", "", "\n", false, nil); err == nil || ok {
-		t.Fatalf("AddHosts should refuse an unrelated existing backup, ok=%t err=%v", ok, err)
+	// An unrelated backup must not block setup: it is rotated instead.
+	if ok, err := AddHosts(net.ParseIP("10.99.0.1"), "age2", "", "\n", false, nil); err != nil || !ok {
+		t.Fatalf("AddHosts should rotate an unrelated backup: ok=%t err=%v", ok, err)
+	}
+	rotated, err := filepath.Glob(bakPath + ".old-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rotated) != 1 {
+		t.Fatalf("rotated backups = %v, want exactly one", rotated)
+	}
+	rotatedBackup, err := os.ReadFile(rotated[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(rotatedBackup, backup) {
+		t.Fatalf("rotated backup = %q, want %q", rotatedBackup, backup)
 	}
 	gotHosts, err := os.ReadFile(fpath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(gotHosts, current) {
-		t.Fatalf("hosts file changed after refusal: got %q, want %q", gotHosts, current)
+	if !bytes.Contains(gotHosts, []byte("localhost")) {
+		t.Fatalf("user content lost: %q", gotHosts)
+	}
+	if !bytes.Contains(gotHosts, []byte("10.99.0.1")) {
+		t.Fatalf("new mapping missing: %q", gotHosts)
 	}
 	gotBackup, err := os.ReadFile(bakPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(gotBackup, backup) {
-		t.Fatalf("existing backup was changed: got %q, want %q", gotBackup, backup)
+	if string(gotBackup) != "127.0.0.1\tlocalhost\n" {
+		t.Fatalf("new backup = %q, want the clean pre-state", gotBackup)
 	}
 }
 

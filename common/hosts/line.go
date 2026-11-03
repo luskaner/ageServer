@@ -9,7 +9,14 @@ import (
 	"github.com/luskaner/ageServer/common"
 )
 
-const marking = common.Name
+const (
+	// marking labels lines written by AgeServer that are active mappings.
+	marking = common.Name
+	// preservedMarking labels commented copies of user lines that AgeServer
+	// preserves so a revert can restore them. It is distinct from marking so a
+	// revert never uncomments a legacy owned comment by accident.
+	preservedMarking = marking + "-preserved"
+)
 
 type Line struct {
 	ip       net.IP
@@ -29,7 +36,17 @@ func (l Line) Own() bool {
 	if len(l.comments) == 0 {
 		return false
 	}
-	return l.comments[len(l.comments)-1] == marking
+	last := l.comments[len(l.comments)-1]
+	return last == marking || last == preservedMarking
+}
+
+// Preserved reports whether the line is a commented copy of a user line that
+// AgeServer should restore on revert.
+func (l Line) Preserved() bool {
+	if len(l.comments) == 0 {
+		return false
+	}
+	return l.comments[len(l.comments)-1] == preservedMarking
 }
 
 func (l Line) OnlyComments() bool {
@@ -83,10 +100,7 @@ func (l Line) Uncommented() (nl string) {
 }
 
 func (l Line) hasOwnMarking() bool {
-	if len(l.comments) < 1 {
-		return false
-	}
-	return l.comments[len(l.comments)-1] == marking
+	return l.Own()
 }
 
 func (l Line) WithoutOwnMarking() Line {
@@ -102,5 +116,14 @@ func (l Line) WithOwnMarking() Line {
 		return l
 	}
 	l.comments = slices.Clone(append(l.comments, marking))
+	return l
+}
+
+// WithPreservedMarking labels the line as a commented copy of a user line.
+// Any previous own marking is replaced, so the line comes out as exactly one
+// preserved marking.
+func (l Line) WithPreservedMarking() Line {
+	l = l.WithoutOwnMarking()
+	l.comments = slices.Clone(append(l.comments, preservedMarking))
 	return l
 }
