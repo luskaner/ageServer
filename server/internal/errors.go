@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	ErrCertDirectory = iota + common.ErrLast
+	ErrCertDirectory       = iota + common.ErrLast
 	ErrResolveHost
 	ErrCreateLogFile
 	ErrStartServer
@@ -19,4 +19,5 @@ const (
 	ErrCustomFiles
 	ErrEmbeddedBattleServer
 	ErrBattleServerReplays
+	ErrCommunityAPI
 )

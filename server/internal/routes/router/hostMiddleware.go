@@ -17,6 +17,7 @@ type ConditionalHandler interface {
 func HostMiddleware(gameId string, writer io.Writer) http.Handler {
 	var condHandlerOrder = []ConditionalHandler{
 		&PlayfabApi{},
+		NewApiCommunity(),
 		NewApiAgeOfEmpires(),
 		NewAoe4ApiAgeOfEmpires(),
 		&CdnAgeOfEmpires{},

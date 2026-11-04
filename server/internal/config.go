@@ -4,6 +4,10 @@ import (
 	"github.com/luskaner/ageServer/common/battleServer"
 )
 
+// CommunityAPIEnabled controls whether the public Community API endpoints are enabled.
+// Defaults to false (disabled).
+var CommunityAPIEnabled bool
+
 type Announcement struct {
 	Enabled        bool
 	Multicast      bool
@@ -80,6 +84,12 @@ type BattleServerReplays struct {
 	Expiry       string
 }
 
+// CommunityAPI configures the public Community API endpoints.
+// When disabled, the endpoints return 404.
+type CommunityAPI struct {
+	Enabled bool
+}
+
 type SignConfig struct {
 	// Enabled makes the server re-sign the catalogues it serves instead of
 	// replaying the signatures captured alongside them in resources/responses.
@@ -101,6 +111,7 @@ type Configuration struct {
 	Games                  Games
 	CustomFiles            CustomFiles
 	BattleServerReplays    BattleServerReplays
+	CommunityAPI           CommunityAPI
 	Sign                   SignConfig
 }
 

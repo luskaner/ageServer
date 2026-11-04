@@ -153,3 +153,11 @@ MaxTotalSize = '256MB'
 # (e.g. 12h, 30m, 1h30m). Files are also purged at startup if older than this.
 # Set to 0 or a negative value (e.g. -1) to keep replay files forever.
 Expiry = '12h'
+
+# CONFIGURING COMMUNITY API
+# The public Community API provides unauthenticated access to leaderboards,
+# match history, advertisements, news, and other data.
+[CommunityAPI]
+# Whether to enable the public Community API endpoints. When disabled, the
+# routes return 404. Default is false (disabled).
+Enabled = false

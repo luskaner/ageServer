@@ -225,6 +225,11 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		exitCode = internal.ErrBattleServerReplays
 		return
 	}
+	if err = applyCommunityAPIConfig(cfg); err != nil {
+		logger.Fail("Invalid CommunityAPI configuration: %s", err)
+		exitCode = internal.ErrCommunityAPI
+		return
+	}
 	var servers []*http.Server
 	internal.InitializeStopSignal()
 
@@ -521,6 +526,7 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"BattleServerReplays.MaxFileSize":  "32MB",
 		"BattleServerReplays.MaxTotalSize": "256MB",
 		"BattleServerReplays.Expiry":       "12h",
+		"CommunityAPI.Enabled":             false,
 	}
 	for g := range game.SupportedGames.Iter() {
 		defaults[fmt.Sprintf("Games.%s.Hosts", g)] = []string{netip.IPv4Unspecified().String()}
@@ -667,5 +673,11 @@ func applyBattleServerReplaysConfig(cfg *internal.Configuration) error {
 	internal.BattleServerReplaysMaxFileSize = maxFileSize
 	internal.BattleServerReplaysMaxTotalSize = maxTotalSize
 	internal.BattleServerReplaysExpiry = expiry
+	return nil
+}
+
+// applyCommunityAPIConfig applies the CommunityAPI configuration.
+func applyCommunityAPIConfig(cfg *internal.Configuration) error {
+	internal.CommunityAPIEnabled = cfg.CommunityAPI.Enabled
 	return nil
 }
