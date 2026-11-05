@@ -35,15 +35,15 @@ type signature struct {
 // newsEntry is one [id] table of a game's news.toml. The table key is the id
 // sent to the client; the remaining fields are forwarded as received.
 type newsEntry struct {
-	Category    string `toml:"category"`
-	Title       string `toml:"title"`
-	Subtitle    string `toml:"subtitle"`
-	Text        string `toml:"text"`
-	ImageURL    string `toml:"image_url"`
-	Body        string `toml:"body"`
-	Metadata    string `toml:"metadata"`
-	DateVisible any    `toml:"date_visible"`
-	DateExpiry  any    `toml:"date_expiry"`
+	Category    string  `toml:"category"`
+	Title       string  `toml:"title"`
+	Subtitle    *string `toml:"subtitle"`
+	Text        string  `toml:"text"`
+	ImageURL    string  `toml:"image_url"`
+	Body        string  `toml:"body"`
+	Metadata    string  `toml:"metadata"`
+	DateVisible any     `toml:"date_visible"`
+	DateExpiry  any     `toml:"date_expiry"`
 }
 
 type Resources interface {
