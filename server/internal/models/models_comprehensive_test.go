@@ -350,6 +350,7 @@ type fakeResources struct {
 	signedAssets map[string][]byte
 	chatChannels map[string]*MainChatChannel
 	loginData    []i.A
+	cloudFiles   *CloudFiles
 }
 
 func (f *fakeResources) Initialize(string, *ResourcesOpts) {
@@ -363,6 +364,7 @@ func (f *fakeResources) Initialize(string, *ResourcesOpts) {
 	}
 	f.chatChannels = map[string]*MainChatChannel{"1": NewChatChannel(1, "lobby")}
 	f.loginData = []i.A{}
+	f.cloudFiles = &CloudFiles{Credentials: NewCredentials(), Value: map[string]CloudfilesIndex{}}
 }
 
 func (f *fakeResources) ReturnSignedAsset(string, *http.ResponseWriter, *http.Request, bool) {}
@@ -371,8 +373,11 @@ func (f *fakeResources) ChatChannels() map[string]*MainChatChannel              
 func (f *fakeResources) News() []i.A                                                         { return nil }
 func (f *fakeResources) ArrayFiles() map[string]i.A                                          { return f.arrayFiles }
 func (f *fakeResources) SignedAssets() map[string][]byte                                     { return f.signedAssets }
-func (f *fakeResources) CloudFiles() CloudFiles {
-	return CloudFiles{Credentials: NewCredentials(), Value: map[string]CloudfilesIndex{}}
+func (f *fakeResources) CloudFiles() *CloudFiles {
+	if f.cloudFiles == nil {
+		f.cloudFiles = &CloudFiles{Credentials: NewCredentials(), Value: map[string]CloudfilesIndex{}}
+	}
+	return f.cloudFiles
 }
 
 func TestCreateMainGame(t *testing.T) {

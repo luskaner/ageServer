@@ -248,6 +248,11 @@ func migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_match_players_profile ON match_players(profile_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_matches_finished ON matches(finished_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS single_player_matches (
+			match_key  TEXT PRIMARY KEY,
+			match_id   INTEGER NOT NULL,
+			created_at INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
@@ -642,6 +647,45 @@ func (s *MatchHistoryStore) applyEloTx(tx *sql.Tx, leaderboard int32, m MatchRes
 		return nil, false
 	}
 	return updated, true
+}
+
+// CreateSinglePlayerMatch maps the opaque matchKey of a single-player match to
+// the match id the server generated, so the later report can resolve it.
+func (s *MatchHistoryStore) CreateSinglePlayerMatch(matchKey string, matchID int64) error {
+	if matchKey == "" || matchID == 0 {
+		return errors.New("single-player matchKey and matchID are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("match history database is not available")
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO single_player_matches (match_key, match_id, created_at)
+		 VALUES (?, ?, ?)
+		 ON CONFLICT(match_key) DO UPDATE SET match_id = excluded.match_id, created_at = excluded.created_at`,
+		matchKey, matchID, time.Now().Unix(),
+	)
+	return err
+}
+
+// ResolveSinglePlayerMatch returns the match id stored for a matchKey.
+func (s *MatchHistoryStore) ResolveSinglePlayerMatch(matchKey string) (int64, bool) {
+	if matchKey == "" {
+		return 0, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return 0, false
+	}
+	var matchID int64
+	if err := s.db.QueryRow(
+		`SELECT match_id FROM single_player_matches WHERE match_key = ?`, matchKey,
+	).Scan(&matchID); err != nil {
+		return 0, false
+	}
+	return matchID, true
 }
 
 func (s *MatchHistoryStore) HasMatch(matchID int64) bool {

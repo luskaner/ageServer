@@ -47,6 +47,11 @@ type MatchHistory interface {
 	// ApplyResult stores a reported result and returns the updated ratings and
 	// whether this call moved them.
 	ApplyResult(m MatchResult) (map[int32]*PlayerRating, bool)
+	// CreateSinglePlayerMatch maps the opaque matchKey of a single-player match
+	// to the match id the server generated.
+	CreateSinglePlayerMatch(matchKey string, matchID int64) error
+	// ResolveSinglePlayerMatch resolves the match id of a matchKey.
+	ResolveSinglePlayerMatch(matchKey string) (int64, bool)
 }
 
 func G(r *http.Request) Game {

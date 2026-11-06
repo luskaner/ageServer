@@ -71,7 +71,12 @@ func TestInitializeNews_LoadsEntriesInOrder(t *testing.T) {
 		"1793294400", "1798480800",
 	}
 	for index, want := range wantFirst {
-		if got := resources.news[0][index]; got != want {
+		got := resources.news[0][index]
+		// subtitle is stored as *string (a nil pointer means "no subtitle").
+		if subtitle, ok := got.(*string); ok {
+			got = *subtitle
+		}
+		if got != want {
 			t.Fatalf("news 1 field %d = %v, want %v", index, got, want)
 		}
 	}

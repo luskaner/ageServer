@@ -143,6 +143,11 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 			if cf := g.CustomFiles(); cf != nil {
 				cf.Close()
 			}
+			// Stop the replay sweeper and release the cloud root. The uploaded
+			// replays stay on disk: the TTL is what removes them.
+			if store := g.Resources().CloudFiles(); store != nil {
+				store.Close()
+			}
 		}
 		_ = fileLockUnlockFn(lock)
 	}()
@@ -220,9 +225,9 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		exitCode = internal.ErrCustomFiles
 		return
 	}
-	if err = applyBattleServerReplaysConfig(cfg); err != nil {
-		logger.Fail("Invalid BattleServerReplays configuration: %s", err)
-		exitCode = internal.ErrBattleServerReplays
+	if err = applyReplaysConfig(cfg); err != nil {
+		logger.Fail("Invalid Replays configuration: %s", err)
+		exitCode = internal.ErrReplays
 		return
 	}
 	var servers []*http.Server
@@ -310,18 +315,11 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 					LogLevel:      ebs.LogLevel,
 				},
 			}
-			replayOpts := embedded.ReplayOptions{
-				Enabled:      internal.BattleServerReplaysEnabled,
-				Folder:       internal.BattleServerReplaysFolder,
-				MaxFileSize:  internal.BattleServerReplaysMaxFileSize,
-				MaxTotalSize: internal.BattleServerReplaysMaxTotalSize,
-				Expiry:       internal.BattleServerReplaysExpiry,
-			}
 			// Not a timeout: the embedded server owns a context of its own and
 			// keeps running until inst.Stop, because the context it is started
 			// with is its lifetime (see embedded.Instance.Start). A startup
 			// budget here would cancel that lifetime as soon as Start returned.
-			startErr := inst.Start(context.Background(), certificatePairFolder, replayOpts)
+			startErr := inst.Start(context.Background(), certificatePairFolder)
 			if startErr != nil {
 				logger.Fail("Failed to start embedded battle server for %s: %s", gameId, startErr)
 				exitCode = internal.ErrEmbeddedBattleServer
@@ -499,28 +497,27 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 	k := koanf.New(".")
 	defaults := map[string]any{
-		"Log":                              false,
-		"GeneratePlatformUserId":           false,
-		"Sign.Enabled":                     false,
-		"Sign.PlatformUserIdExceptions":    []string{},
-		"Authentication":                   "disabled",
-		"Internet.Enabled":                 true,
-		"Internet.IP":                      "auto",
-		"Announcement.Enabled":             true,
-		"Announcement.Multicast":           true,
-		"Announcement.MulticastGroup":      common.AnnounceMulticastGroup,
-		"Announcement.Port":                common.AnnouncePort,
-		"Games.Enabled":                    []string{},
-		"CustomFiles.Enabled":              true,
-		"CustomFiles.Folder":               "auto",
-		"CustomFiles.MaxFileSize":          "32MB",
-		"CustomFiles.MaxTotalSize":         "256MB",
-		"CustomFiles.Expiry":               "12h",
-		"BattleServerReplays.Enabled":      false,
-		"BattleServerReplays.Folder":       "auto",
-		"BattleServerReplays.MaxFileSize":  "32MB",
-		"BattleServerReplays.MaxTotalSize": "256MB",
-		"BattleServerReplays.Expiry":       "12h",
+		"Log":                           false,
+		"GeneratePlatformUserId":        false,
+		"Sign.Enabled":                  false,
+		"Sign.PlatformUserIdExceptions": []string{},
+		"Authentication":                "disabled",
+		"Internet.Enabled":              true,
+		"Internet.IP":                   "auto",
+		"Announcement.Enabled":          true,
+		"Announcement.Multicast":        true,
+		"Announcement.MulticastGroup":   common.AnnounceMulticastGroup,
+		"Announcement.Port":             common.AnnouncePort,
+		"Games.Enabled":                 []string{},
+		"CustomFiles.Enabled":           true,
+		"CustomFiles.Folder":            "auto",
+		"CustomFiles.MaxFileSize":       "32MB",
+		"CustomFiles.MaxTotalSize":      "256MB",
+		"CustomFiles.Expiry":            "12h",
+		"Replays.Enabled":               true,
+		"Replays.MaxFileSize":           "32MB",
+		"Replays.MaxTotalSize":          "1GB",
+		"Replays.Expiry":                "-1s",
 	}
 	for g := range game.SupportedGames.Iter() {
 		defaults[fmt.Sprintf("Games.%s.Hosts", g)] = []string{netip.IPv4Unspecified().String()}
@@ -633,20 +630,19 @@ func parseByteSize(value string) (int64, error) {
 	return strconv.ParseInt(value, 10, 64)
 }
 
-// applyBattleServerReplaysConfig validates the BattleServerReplays section and publishes
+// applyReplaysConfig validates the Replays section and publishes
 // the resolved values in the internal runtime globals. Sizes accept the usual
 // B/KB/MB/GB suffixes; the TTL is a Go duration such as 12h or 5m.
-func applyBattleServerReplaysConfig(cfg *internal.Configuration) error {
-	internal.BattleServerReplaysEnabled = cfg.BattleServerReplays.Enabled
-	internal.BattleServerReplaysFolder = cfg.BattleServerReplays.Folder
-	if !cfg.BattleServerReplays.Enabled {
+func applyReplaysConfig(cfg *internal.Configuration) error {
+	internal.ReplaysEnabled = cfg.Replays.Enabled
+	if !cfg.Replays.Enabled {
 		return nil
 	}
-	maxFileSize, err := parseByteSize(cfg.BattleServerReplays.MaxFileSize)
+	maxFileSize, err := parseByteSize(cfg.Replays.MaxFileSize)
 	if err != nil {
 		return fmt.Errorf("MaxFileSize: %w", err)
 	}
-	maxTotalSize, err := parseByteSize(cfg.BattleServerReplays.MaxTotalSize)
+	maxTotalSize, err := parseByteSize(cfg.Replays.MaxTotalSize)
 	if err != nil {
 		return fmt.Errorf("MaxTotalSize: %w", err)
 	}
@@ -659,13 +655,13 @@ func applyBattleServerReplaysConfig(cfg *internal.Configuration) error {
 	if maxFileSize > maxTotalSize {
 		return fmt.Errorf("MaxFileSize (%d) must not exceed MaxTotalSize (%d)", maxFileSize, maxTotalSize)
 	}
-	expiry, err := time.ParseDuration(strings.TrimSpace(cfg.BattleServerReplays.Expiry))
+	expiry, err := time.ParseDuration(strings.TrimSpace(cfg.Replays.Expiry))
 	if err != nil {
-		return fmt.Errorf("Expiry: %w", err)
+		return fmt.Errorf("expiry: %w", err)
 	}
 	// Expiry <= 0 means keep forever (no TTL-based expiration)
-	internal.BattleServerReplaysMaxFileSize = maxFileSize
-	internal.BattleServerReplaysMaxTotalSize = maxTotalSize
-	internal.BattleServerReplaysExpiry = expiry
+	internal.ReplaysMaxFileSize = maxFileSize
+	internal.ReplaysMaxTotalSize = maxTotalSize
+	internal.ReplaysExpiry = expiry
 	return nil
 }

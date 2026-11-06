@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ type fakeResources struct {
 	arrayFiles   map[string]i.A
 	signedAssets map[string][]byte
 	signatures   map[string]string
-	cloudFiles   models.CloudFiles
+	cloudFiles   *models.CloudFiles
 }
 
 func (f *fakeResources) Initialize(_ string, _ *models.ResourcesOpts) {
@@ -63,11 +64,11 @@ func (f *fakeResources) Initialize(_ string, _ *models.ResourcesOpts) {
 	if f.loginData == nil {
 		f.loginData = []i.A{}
 	}
-	if f.cloudFiles.Credentials == nil {
-		f.cloudFiles.Credentials = models.NewCredentials()
-	}
-	if f.cloudFiles.Value == nil {
-		f.cloudFiles.Value = map[string]models.CloudfilesIndex{}
+	if f.cloudFiles == nil {
+		f.cloudFiles = &models.CloudFiles{
+			Credentials: models.NewCredentials(),
+			Value:       map[string]models.CloudfilesIndex{},
+		}
 	}
 }
 
@@ -109,13 +110,21 @@ func (f *fakeResources) ChatChannels() map[string]*models.MainChatChannel { retu
 func (f *fakeResources) News() []i.A                                      { return f.news }
 func (f *fakeResources) ArrayFiles() map[string]i.A                       { return f.arrayFiles }
 func (f *fakeResources) SignedAssets() map[string][]byte                  { return f.signedAssets }
-func (f *fakeResources) CloudFiles() models.CloudFiles                    { return f.cloudFiles }
+func (f *fakeResources) CloudFiles() *models.CloudFiles                   { return f.cloudFiles }
 
 // -------------------------------------------------------------------
 // helpers
 // -------------------------------------------------------------------
 
 func newTestGame(t *testing.T, gameId string) models.Game {
+	t.Helper()
+	return newTestGameWithCloud(t, gameId, filepath.Join(t.TempDir(), "cloud"))
+}
+
+// newTestGameWithCloud is newTestGame with the cloud store rooted at a folder
+// the caller controls, so a test can drop files under builtin/ before the store
+// indexes them.
+func newTestGameWithCloud(t *testing.T, gameId, cloudFolder string) models.Game {
 	t.Helper()
 	// ensure auth disabled so platformlogin doesn't try to contact upstream
 	origAuth := i.Authentication
@@ -130,6 +139,19 @@ func newTestGame(t *testing.T, gameId string) models.Game {
 
 	fake := &fakeResources{}
 	fake.Initialize(gameId, nil)
+	// A real cloud store on a temp folder, so /cloudfiles/ is reachable and
+	// uploads can be exercised end to end.
+	fake.cloudFiles = models.BuildCloudfilesIndex(
+		filepath.Join(t.TempDir(), "config"),
+		cloudFolder,
+	)
+	fake.cloudFiles.SetReplayOpts(models.CloudFilesReplayOpts{
+		Enabled:      true,
+		MaxFileSize:  1 << 20,
+		MaxTotalSize: 4 << 20,
+		Expiry:       time.Hour,
+	})
+	t.Cleanup(fake.cloudFiles.Close)
 	opts := &models.CreateMainGameOpts{
 		Instances: &models.InstanceOpts{
 			Resources: fake,
@@ -538,8 +560,12 @@ func buildExpectedRoutes(gameId string) []routeCase {
 
 	add("GET", "/wss/")
 
-	if gameId == game.AoE2 || gameId == game.AoE3 {
+	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
 		add("GET", "/cloudfiles/")
+	}
+	if gameId == game.AoE2 || gameId == game.AoE4 || gameId == game.AoM {
+		add("PUT", "/cloudfiles/")
+		add("POST", "/cloudfiles/")
 	}
 	return routes
 }

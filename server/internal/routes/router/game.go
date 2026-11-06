@@ -302,9 +302,13 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 	g.group.HandleFunc("GET", "/wss/", wss.Handle)
 
 	// Artificial path needed for cloudGroup
-	// TODO: Enable to AoM if/when it gets cloud support
-	if gameId == game.AoE2 || gameId == game.AoE3 {
+	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
 		g.group.HandleFunc("GET", "/cloudfiles/", cloudfiles.Cloudfiles)
+	}
+	// Uploads only where the client has a replay upload flow.
+	if gameId == game.AoE2 || gameId == game.AoE4 || gameId == game.AoM {
+		g.group.HandleFunc("PUT", "/cloudfiles/", cloudfiles.Cloudfiles)
+		g.group.HandleFunc("POST", "/cloudfiles/", cloudfiles.Cloudfiles)
 	}
 
 	// Custom files (savegames/replays). Registered here and in

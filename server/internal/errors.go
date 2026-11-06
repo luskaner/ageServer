@@ -18,5 +18,5 @@ const (
 	ErrSigningKey
 	ErrCustomFiles
 	ErrEmbeddedBattleServer
-	ErrBattleServerReplays
+	ErrReplays
 )

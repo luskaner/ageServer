@@ -140,7 +140,7 @@ func TestStartOutlivesTheStartupContext(t *testing.T) {
 	}}
 
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := inst.Start(startupCtx, certs, ReplayOptions{}); err != nil {
+	if err := inst.Start(startupCtx, certs); err != nil {
 		cancelStartup()
 		t.Fatalf("Start: %v", err)
 	}

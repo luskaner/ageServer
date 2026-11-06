@@ -18,7 +18,7 @@ import (
 // The success code is part of the wire protocol with the client: it must be a
 // single value, not a range.
 func TestReportMatchResponseSuccessCode(t *testing.T) {
-	response := reportMatchResponse(0)
+	response := reportMatchResponse(0, nil)
 	if len(response) != 16 {
 		t.Fatalf("response has %d fields, want 16", len(response))
 	}

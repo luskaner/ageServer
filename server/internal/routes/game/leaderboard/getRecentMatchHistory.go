@@ -96,6 +96,22 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 			matchTypeID = 26
 			description = "AUTOMATCH"
 		}
+		// matchUrls is one entry per uploaded artifact: age4 has kind 0 and 1,
+		// age2 and athens (multiplayer) only kind 0. The URL carries no SAS; the
+		// client asks getTempCredentials for it.
+		matchURLs := i.A{}
+		if store := game.Resources().CloudFiles(); store != nil && store.ReplaysEnabled() {
+			scheme := "http"
+			if r.TLS != nil {
+				scheme = "https"
+			}
+			for _, kind := range []int{0, 1} {
+				if key, entry, ok := store.FindReplay(match.MatchID, kind); ok {
+					url := scheme + "://" + r.Host + "/cloudfiles/" + key
+					matchURLs = append(matchURLs, i.A{creator, url, entry.Length, kind})
+				}
+			}
+		}
 		history = append(history, i.A{
 			match.MatchID,           // matchHistoryID
 			creator,                 // creatorProfileID
@@ -110,7 +126,7 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 			0,                       // observerTotal
 			reportResults,           // matchHistoryReportResults
 			i.A{},                   // matchHistoryItems
-			i.A{},                   // matchUrls
+			matchURLs,               // matchUrls
 			i.A{"INVALID", "INVALID", "INVALID", 0, 0, 0, 0}, // matchVersionInfo
 			memberStats, // matchHistoryMemberStats
 		})

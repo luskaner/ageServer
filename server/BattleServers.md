@@ -294,34 +294,11 @@ SimulationPeriod = 0
 LogLevel = 'info'
 ```
 
-### Battle Server Replays
-
-When enabled, the embedded battle server writes the recorded game data to self-describing `.replay` files. This is configured globally under `[BattleServerReplays]` and mirrors the `[CustomFiles]` settings:
-
-| Key            | Description |
-|----------------|-------------|
-| `Enabled`      | Whether to enable replay recording. |
-| `Folder`       | Folder where replay files are stored. Use `'auto'` for `<resources>/userData/<game>/replays`. |
-| `MaxFileSize`  | Maximum size of a single replay file (e.g., `32MB`). |
-| `MaxTotalSize` | Maximum accumulated size per game (e.g., `256MB`). |
-| `Expiry`       | How long a replay file is kept since its last write (e.g., `12h`). Set to `0` or negative (e.g., `-1`) to keep replay files forever (no TTL-based expiration). |
-
-```toml
-[BattleServerReplays]
-Enabled = true
-Folder = 'auto'
-MaxFileSize = '32MB'
-MaxTotalSize = '256MB'
-Expiry = '12h'
-```
-
 ### Notes
 
 - The embedded battle server uses the same certificate logic as the external battle server: `cert.pem`/`key.pem` for `age4`/`athens`, `selfsigned_cert.pem`/`selfsigned_key.pem` for other games.
 - Relay broadcast is disabled. Lobby is disabled. Public port equals `BsPort`.
 - The embedded server appears in the game's battle server list alongside any external battle servers.
-- Replay files use a custom container format (`ALSBREPL` magic, version byte, JSON header, then timestamped records).
-- One file is kept per session (session ID 0 is ignored). Per-file TTL and total quota with oldest-file eviction are enforced.
 
 ### StartIfMissing Behavior
 

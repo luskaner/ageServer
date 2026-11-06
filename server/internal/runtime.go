@@ -36,12 +36,11 @@ var CustomFilesMaxFileSize int64
 var CustomFilesMaxTotalSize int64
 var CustomFilesExpiry time.Duration
 
-// BattleServerReplays holds the resolved battle server replay recording configuration.
+// Replays holds the resolved replay upload configuration.
 // Set once at startup.
-var BattleServerReplaysEnabled bool
-var BattleServerReplaysFolder string
-var BattleServerReplaysMaxFileSize int64
-var BattleServerReplaysMaxTotalSize int64
-var BattleServerReplaysExpiry time.Duration
+var ReplaysEnabled bool
+var ReplaysMaxFileSize int64
+var ReplaysMaxTotalSize int64
+var ReplaysExpiry time.Duration
 
 type AnnounceMessageDataLatest = common.AnnounceMessageData002

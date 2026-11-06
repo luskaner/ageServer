@@ -59,7 +59,7 @@ func TestGameSpecificRoutes_httptest(t *testing.T) {
 		{name: "AoM_getEventStats", gameId: game.AoM, method: "GET", path: "/game/CommunityEvent/getEventStats", wantFirst: -1},
 		{name: "AoM_getEventLeaderboard", gameId: game.AoM, method: "GET", path: "/game/CommunityEvent/getEventLeaderboard", wantFirst: -1},
 		{name: "AoM_updateProgressBatched", gameId: game.AoM, method: "POST", path: "/game/challenge/updateProgressBatched", body: "updates=[]", wantFirst: -1},
-		{name: "AoM_createOrReportSinglePlayer", gameId: game.AoM, method: "POST", path: "/game/party/createOrReportSinglePlayer", wantFirst: -1},
+		{name: "AoM_createOrReportSinglePlayer", gameId: game.AoM, method: "POST", path: "/game/party/createOrReportSinglePlayer", body: "createMatchKey=1&matchTypeID=1&mapname=x", wantFirst: 0},
 		{name: "AoM_reportUser", gameId: game.AoM, method: "POST", path: "/game/playerreport/reportUser", body: "profileID=1&reason=1", wantFirst: -1},
 		{name: "AoM_getProfileProperty", gameId: game.AoM, method: "GET", path: "/game/account/getProfileProperty?profile_id=1&property_id=x", wantFirst: 0},
 	}

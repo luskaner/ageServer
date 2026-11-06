@@ -22,14 +22,17 @@ import (
 // as JSON arrays, which i.Json decodes transparently. ItemUpdates is kept as
 // raw text so one malformed value cannot fail the whole bind.
 type reportMatchRequest struct {
-	MatchID     int64           `schema:"match_id"`
-	ProfileIDs  i.Json[[]int32] `schema:"profile_ids"`
-	Results     i.Json[[]int32] `schema:"results"`
-	TeamIDs     i.Json[[]int32] `schema:"teamIDs"`
-	RaceIDs     i.Json[[]int32] `schema:"race_ids"`
-	XPGained    i.Json[[]int32] `schema:"xpGained"`
-	CountersZip string          `schema:"countersZip"`
-	ItemUpdates string          `schema:"itemUpdates"`
+	MatchID      int64           `schema:"match_id"`
+	ProfileIDs   i.Json[[]int32] `schema:"profile_ids"`
+	Results      i.Json[[]int32] `schema:"results"`
+	TeamIDs      i.Json[[]int32] `schema:"teamIDs"`
+	RaceIDs      i.Json[[]int32] `schema:"race_ids"`
+	XPGained     i.Json[[]int32] `schema:"xpGained"`
+	CountersZip  string          `schema:"countersZip"`
+	ItemUpdates  string          `schema:"itemUpdates"`
+	SimPlayerIDs i.Json[[]int32] `schema:"simplayerIDs"`
+	CheckSums    i.Json[[]int32] `schema:"checkSums"`
+	LastCallTime int64           `schema:"lastCallTime"`
 }
 
 const maxReportCountersSize = 1 << 20
@@ -51,9 +54,17 @@ var defaultMatchCustomUpdate = map[string]string{
 
 // reportMatchResponse matches the official positional response. A successful
 // report uses result code 0; malformed or unprocessable reports use code 2.
-func reportMatchResponse(resultCode int) i.A {
-	// Local replay files are not currently downloadable in the game's replay format.
-	return i.A{resultCode, i.A{}, i.A{-1, "", "", "", 0, ""}, i.A{-1, "", "", "", 0, ""}, nil, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, 0, nil, i.A{}, i.A{}, i.A{}}
+// replays holds the descriptors for slots 2 and 3, in that order. The response
+// always has 16 elements, including age1: see replay-implementation.md §7.2.
+func reportMatchResponse(resultCode int, replays []i.A) i.A {
+	slot2, slot3 := emptyReplayDescriptor(), emptyReplayDescriptor()
+	if len(replays) > 0 {
+		slot2 = replays[0]
+	}
+	if len(replays) > 1 {
+		slot3 = replays[1]
+	}
+	return i.A{resultCode, i.A{}, slot2, slot3, nil, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, 0, nil, i.A{}, i.A{}, i.A{}}
 }
 
 func decodeReportCounters(encoded string, playerCount int) ([]string, error) {
@@ -144,12 +155,12 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 	var req reportMatchRequest
 	if err := i.Bind(r, &req); err != nil {
 		logger.Printf("party.reportMatch: could not bind form: %s\n", err)
-		i.JSON(&w, reportMatchResponse(2))
+		i.JSON(&w, reportMatchResponse(2, nil))
 		return
 	}
 	if req.MatchID == 0 {
 		logger.Printf("party.reportMatch: missing or invalid match_id\n")
-		i.JSON(&w, reportMatchResponse(2))
+		i.JSON(&w, reportMatchResponse(2, nil))
 		return
 	}
 
@@ -165,7 +176,7 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(result.Players) == 0 {
 		logger.Printf("party.reportMatch: match=%d has no profile_ids\n", req.MatchID)
-		i.JSON(&w, reportMatchResponse(2))
+		i.JSON(&w, reportMatchResponse(2, nil))
 		return
 	}
 	counters, err := decodeReportCounters(req.CountersZip, len(result.Players))
@@ -187,13 +198,13 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 	history := models.G(r).MatchHistory()
 	if history == nil {
 		logger.Printf("party.reportMatch: match=%d no match history store\n", req.MatchID)
-		i.JSON(&w, reportMatchResponse(2))
+		i.JSON(&w, reportMatchResponse(2, nil))
 		return
 	}
 	ratings, rated := history.ApplyResult(result)
 	if !history.HasMatch(req.MatchID) {
 		logger.Printf("party.reportMatch: match=%d was not persisted\n", req.MatchID)
-		i.JSON(&w, reportMatchResponse(2))
+		i.JSON(&w, reportMatchResponse(2, nil))
 		return
 	}
 
@@ -224,12 +235,15 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	logger.Printf(
-		"party.reportMatch: stored match=%d profiles=%v results=%v teams=%v races=%v rated=%t ratings=[%s]\n",
+		"party.reportMatch: stored match=%d profiles=%v results=%v teams=%v races=%v simplayerIDs=%v checkSums=%v lastCallTime=%d rated=%t ratings=[%s]\n",
 		req.MatchID,
 		result.Players,
 		result.Results,
 		result.Teams,
 		result.Races,
+		req.SimPlayerIDs.Data,
+		req.CheckSums.Data,
+		req.LastCallTime,
 		rated,
 		strings.Join(updates, " "),
 	)
@@ -241,7 +255,8 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	i.JSON(&w, reportMatchResponse(0))
+	replays := replayDescriptorsFor(r, req.MatchID, reportMatchReplayKinds(models.G(r).Title()), false)
+	i.JSON(&w, reportMatchResponse(0, replays))
 }
 
 func gameResultNotification(match models.MatchResult, ratings map[int32]*models.PlayerRating, statGroupIDs map[int32]int32) i.A {
