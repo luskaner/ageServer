@@ -9,7 +9,8 @@ import (
 	commonGame "github.com/luskaner/ageServer/common/game"
 )
 
-// Seeds the DNS-probe cache so generateDomains never performs network lookups.
+// Seeds the DNS-probe caches so generateDomains and generateMacOsDomains never
+// perform network lookups.
 func seedGeneratedDomains(tb testing.TB) {
 	tb.Helper()
 	for _, g := range []string{
@@ -17,12 +18,15 @@ func seedGeneratedDomains(tb testing.TB) {
 	} {
 		generatedDomainsCache[g] = nil
 	}
+	oldMacOsDomains := generatedMacOsDomainsCache
+	generatedMacOsDomainsCache = staticMacOsDomains()
 	tb.Cleanup(func() {
 		for _, g := range []string{
 			commonGame.AoE1, commonGame.AoE2, commonGame.AoE3, commonGame.AoE4, commonGame.AoM,
 		} {
 			delete(generatedDomainsCache, g)
 		}
+		generatedMacOsDomainsCache = oldMacOsDomains
 	})
 }
 
@@ -61,12 +65,24 @@ func TestGameHostsSharedGames(t *testing.T) {
 func TestGameHostsMacOsExclusiveOnlyAoE2(t *testing.T) {
 	seedGeneratedDomains(t)
 	with := GameHosts(commonGame.AoE2, true)
-	if !slices.Contains(with, aoe2MacWorldsEdgeDomain) {
-		t.Errorf("AoE2 macOS-exclusive domain missing: %v", with)
+	for _, want := range []string{
+		aoe2MacWorldsEdgeDomain,
+		"arthurlive-release1-api.worldsedgelink.com",
+		"arthurlive-release2-api.worldsedgelink.com",
+	} {
+		if !slices.Contains(with, want) {
+			t.Errorf("AoE2 macOS-exclusive domain missing %q: %v", want, with)
+		}
 	}
 	for _, g := range []string{commonGame.AoE1, commonGame.AoE3, commonGame.AoE4, commonGame.AoM} {
 		if slices.Contains(GameHosts(g, true), aoe2MacWorldsEdgeDomain) {
 			t.Errorf("%s must not include the macOS-exclusive domain", g)
+		}
+	}
+	without := GameHosts(commonGame.AoE2, false)
+	for _, unwanted := range []string{aoe2MacWorldsEdgeDomain, "arthurlive-release1-api.worldsedgelink.com"} {
+		if slices.Contains(without, unwanted) {
+			t.Errorf("AoE2 without the macOS flag must not include %q: %v", unwanted, without)
 		}
 	}
 }
@@ -140,11 +156,14 @@ func withUseInternet(tb testing.TB, enabled bool) {
 	tb.Helper()
 	oldUseInternet := useInternet
 	oldCache := generatedDomainsCache
+	oldMacOsCache := generatedMacOsDomainsCache
 	useInternet = enabled
 	generatedDomainsCache = make(map[string][]string)
+	generatedMacOsDomainsCache = nil
 	tb.Cleanup(func() {
 		useInternet = oldUseInternet
 		generatedDomainsCache = oldCache
+		generatedMacOsDomainsCache = oldMacOsCache
 	})
 }
 
@@ -205,6 +224,56 @@ func TestGenerateDomainsProbesWhenInternetEnabled(t *testing.T) {
 	}
 }
 
+func TestGenerateMacOsDomainsProbesReleases(t *testing.T) {
+	withUseInternet(t, true)
+	oldFn := directHostToIPFn
+	defer func() { directHostToIPFn = oldFn }()
+	calls := 0
+	directHostToIPFn = func(host string) (string, error) {
+		calls++
+		if calls <= 1 {
+			return "1.2.3.4", nil
+		}
+		return "", errors.New("mock dns error")
+	}
+	got := generateMacOsDomains()
+	want := []string{
+		"arthurlive-release1-api.worldsedgelink.com",
+		"arthurlive-release2-api.worldsedgelink.com",
+		"arthurlive-release3-api.worldsedgelink.com",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("generateMacOsDomains() = %v, want %v", got, want)
+	}
+	if calls != 2 {
+		t.Errorf("directHostToIPFn called %d times with internet enabled, want 2", calls)
+	}
+	if cached := generateMacOsDomains(); !slices.Equal(got, cached) {
+		t.Errorf("cached mismatch: got %v, cached %v", got, cached)
+	}
+	if calls != 2 {
+		t.Errorf("directHostToIPFn called %d times after the cache hit, want 2", calls)
+	}
+}
+
+func TestGenerateMacOsDomainsNoProbeWhenInternetDisabled(t *testing.T) {
+	withUseInternet(t, false)
+	oldFn := directHostToIPFn
+	defer func() { directHostToIPFn = oldFn }()
+	calls := 0
+	directHostToIPFn = func(host string) (string, error) {
+		calls++
+		return "1.2.3.4", nil
+	}
+	got := generateMacOsDomains()
+	if calls != 0 {
+		t.Errorf("directHostToIPFn called %d times with internet disabled, want 0", calls)
+	}
+	if want := staticMacOsDomains(); !slices.Equal(got, want) {
+		t.Errorf("generateMacOsDomains() = %v, want the static releases %v", got, want)
+	}
+}
+
 func TestSetUseInternetInvalidatesCache(t *testing.T) {
 	withUseInternet(t, true)
 	oldFn := directHostToIPFn
@@ -220,6 +289,11 @@ func TestSetUseInternetInvalidatesCache(t *testing.T) {
 	SetUseInternet(true)
 	if _, cached := generatedDomainsCache[commonGame.AoE2]; cached {
 		t.Fatal("cache should be empty immediately after SetUseInternet")
+	}
+	generatedMacOsDomainsCache = []string{"stale"}
+	SetUseInternet(true)
+	if generatedMacOsDomainsCache != nil {
+		t.Fatal("macOS domains cache should be invalidated immediately after SetUseInternet")
 	}
 	got := generateDomains(commonGame.AoE2)
 	if len(got) != 8 {

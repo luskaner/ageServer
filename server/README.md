@@ -34,7 +34,9 @@ Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/Mi
 
 #### AoE 2: DE - Steam macOS
 
-* `arthurlive-api.worldsedgelink.com`: exclusive domain.
+* `arthurlive-api.worldsedgelink.com`: legacy exclusive domain.
+* `arthurlive-release<N>-api.worldsedgelink.com`: current exclusive domain. `N` starts at 1 and the releases beyond
+  the statically known ones are discovered via DNS when internet access is available.
 
 ### Playfab
 
