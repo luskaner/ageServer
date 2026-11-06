@@ -40,6 +40,10 @@ type Advertisement interface {
 	UnsafeGetStartTime() int64
 	UnsafeGetState() int8
 	UnsafeGetDescription() string
+	UnsafeGetOptions() string
+	UnsafeGetSlotInfo() string
+	UnsafeGetMaxPlayers() uint8
+	UnsafeGetMapName() string
 	GetRelayRegion() string
 	GetParty() int32
 	UnsafeGetVisible() bool
@@ -183,6 +187,30 @@ func (adv *MainAdvertisement) GetId() int32 {
 // UnsafeGetDescription requires advertisement read lock
 func (adv *MainAdvertisement) UnsafeGetDescription() string {
 	return adv.description
+}
+
+// UnsafeGetOptions requires advertisement read lock. It returns the opaque
+// zlib+base64 options blob the client sent when hosting the lobby, which is the
+// same value the official service echoes as encodedOptions in the match history.
+func (adv *MainAdvertisement) UnsafeGetOptions() string {
+	return adv.options
+}
+
+// UnsafeGetSlotInfo requires advertisement read lock. It returns the opaque
+// zlib+base64 slot blob the client sent when hosting the lobby, which is the
+// same value the official service echoes as encodedSlots in the match history.
+func (adv *MainAdvertisement) UnsafeGetSlotInfo() string {
+	return adv.slotInfo
+}
+
+// UnsafeGetMaxPlayers requires advertisement read lock
+func (adv *MainAdvertisement) UnsafeGetMaxPlayers() uint8 {
+	return adv.maxPlayers
+}
+
+// UnsafeGetMapName requires advertisement read lock
+func (adv *MainAdvertisement) UnsafeGetMapName() string {
+	return adv.mapName
 }
 
 func (adv *MainAdvertisement) GetRelayRegion() string {

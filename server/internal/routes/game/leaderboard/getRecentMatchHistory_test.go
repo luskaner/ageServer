@@ -7,6 +7,40 @@ import (
 	"github.com/luskaner/ageServer/server/internal/models"
 )
 
+// The official service echoes the lobby metadata the client sent when hosting:
+// mapName, maxPlayers and description come from the advertisement, not from the
+// number of players that actually reported.
+func TestMatchHistoryMetadataUsesLobbyValues(t *testing.T) {
+	mapName, maxPlayers, description, matchTypeID := matchHistoryMetadata(models.MatchResult{
+		MapName:     "generated_map",
+		MaxPlayers:  16,
+		Description: "unnamed_session",
+		PlayerStats: []models.MatchPlayer{{ProfileID: 10}},
+	})
+	if mapName != "generated_map" || maxPlayers != 16 || description != "unnamed_session" || matchTypeID != 0 {
+		t.Fatalf("metadata = %q/%d/%q/%d", mapName, maxPlayers, description, matchTypeID)
+	}
+}
+
+func TestMatchHistoryMetadataFallsBackToReportedPlayers(t *testing.T) {
+	_, maxPlayers, _, _ := matchHistoryMetadata(models.MatchResult{
+		PlayerStats: []models.MatchPlayer{{ProfileID: 10}, {ProfileID: 20}},
+	})
+	if maxPlayers != 2 {
+		t.Fatalf("maxPlayers = %d, want 2", maxPlayers)
+	}
+}
+
+func TestMatchHistoryMetadataMarksAutomatch(t *testing.T) {
+	_, _, description, matchTypeID := matchHistoryMetadata(models.MatchResult{
+		QueueType:   "automatch2-6",
+		Description: "unnamed_session",
+	})
+	if matchTypeID != 26 || description != "AUTOMATCH" {
+		t.Fatalf("automatch = %d/%q", matchTypeID, description)
+	}
+}
+
 func TestMatchHistoryReportResultUsesStoredPlayerData(t *testing.T) {
 	match := models.MatchResult{
 		MatchID:   42,

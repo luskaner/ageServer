@@ -43,23 +43,27 @@ const (
 // derive from the client payload are filled in; everything else stays at its
 // zero value.
 type MatchResult struct {
-	MatchID       int64         `json:"matchId"`
-	MapID         int32         `json:"mapId"`
-	MapName       string        `json:"mapName"`
-	LeaderboardID int32         `json:"leaderboard"`
-	QueueType     string        `json:"queueType"`
-	Players       []int32       `json:"players"`
-	Teams         []int32       `json:"teams"`
-	Results       []int32       `json:"results"`
-	Races         []int32       `json:"races"`
-	XPGained      []int32       `json:"xpGained"`
-	Counters      []string      `json:"counters"`
-	CustomUpdates []string      `json:"customUpdates"`
-	WinnerTeam    int32         `json:"winnerTeam"`
-	StartedAt     time.Time     `json:"startedAt"`
-	FinishedAt    time.Time     `json:"finishedAt"`
-	Rated         bool          `json:"rated"`
-	PlayerStats   []MatchPlayer `json:"playerStats,omitempty"`
+	MatchID        int64         `json:"matchId"`
+	MapID          int32         `json:"mapId"`
+	MapName        string        `json:"mapName"`
+	MaxPlayers     int32         `json:"maxPlayers"`
+	Description    string        `json:"description"`
+	EncodedOptions string        `json:"encodedOptions"`
+	EncodedSlots   string        `json:"encodedSlots"`
+	LeaderboardID  int32         `json:"leaderboard"`
+	QueueType      string        `json:"queueType"`
+	Players        []int32       `json:"players"`
+	Teams          []int32       `json:"teams"`
+	Results        []int32       `json:"results"`
+	Races          []int32       `json:"races"`
+	XPGained       []int32       `json:"xpGained"`
+	Counters       []string      `json:"counters"`
+	CustomUpdates  []string      `json:"customUpdates"`
+	WinnerTeam     int32         `json:"winnerTeam"`
+	StartedAt      time.Time     `json:"startedAt"`
+	FinishedAt     time.Time     `json:"finishedAt"`
+	Rated          bool          `json:"rated"`
+	PlayerStats    []MatchPlayer `json:"playerStats,omitempty"`
 }
 
 // MatchPlayer is the per-profile part of a reported match.
@@ -271,6 +275,21 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 	}
+	// The lobby metadata the client sends when hosting is echoed back in the
+	// match history, so it has to survive the match itself.
+	for _, column := range []struct {
+		name       string
+		definition string
+	}{
+		{name: "max_players", definition: "INTEGER NOT NULL DEFAULT 0"},
+		{name: "description", definition: "TEXT NOT NULL DEFAULT ''"},
+		{name: "encoded_options", definition: "TEXT NOT NULL DEFAULT ''"},
+		{name: "encoded_slots", definition: "TEXT NOT NULL DEFAULT ''"},
+	} {
+		if err := ensureColumn(db, "matches", column.name, column.definition); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -407,8 +426,9 @@ func (s *MatchHistoryStore) ApplyResult(m MatchResult) (map[int32]*PlayerRating,
 	}
 	if _, err = tx.Exec(
 		`INSERT INTO matches (match_id, map_id, map_name, leaderboard_id, queue_type, winner_team,
-		                      reported, rated, started_at, finished_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
+		                      reported, rated, started_at, finished_at,
+		                      max_players, description, encoded_options, encoded_slots)
+		 VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(match_id) DO UPDATE SET
 		   map_id         = CASE WHEN excluded.map_id <> 0 THEN excluded.map_id ELSE matches.map_id END,
 		   map_name       = CASE WHEN excluded.map_name <> '' THEN excluded.map_name ELSE matches.map_name END,
@@ -416,9 +436,14 @@ func (s *MatchHistoryStore) ApplyResult(m MatchResult) (map[int32]*PlayerRating,
 		   queue_type     = CASE WHEN excluded.queue_type <> '' THEN excluded.queue_type ELSE matches.queue_type END,
 		   winner_team    = CASE WHEN excluded.winner_team >= 0 THEN excluded.winner_team ELSE matches.winner_team END,
 		   reported       = 1,
-		   finished_at    = CASE WHEN excluded.finished_at <> 0 THEN excluded.finished_at ELSE matches.finished_at END`,
+		   finished_at    = CASE WHEN excluded.finished_at <> 0 THEN excluded.finished_at ELSE matches.finished_at END,
+		   max_players    = CASE WHEN excluded.max_players <> 0 THEN excluded.max_players ELSE matches.max_players END,
+		   description    = CASE WHEN excluded.description <> '' THEN excluded.description ELSE matches.description END,
+		   encoded_options = CASE WHEN excluded.encoded_options <> '' THEN excluded.encoded_options ELSE matches.encoded_options END,
+		   encoded_slots  = CASE WHEN excluded.encoded_slots <> '' THEN excluded.encoded_slots ELSE matches.encoded_slots END`,
 		m.MatchID, m.MapID, m.MapName, leaderboard, m.QueueType, winner,
 		finished.Unix(), finished.Unix(),
+		m.MaxPlayers, m.Description, m.EncodedOptions, m.EncodedSlots,
 	); err != nil {
 		logger.Printf("matchHistory: store %d: %s\n", m.MatchID, err)
 		return map[int32]*PlayerRating{}, false
@@ -789,7 +814,8 @@ func (s *MatchHistoryStore) GetRecentForProfiles(profiles []int32, limit int) []
 		return nil
 	}
 	query := `SELECT DISTINCT m.match_id, m.map_id, m.map_name, m.leaderboard_id, m.queue_type,
-	                 m.winner_team, m.started_at, m.finished_at
+	                 m.winner_team, m.started_at, m.finished_at,
+	                 m.max_players, m.description, m.encoded_options, m.encoded_slots
 	          FROM matches m
 	          JOIN match_players p ON p.match_id = m.match_id
 	          WHERE m.reported = 1
@@ -827,7 +853,8 @@ func scanMatch(rows *sql.Rows) (MatchResult, error) {
 		startedAt, finishedAt int64
 	)
 	err := rows.Scan(&m.MatchID, &m.MapID, &m.MapName, &m.LeaderboardID, &m.QueueType,
-		&m.WinnerTeam, &startedAt, &finishedAt)
+		&m.WinnerTeam, &startedAt, &finishedAt,
+		&m.MaxPlayers, &m.Description, &m.EncodedOptions, &m.EncodedSlots)
 	if err != nil {
 		return m, err
 	}

@@ -232,6 +232,70 @@ func TestApplyResultPersistsClientReportDetailsInReportOrder(t *testing.T) {
 	}
 }
 
+// The lobby metadata the client sends when hosting has to survive the match so
+// getRecentMatchHistory can echo it back as encodedOptions/encodedSlots.
+func TestApplyResultPersistsLobbyMetadata(t *testing.T) {
+	store := newTestStore(t)
+	store.ApplyResult(MatchResult{
+		MatchID:        300,
+		MapName:        "generated_map",
+		MaxPlayers:     16,
+		Description:    "unnamed_session",
+		EncodedOptions: "eNq-options",
+		EncodedSlots:   `12,[{"profileInfo.id":10}]`,
+		Players:        []int32{10},
+		Teams:          []int32{0},
+		Results:        []int32{1},
+	})
+
+	matches := store.GetRecentForProfiles([]int32{10}, 10)
+	if len(matches) != 1 {
+		t.Fatalf("matches = %+v", matches)
+	}
+	got := matches[0]
+	if got.MapName != "generated_map" || got.MaxPlayers != 16 || got.Description != "unnamed_session" {
+		t.Errorf("metadata = %q/%d/%q", got.MapName, got.MaxPlayers, got.Description)
+	}
+	if got.EncodedOptions != "eNq-options" || got.EncodedSlots != `12,[{"profileInfo.id":10}]` {
+		t.Errorf("blobs = %q/%q", got.EncodedOptions, got.EncodedSlots)
+	}
+}
+
+// A second report of the same match without the lobby metadata must not wipe
+// what the first one stored.
+func TestApplyResultKeepsStoredLobbyMetadataOnRepeat(t *testing.T) {
+	store := newTestStore(t)
+	store.ApplyResult(MatchResult{
+		MatchID:        301,
+		MapName:        "generated_map",
+		MaxPlayers:     16,
+		Description:    "unnamed_session",
+		EncodedOptions: "eNq-options",
+		EncodedSlots:   "12,[]",
+		Players:        []int32{10},
+		Teams:          []int32{0},
+		Results:        []int32{1},
+	})
+	store.ApplyResult(MatchResult{
+		MatchID: 301,
+		Players: []int32{10},
+		Teams:   []int32{0},
+		Results: []int32{1},
+	})
+
+	matches := store.GetRecentForProfiles([]int32{10}, 10)
+	if len(matches) != 1 {
+		t.Fatalf("matches = %+v", matches)
+	}
+	got := matches[0]
+	if got.MapName != "generated_map" || got.MaxPlayers != 16 || got.Description != "unnamed_session" {
+		t.Errorf("metadata = %q/%d/%q", got.MapName, got.MaxPlayers, got.Description)
+	}
+	if got.EncodedOptions != "eNq-options" || got.EncodedSlots != "12,[]" {
+		t.Errorf("blobs = %q/%q", got.EncodedOptions, got.EncodedSlots)
+	}
+}
+
 func TestCustomMatchDoesNotChangeRating(t *testing.T) {
 	store := newTestStore(t)
 	_, rated := store.ApplyResult(MatchResult{

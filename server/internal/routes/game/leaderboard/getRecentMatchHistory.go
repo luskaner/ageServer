@@ -68,20 +68,31 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 				streak = rating.Streak
 			}
 			statGroupID := models.ResolveStatGroupID(userStatGroupID, storedStatGroupID, ratingStatGroupID)
+			// The official service never reports a zero rating or a zero
+			// arbitration: an unrated match still carries the default rating and
+			// arbitration 1, which is the value it uses for every single-player
+			// match in the logs.
+			oldRating, newRating := player.RatingBefore, player.RatingAfter
+			if oldRating <= 0 {
+				oldRating = models.DefaultRating
+			}
+			if newRating <= 0 {
+				newRating = oldRating
+			}
 			memberStats = append(memberStats, i.A{
-				match.MatchID,       // matchHistoryID
-				player.ProfileID,    // profileID
-				player.RaceID,       // raceID
-				statGroupID,         // statGroupID
-				player.TeamID,       // teamID
-				wins,                // wins
-				losses,              // losses
-				streak,              // streak
-				0,                   // arbitration
-				player.Result,       // outcome
-				player.RatingBefore, // oldRating
-				player.RatingAfter,  // newRating
-				0,                   // reportType
+				match.MatchID,    // matchHistoryID
+				player.ProfileID, // profileID
+				player.RaceID,    // raceID
+				statGroupID,      // statGroupID
+				player.TeamID,    // teamID
+				wins,             // wins
+				losses,           // losses
+				streak,           // streak
+				1,                // arbitration
+				player.Result,    // outcome
+				oldRating,        // oldRating
+				newRating,        // newRating
+				1,                // reportType
 			})
 		}
 
@@ -89,13 +100,7 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		if len(match.PlayerStats) > 0 {
 			creator = match.PlayerStats[0].ProfileID
 		}
-		matchTypeID := 0
-		description := match.MapName
-		if match.QueueType != "" || match.Rated {
-			// 26 is the 1v1 ranked automatch type used by the official service.
-			matchTypeID = 26
-			description = "AUTOMATCH"
-		}
+		mapName, maxPlayers, description, matchTypeID := matchHistoryMetadata(match)
 		// matchUrls is one entry per uploaded artifact: age4 has kind 0 and 1,
 		// age2 and athens (multiplayer) only kind 0. The URL carries no SAS; the
 		// client asks getTempCredentials for it.
@@ -115,11 +120,11 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		history = append(history, i.A{
 			match.MatchID,           // matchHistoryID
 			creator,                 // creatorProfileID
-			match.MapName,           // mapName
-			len(match.PlayerStats),  // maxPlayers
+			mapName,                 // mapName
+			maxPlayers,              // maxPlayers
 			matchTypeID,             // matchTypeID
-			"",                      // encodedOptions
-			"",                      // encodedSlots
+			match.EncodedOptions,    // encodedOptions
+			match.EncodedSlots,      // encodedSlots
 			description,             // description
 			match.StartedAt.Unix(),  // startGameTime
 			match.FinishedAt.Unix(), // completionTime
@@ -138,6 +143,27 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		len(history),
 	)
 	i.JSON(&w, i.A{0, history})
+}
+
+// matchHistoryMetadata resolves the lobby metadata the client sent when hosting
+// the advertisement. The official service echoes it back verbatim, so the client
+// can rebuild the slot layout of the post-game screen.
+func matchHistoryMetadata(match models.MatchResult) (mapName string, maxPlayers int32, description string, matchTypeID int32) {
+	mapName = match.MapName
+	description = match.Description
+	// maxPlayers is the lobby capacity, not the number of players that showed
+	// up: the official service reports 16 for every AoE IV match, 8 for AoE II
+	// and 12 for AoM.
+	maxPlayers = match.MaxPlayers
+	if maxPlayers == 0 {
+		maxPlayers = int32(len(match.PlayerStats))
+	}
+	if match.QueueType != "" || match.Rated {
+		// 26 is the 1v1 ranked automatch type used by the official service.
+		matchTypeID = 26
+		description = "AUTOMATCH"
+	}
+	return mapName, maxPlayers, description, matchTypeID
 }
 
 func matchHistoryReportResult(match models.MatchResult, player models.MatchPlayer) i.A {
