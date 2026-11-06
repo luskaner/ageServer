@@ -423,6 +423,9 @@ func buildExpectedRoutes(gameId string) []routeCase {
 	if gameId == game.AoE2 || gameId == game.AoE4 || gameId == game.AoM {
 		add("GET", "/game/Leaderboard/getRecentMatchHistory")
 	}
+	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
+		add("GET", "/game/Leaderboard/getPersonalStat")
+	}
 	add("GET", "/game/Leaderboard/getLeaderBoard")
 	add("GET", "/game/Leaderboard/getAvailableLeaderboards")
 	add("GET", "/game/Leaderboard/getStatGroupsByProfileIDs")
@@ -444,6 +447,15 @@ func buildExpectedRoutes(gameId string) []routeCase {
 	if gameId == game.AoE4 {
 		add("POST", "/game/automatch2/polling")
 		add("POST", "/game/automatch2/stoppolling")
+		add("POST", "/game/automatch2/updateStatus")
+	}
+	if gameId == game.AoE2 {
+		add("POST", "/game/automatch2/polling")
+		add("GET", "/game/automatch2/polling")
+		add("POST", "/game/automatch2/stoppolling")
+		add("GET", "/game/automatch2/stoppolling")
+		add("POST", "/game/automatch2/updateStatus")
+		add("GET", "/game/automatch2/updateStatus")
 	}
 
 	add("GET", "/game/Achievement/getAchievements")

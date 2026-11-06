@@ -73,17 +73,19 @@ func Host(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if gameTitle != game.AoE2 && gameTitle != game.AoE4 && models.IsAutomatchDescription(adv.Description) {
-		// Matchmaking is only implemented for AoE2:DE. Keep the previous
-		// behaviour for the other titles.
+	if !models.AutomatchSupported(gameTitle) && models.IsAutomatchDescription(adv.Description) {
+		// Matchmaking is only implemented for the titles whose flow has been
+		// captured. Keep the previous behaviour for the others.
 		returnError(battleServers, gameTitle, sess.GetClientLibVersion(), r, &w)
 		return
 	}
 	// SESSION_MATCH_KEY is used both by ordinary session/party lobbies
 	// (matchtype 1, four empty slots) and by the actual matchmaking host
-	// (matchtype 19, no_map). Only the latter is server-managed.
-	automatch := gameTitle == game.AoE2 &&
-		(adv.AutomatchPollId > 0 || adv.MatchType == models.AutomatchAdvertisementMatchType)
+	// (matchtype 19, no_map) in AoE2. AoE4 uses description AUTOMATCH.
+	automatch := models.AutomatchSupported(gameTitle) &&
+		(adv.AutomatchPollId > 0 ||
+			adv.MatchType == models.AutomatchAdvertisementMatchType ||
+			adv.Description == models.AutomatchAutoMatchDescription)
 	var reservation models.AutomatchHostReservation
 	var battleServer models.BattleServer
 
@@ -91,7 +93,7 @@ func Host(w http.ResponseWriter, r *http.Request) {
 		// Keep the server-side marker even if the client omitted the
 		// description. The advertisement flag below is what the join/update
 		// routes use to recognize the server-managed matchmaking lobby.
-		adv.Description = models.AutomatchMatchDescription
+		adv.Description = reservation.Description
 		logger.Printf(
 			"automatch2: host request user=%d adv=%d poll=%d desc=%q matchtype=%d state=%d map=%q max=%d party=%d relay=%q\n",
 			adv.HostId,
@@ -130,7 +132,7 @@ func Host(w http.ResponseWriter, r *http.Request) {
 			adv.MaxPlayers = reservation.MaxPlayers
 		}
 		adv.MapName = reservation.MapName
-		adv.MatchType = models.AutomatchAdvertisementMatchType
+		adv.MatchType = reservation.MatchType
 		adv.RelayRegion = reservation.BattleServer.Region()
 		adv.Joinable = true
 		// The matchmaking host request carries synthetic race/team values.

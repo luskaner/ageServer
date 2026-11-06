@@ -38,7 +38,7 @@ type AdvertisementUpdateRequest struct {
 	Passworded        bool   `schema:"passworded"`
 	Visible           bool   `schema:"visible"`
 	Joinable          bool   `schema:"joinable"`
-	MatchType         uint8  `schema:"matchtype"`
+	MatchType         uint16 `schema:"matchtype"`
 	MaxPlayers        uint8  `schema:"maxplayers"`
 	Options           string `schema:"options"`
 	SlotInfo          string `schema:"slotinfo"`
@@ -63,7 +63,7 @@ type AdvertisementHostRequest struct {
 	Visible          bool   `schema:"visible"`
 	StatGroup        int32  `schema:"statgroup"`
 	Joinable         bool   `schema:"joinable"`
-	MatchType        uint8  `schema:"matchtype"`
+	MatchType        uint16 `schema:"matchtype"`
 	MaxPlayers       uint8  `schema:"maxplayers"`
 	Options          string `schema:"options"`
 	SlotInfo         string `schema:"slotinfo"`

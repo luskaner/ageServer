@@ -40,8 +40,6 @@ type reportMatchRequest struct {
 
 const maxReportCountersSize = 1 << 20
 
-const rankedAutomatchQueueID int32 = 6
-
 // defaultMatchCustomUpdate holds the empty document used for a key the client
 // did not send. Unknown keys are kept as received so client-side data such as
 // customScoring survives a round trip through the server.
@@ -237,6 +235,24 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 		i.JSON(&w, reportMatchResponse(2, nil))
 		return
 	}
+	// The client does not echo the queue or the ladder. Recover them from the
+	// pending match that was recorded when the pairing was created, so a
+	// Death Match/Empire Wars/co-op result is not scored as 1v1 Random Map
+	// (D4/D13).
+	if pending, ok := history.GetMatch(req.MatchID); ok {
+		if pending.QueueType != "" {
+			result.QueueType = pending.QueueType
+		}
+		if pending.LeaderboardID != 0 {
+			result.LeaderboardID = pending.LeaderboardID
+		}
+		if pending.MatchType > 0 {
+			result.MatchType = pending.MatchType
+			result.QueueID = pending.MatchType
+		}
+		// A pending match only has a ladder when its queue was rated.
+		result.Rated = pending.LeaderboardID > 0
+	}
 	ratings, rated := history.ApplyResult(result)
 	if !history.HasMatch(req.MatchID) {
 		logger.Printf("party.reportMatch: match=%d was not persisted\n", req.MatchID)
@@ -297,6 +313,12 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func gameResultNotification(match models.MatchResult, ratings map[int32]*models.PlayerRating, statGroupIDs map[int32]int32) i.A {
+	matchTypeID := match.MatchType
+	if matchTypeID <= 0 {
+		if queueID, ok := models.QueueIDFromQueueType(match.QueueType); ok {
+			matchTypeID = queueID
+		}
+	}
 	results := make(i.A, 0, len(match.Players))
 	leaderboardStats := make(i.A, 0, len(match.Players))
 	// Slot 4 of every row is the list of teams that won, not the result of the
@@ -332,7 +354,7 @@ func gameResultNotification(match models.MatchResult, ratings map[int32]*models.
 		statGroupID := statGroupIDs[profileID]
 		results = append(results, i.A{
 			profileID,
-			rankedAutomatchQueueID,
+			matchTypeID,
 			raceID,
 			teamID,
 			winningTeams,
@@ -354,7 +376,7 @@ func gameResultNotification(match models.MatchResult, ratings map[int32]*models.
 		if rating == nil {
 			rating = &models.PlayerRating{
 				ProfileID:     profileID,
-				LeaderboardID: models.SoloRMRanked,
+				LeaderboardID: match.LeaderboardID,
 				Rating:        models.DefaultRating,
 				HighestRating: models.DefaultRating,
 			}

@@ -24,6 +24,10 @@ type Values struct {
 	AnnounceMulticast      string
 	AnnounceMulticastGroup string
 	StartBsIfMissing       string
+	// AssumeQueue unlocks matchmaking when the map pool a client uses is not
+	// part of the bundled automatchMaps.json. Only "rm-solo" is accepted; see
+	// docs/matchmaking.md §4.1.
+	AssumeQueue string
 }
 
 func SingleFlagSet(version string, configPaths []string, runFn func(*pflag.FlagSet) (err error, exitCode int)) (values *Values, singleFs *cmd.SingleFlagSet) {
@@ -46,5 +50,6 @@ func SingleFlagSet(version string, configPaths []string, runFn func(*pflag.FlagS
 	flags.BoolVarP(&values.GeneratePlatformUserId, "generatePlatformUserId", "g", false, "Generate the Platform User Id based on the user's IP.")
 	flags.StringVar(&values.Id, "id", "", "Server instance ID to identify it.")
 	flags.StringVar(&values.StartBsIfMissing, "startBsIfMissing", "true", "Embedded battle server mode for all enabled games (true, false, required)")
+	flags.StringVar(&values.AssumeQueue, "assumeQueue", "", "Match unknown matchTypes as the given queue when the bundled map pool is out of date. Accepted: rm-solo (forces the match to be unrated)")
 	return
 }

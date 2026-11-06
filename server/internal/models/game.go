@@ -44,6 +44,10 @@ type MatchHistory interface {
 	// match is created, so the result can still be attributed after the
 	// matchmaking entry has been removed.
 	RecordPendingMatch(m MatchResult)
+	// GetMatch returns the stored metadata of a match (no player rows). The
+	// report route uses it to recover the queue type and ladder that the
+	// client does not send back.
+	GetMatch(matchID int64) (MatchResult, bool)
 	// ApplyResult stores a reported result and returns the updated ratings and
 	// whether this call moved them.
 	ApplyResult(m MatchResult) (map[int32]*PlayerRating, bool)
@@ -213,7 +217,6 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 			store.BackfillProfiles(userDataDir)
 		}
 	}
-	game.matchmaking.Initialize(game)
 	if itemLocations, ok := game.resources.ArrayFiles()["itemLocations.json"]; ok {
 		if opts.Instances.Items == nil {
 			opts.Instances.Items = &MainItems{}
@@ -227,8 +230,11 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 			opts.Instances.LeaderboardDefinitions = &MainLeaderboardDefinitions{}
 		}
 		game.leaderboardDefinitions = opts.Instances.LeaderboardDefinitions
-		game.leaderboardDefinitions.Initialize(leaderboards)
+		game.leaderboardDefinitions.Initialize(gameId, leaderboards)
 	}
+	// The matchmaking catalog validates its ladders against
+	// LeaderboardDefinitions, so it must be loaded after that resource.
+	game.matchmaking.Initialize(game)
 	if opts.Instances.PresenceDefinitions == nil {
 		opts.Instances.PresenceDefinitions = &MainPresenceDefinitions{}
 	}

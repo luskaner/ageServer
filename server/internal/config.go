@@ -102,6 +102,16 @@ type Configuration struct {
 	CustomFiles            CustomFiles
 	Replays                Replays
 	Sign                   SignConfig
+	Automatch              Automatch
+}
+
+// Automatch configures the Quick Match engine.
+type Automatch struct {
+	// AssumeQueue is the opt-in fallback used when a client asks for a pool
+	// that the bundled automatchMaps.json does not know. Empty (the default)
+	// rejects unknown matchTypes. "rm-solo" pairs them as 1v1 Random Map and
+	// forces the resulting match to be unrated. See docs/matchmaking.md §4.1.
+	AssumeQueue string
 }
 
 func (cfg *Configuration) GetGameHosts(gameId string) []string {

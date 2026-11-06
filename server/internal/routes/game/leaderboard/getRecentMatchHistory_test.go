@@ -36,7 +36,7 @@ func TestMatchHistoryMetadataMarksAutomatch(t *testing.T) {
 		QueueType:   "automatch2-6",
 		Description: "unnamed_session",
 	})
-	if matchTypeID != 26 || description != "AUTOMATCH" {
+	if matchTypeID != 6 || description != "AUTOMATCH" {
 		t.Fatalf("automatch = %d/%q", matchTypeID, description)
 	}
 }

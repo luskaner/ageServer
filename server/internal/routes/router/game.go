@@ -137,7 +137,9 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 	if gameId == game.AoE4 {
 		LeaderboardGroup.HandleFunc("GET", "/getRecentMatchSinglePlayerHistory", leaderboard.GetRecentMatchSinglePlayerHistory)
 	}
-	// Implement getPersonalStat ?
+	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
+		LeaderboardGroup.HandleFunc("GET", "/getPersonalStat", leaderboard.GetPersonalStat)
+	}
 	leaderboardGroup := gameGroup.Subgroup("/leaderboard")
 	leaderboardGroup.HandleFunc("POST", "/applyOfflineUpdates", leaderboard.ApplyOfflineUpdates)
 	leaderboardGroup.HandleFunc("POST", "/setAvatarStatValues", leaderboard.SetAvatarStatValues)
@@ -151,7 +153,8 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 	automatch2Group.HandleFunc("GET", "/getAutomatchMap", Automatch2.GetAutomatchMap)
 	if gameId == game.AoE4 {
 		automatch2Group.HandleFunc("POST", "/polling", Automatch2.Polling)
-		automatch2Group.HandleFunc("POST", "/stoppolling", Automatch2.Stoppolling)
+		automatch2Group.HandleFunc("POST", "/stoppolling", Automatch2.StopPolling)
+		automatch2Group.HandleFunc("POST", "/updateStatus", Automatch2.UpdateStatus)
 	} else if gameId == game.AoE2 {
 		automatch2Group.HandleFunc("POST", "/polling", Automatch2.PollingAoE2)
 		automatch2Group.HandleFunc("GET", "/polling", Automatch2.PollingAoE2)

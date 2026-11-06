@@ -44,7 +44,7 @@ func TestGameSpecificRoutes_httptest(t *testing.T) {
 		{name: "AoE3_getChatChannels", gameId: game.AoE3, method: "POST", path: "/game/chat/getChatChannels", wantFirst: 0},
 
 		// --- AoE4 ---
-		{name: "AoE4_polling", gameId: game.AoE4, method: "POST", path: "/game/automatch2/polling", wantFirst: 2},
+		{name: "AoE4_polling", gameId: game.AoE4, method: "POST", path: "/game/automatch2/polling", wantFirst: 0},
 		{name: "AoE4_stoppolling", gameId: game.AoE4, method: "POST", path: "/game/automatch2/stoppolling", wantFirst: -1},
 		{name: "AoE4_getAutomatchMap", gameId: game.AoE4, method: "GET", path: "/game/automatch/getAutomatchMap", wantFirst: -1},
 		{name: "AoE4_getRecentMatchSinglePlayerHistory", gameId: game.AoE4, method: "GET", path: "/game/Leaderboard/getRecentMatchSinglePlayerHistory", wantFirst: -1},

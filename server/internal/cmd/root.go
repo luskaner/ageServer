@@ -117,6 +117,16 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		return
 	}
 	internal.Authentication = cfg.Authentication
+	assumeQueue := strings.ToLower(strings.TrimSpace(cfg.Automatch.AssumeQueue))
+	if assumeQueue != "" && assumeQueue != "rm-solo" {
+		logger.Fail("Invalid automatch assume-queue value: %s (accepted: rm-solo)", cfg.Automatch.AssumeQueue)
+		exitCode = common.ErrConfigParse
+		return
+	}
+	if assumeQueue != "" {
+		logger.Warn("Automatch unknown matchTypes will be paired as unrated 1v1 Random Map (assume-queue=%s)", assumeQueue)
+	}
+	internal.AutomatchAssumeQueue = assumeQueue
 	var seed uint64
 	if !values.Deterministic {
 		seed = uint64(time.Now().UnixNano())
@@ -518,6 +528,7 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"Replays.MaxFileSize":           "32MB",
 		"Replays.MaxTotalSize":          "1GB",
 		"Replays.Expiry":                "-1s",
+		"Automatch.AssumeQueue":         "",
 	}
 	for g := range game.SupportedGames.Iter() {
 		defaults[fmt.Sprintf("Games.%s.Hosts", g)] = []string{netip.IPv4Unspecified().String()}
@@ -534,6 +545,7 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"announceMulticastGroup": "Announcement.MulticastGroup",
 		"announcePort":           "Announcement.Port",
 		cmd.GamesIdentifier:      "Games.Enabled",
+		"assumeQueue":            "Automatch.AssumeQueue",
 	}
 	var fileCandidates []string
 	if values.CfgFile != "" {

@@ -27,6 +27,11 @@ var SignConfigRuntime struct {
 var CanUseInternet bool
 var Authentication string
 
+// AutomatchAssumeQueue is the opt-in fallback for unknown matchTypes. Empty
+// keeps the strict "unknown pool does not match" rule; "rm-solo" enables the
+// unrated 1v1 Random Map fallback described in docs/matchmaking.md §4.1.
+var AutomatchAssumeQueue string
+
 // CustomFiles holds the resolved /api/MatchContent/ configuration. Set once at
 // startup, before any game is created, so both the model and the HTTP handlers
 // see the same values without dragging the whole config around.

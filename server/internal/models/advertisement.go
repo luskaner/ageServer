@@ -52,7 +52,7 @@ type Advertisement interface {
 	UnsafeSetAutomatch(automatch bool)
 	UnsafeGetAppBinaryChecksum() int32
 	UnsafeGetDataChecksum() int32
-	UnsafeGetMatchType() uint8
+	UnsafeGetMatchType() uint16
 	UnsafeGetModName() string
 	UnsafeGetModVersion() string
 	UnsafeGetVersionFlags() uint32
@@ -100,7 +100,7 @@ type MainAdvertisement struct {
 	versionFlags      uint32
 	joinable          bool
 	automatch         bool
-	matchType         uint8
+	matchType         uint16
 	maxPlayers        uint8
 	options           string
 	slotInfo          string
@@ -260,7 +260,7 @@ func (adv *MainAdvertisement) UnsafeGetDataChecksum() int32 {
 }
 
 // UnsafeGetMatchType requires advertisement read lock
-func (adv *MainAdvertisement) UnsafeGetMatchType() uint8 {
+func (adv *MainAdvertisement) UnsafeGetMatchType() uint16 {
 	return adv.matchType
 }
 

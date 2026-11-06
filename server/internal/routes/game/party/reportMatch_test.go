@@ -194,13 +194,14 @@ func TestCountersPairsToleratesMissingOrMalformed(t *testing.T) {
 
 func TestGameResultNotificationMatchesOfficialShape(t *testing.T) {
 	match := models.MatchResult{
-		MatchID:  518002788,
-		Players:  []int32{24916071, 25344413},
-		Teams:    []int32{0, 1},
-		Results:  []int32{1, 0},
-		Races:    []int32{199703, 129267},
-		XPGained: []int32{4, 2},
-		Counters: []string{`{"unitprod":0,"totalcmds":87}`, `{"unitprod":1,"totalcmds":12}`},
+		MatchID:   518002788,
+		QueueType: "automatch2-6",
+		Players:   []int32{24916071, 25344413},
+		Teams:     []int32{0, 1},
+		Results:   []int32{1, 0},
+		Races:     []int32{199703, 129267},
+		XPGained:  []int32{4, 2},
+		Counters:  []string{`{"unitprod":0,"totalcmds":87}`, `{"unitprod":1,"totalcmds":12}`},
 	}
 	ratings := map[int32]*models.PlayerRating{
 		24916071: {

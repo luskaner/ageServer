@@ -43,27 +43,32 @@ const (
 // derive from the client payload are filled in; everything else stays at its
 // zero value.
 type MatchResult struct {
-	MatchID        int64         `json:"matchId"`
-	MapID          int32         `json:"mapId"`
-	MapName        string        `json:"mapName"`
-	MaxPlayers     int32         `json:"maxPlayers"`
-	Description    string        `json:"description"`
-	EncodedOptions string        `json:"encodedOptions"`
-	EncodedSlots   string        `json:"encodedSlots"`
-	LeaderboardID  int32         `json:"leaderboard"`
-	QueueType      string        `json:"queueType"`
-	Players        []int32       `json:"players"`
-	Teams          []int32       `json:"teams"`
-	Results        []int32       `json:"results"`
-	Races          []int32       `json:"races"`
-	XPGained       []int32       `json:"xpGained"`
-	Counters       []string      `json:"counters"`
-	CustomUpdates  []string      `json:"customUpdates"`
-	WinnerTeam     int32         `json:"winnerTeam"`
-	StartedAt      time.Time     `json:"startedAt"`
-	FinishedAt     time.Time     `json:"finishedAt"`
-	Rated          bool          `json:"rated"`
-	PlayerStats    []MatchPlayer `json:"playerStats,omitempty"`
+	MatchID        int64  `json:"matchId"`
+	MapID          int32  `json:"mapId"`
+	MapName        string `json:"mapName"`
+	MaxPlayers     int32  `json:"maxPlayers"`
+	Description    string `json:"description"`
+	EncodedOptions string `json:"encodedOptions"`
+	EncodedSlots   string `json:"encodedSlots"`
+	LeaderboardID  int32  `json:"leaderboard"`
+	QueueType      string `json:"queueType"`
+	// MatchType is the client pool/queue id that was paired (automatch2-<id>).
+	// QueueID is kept as an explicit alias because the plan distinguishes the
+	// catalog queue from the legacy match type.
+	MatchType     int32         `json:"matchType"`
+	QueueID       int32         `json:"queueId"`
+	Players       []int32       `json:"players"`
+	Teams         []int32       `json:"teams"`
+	Results       []int32       `json:"results"`
+	Races         []int32       `json:"races"`
+	XPGained      []int32       `json:"xpGained"`
+	Counters      []string      `json:"counters"`
+	CustomUpdates []string      `json:"customUpdates"`
+	WinnerTeam    int32         `json:"winnerTeam"`
+	StartedAt     time.Time     `json:"startedAt"`
+	FinishedAt    time.Time     `json:"finishedAt"`
+	Rated         bool          `json:"rated"`
+	PlayerStats   []MatchPlayer `json:"playerStats,omitempty"`
 }
 
 // MatchPlayer is the per-profile part of a reported match.
@@ -132,9 +137,10 @@ func ResolveStatGroupID(user, stored, ratingStatID int32) int32 {
 // (resources/userData/<gameId>/automatch2.db). The database and its schema are
 // created on first use and reused on every later start.
 type MatchHistoryStore struct {
-	mu   sync.RWMutex
-	db   *sql.DB
-	path string
+	mu     sync.RWMutex
+	db     *sql.DB
+	path   string
+	gameID string
 }
 
 // NewMatchHistoryStore opens (and creates when missing) the database in
@@ -178,7 +184,20 @@ func NewMatchHistoryStore(dataDir string) *MatchHistoryStore {
 // NewMatchHistoryStoreForGame keeps the match history next to the rest of the
 // server's per-game user data.
 func NewMatchHistoryStoreForGame(gameId string) *MatchHistoryStore {
-	return NewMatchHistoryStore(filepath.Join(userDataFolder, gameId))
+	store := NewMatchHistoryStore(filepath.Join(userDataFolder, gameId))
+	store.gameID = gameId
+	return store
+}
+
+// defaultLeaderboard is the ladder used when a caller does not provide one.
+// age1 queries ladder 1, age2 ladder 3 and the rest use their documented
+// default (D13). A store created without a game id keeps the historical 1v1
+// Random Map fallback.
+func (s *MatchHistoryStore) defaultLeaderboard() int32 {
+	if s.gameID == "" {
+		return SoloRMRanked
+	}
+	return DefaultLeaderboardFor(s.gameID)
 }
 
 func (s *MatchHistoryStore) GetStorePath() string { return s.path }
@@ -380,6 +399,53 @@ func (s *MatchHistoryStore) RecordPendingMatch(m MatchResult) {
 	if err = tx.Commit(); err != nil {
 		logger.Printf("matchHistory: pending match %d commit: %s\n", m.MatchID, err)
 	}
+}
+
+// GetMatch returns the metadata of a stored match without loading its player
+// rows. The queue type and ladder are recorded when the match is paired, so
+// this is what lets reportMatch score the result on the right ladder (D4/D13).
+func (s *MatchHistoryStore) GetMatch(matchID int64) (MatchResult, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil || matchID == 0 {
+		return MatchResult{}, false
+	}
+	var (
+		m                     MatchResult
+		startedAt, finishedAt int64
+		rated                 int
+	)
+	err := s.db.QueryRow(
+		`SELECT match_id, map_id, map_name, leaderboard_id, queue_type, winner_team,
+		        started_at, finished_at, max_players, description, encoded_options,
+		        encoded_slots, rated
+		 FROM matches WHERE match_id = ?`, matchID,
+	).Scan(&m.MatchID, &m.MapID, &m.MapName, &m.LeaderboardID, &m.QueueType,
+		&m.WinnerTeam, &startedAt, &finishedAt, &m.MaxPlayers, &m.Description,
+		&m.EncodedOptions, &m.EncodedSlots, &rated)
+	if err != nil {
+		return MatchResult{}, false
+	}
+	m.StartedAt = time.Unix(startedAt, 0)
+	m.FinishedAt = time.Unix(finishedAt, 0)
+	m.Rated = rated != 0
+	m.QueueID, _ = QueueIDFromQueueType(m.QueueType)
+	m.MatchType = m.QueueID
+	return m, true
+}
+
+// QueueIDFromQueueType extracts the pool id from the "automatch2-<id>" queue
+// type the server stores. It returns false for non-automatch matches.
+func QueueIDFromQueueType(queueType string) (int32, bool) {
+	const prefix = "automatch2-"
+	if len(queueType) <= len(prefix) || queueType[:len(prefix)] != prefix {
+		return 0, false
+	}
+	value, err := strconv.ParseInt(queueType[len(prefix):], 10, 32)
+	if err != nil || value <= 0 {
+		return 0, false
+	}
+	return int32(value), true
 }
 
 // ApplyResult stores a reported result and, the first time it is seen, moves
@@ -744,7 +810,7 @@ func (s *MatchHistoryStore) UpdateRatings(m MatchResult) {
 }
 
 func (s *MatchHistoryStore) GetRatings(profiles []int32) map[int32]*PlayerRating {
-	return s.GetRatingsForLeaderboard(SoloRMRanked, profiles)
+	return s.GetRatingsForLeaderboard(s.defaultLeaderboard(), profiles)
 }
 
 func (s *MatchHistoryStore) GetRatingsForLeaderboard(leaderboardID int32, profiles []int32) map[int32]*PlayerRating {
@@ -758,7 +824,7 @@ func (s *MatchHistoryStore) GetRatingsForLeaderboard(leaderboardID int32, profil
 func (s *MatchHistoryStore) getRatingsLocked(leaderboardID int32, profiles []int32) map[int32]*PlayerRating {
 	out := make(map[int32]*PlayerRating, len(profiles))
 	if leaderboardID <= 0 {
-		leaderboardID = SoloRMRanked
+		leaderboardID = s.defaultLeaderboard()
 	}
 	for _, profile := range profiles {
 		out[profile] = &PlayerRating{
@@ -891,7 +957,7 @@ func (s *MatchHistoryStore) loadPlayersLocked(m MatchResult) MatchResult {
 }
 
 func (s *MatchHistoryStore) GetLeaderboard(limit int) []*PlayerRating {
-	list, _ := s.GetLeaderboardPage(SoloRMRanked, 0, limit)
+	list, _ := s.GetLeaderboardPage(s.defaultLeaderboard(), 0, limit)
 	return list
 }
 
@@ -900,7 +966,7 @@ func (s *MatchHistoryStore) GetLeaderboard(limit int) []*PlayerRating {
 // profiles.
 func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count int) ([]*PlayerRating, int64) {
 	if leaderboardID <= 0 {
-		leaderboardID = SoloRMRanked
+		leaderboardID = s.defaultLeaderboard()
 	}
 	if start < 0 {
 		start = 0
@@ -951,18 +1017,19 @@ func (s *MatchHistoryStore) GetDefaultRating() int32 { return DefaultRating }
 func (s *MatchHistoryStore) EnsureRating(profileID int32, statID int32) *PlayerRating {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	leaderboardID := s.defaultLeaderboard()
 	if s.db == nil {
-		return &PlayerRating{ProfileID: profileID, LeaderboardID: SoloRMRanked, StatID: statID, Rating: DefaultRating, HighestRating: DefaultRating}
+		return &PlayerRating{ProfileID: profileID, LeaderboardID: s.defaultLeaderboard(), StatID: statID, Rating: DefaultRating, HighestRating: DefaultRating}
 	}
 	if _, err := s.db.Exec(
 		`INSERT INTO ratings (leaderboard_id, profile_id, stat_id, rating, highest_rating)
 		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(leaderboard_id, profile_id) DO UPDATE SET stat_id = CASE WHEN excluded.stat_id <> 0 THEN excluded.stat_id ELSE ratings.stat_id END`,
-		SoloRMRanked, profileID, statID, DefaultRating, DefaultRating,
+		leaderboardID, profileID, statID, DefaultRating, DefaultRating,
 	); err != nil {
 		logger.Printf("matchHistory: ensure rating %d: %s\n", profileID, err)
 	}
-	ratings := s.getRatingsLocked(SoloRMRanked, []int32{profileID})
+	ratings := s.getRatingsLocked(leaderboardID, []int32{profileID})
 	return ratings[profileID]
 }
 

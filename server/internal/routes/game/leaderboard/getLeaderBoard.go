@@ -30,12 +30,14 @@ type getLeaderBoardRequest struct {
 // three positions can be filled.
 func GetLeaderBoard(w http.ResponseWriter, r *http.Request) {
 	logger.Printf("leaderboard.getLeaderBoard: query=%s\n", r.URL.RawQuery)
+	game := models.G(r)
 
 	// Defaults are assigned before binding so a missing parameter keeps the
-	// value the client expects: the 1v1 RM ranked ladder, first page, 100
-	// entries per page.
+	// value the client expects for its title (age1 asks ladder 1, age2 ladder
+	// 3). Leaderboard 0 means unrated.
+	defaultLeaderboard := models.DefaultLeaderboardFor(game.Title())
 	q := getLeaderBoardRequest{
-		LeaderboardID: models.SoloRMRanked,
+		LeaderboardID: defaultLeaderboard,
 		Start:         1,
 		Count:         100,
 	}
@@ -45,7 +47,7 @@ func GetLeaderBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if q.LeaderboardID <= 0 {
-		q.LeaderboardID = models.SoloRMRanked
+		q.LeaderboardID = defaultLeaderboard
 	}
 	if q.Start <= 0 {
 		q.Start = 1
@@ -57,7 +59,6 @@ func GetLeaderBoard(w http.ResponseWriter, r *http.Request) {
 		q.Count = models.MaxLeaderboardPageSize
 	}
 
-	game := models.G(r)
 	page, total := game.MatchHistory().GetLeaderboardPage(q.LeaderboardID, q.Start-1, q.Count)
 	users := game.Users()
 	history := game.MatchHistory()

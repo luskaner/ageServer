@@ -159,8 +159,15 @@ func matchHistoryMetadata(match models.MatchResult) (mapName string, maxPlayers 
 		maxPlayers = int32(len(match.PlayerStats))
 	}
 	if match.QueueType != "" || match.Rated {
-		// 26 is the 1v1 ranked automatch type used by the official service.
-		matchTypeID = 26
+		// Report the real automatch pool id instead of a fixed 26 (D13). Older
+		// rows that predate the queue type keep 26 as a conservative value.
+		matchTypeID = match.MatchType
+		if queueID, ok := models.QueueIDFromQueueType(match.QueueType); ok {
+			matchTypeID = queueID
+		}
+		if matchTypeID == 0 {
+			matchTypeID = 26
+		}
 		description = "AUTOMATCH"
 	}
 	return mapName, maxPlayers, description, matchTypeID
