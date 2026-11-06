@@ -30,7 +30,10 @@ type reportMatchRequest struct {
 	XPGained     i.Json[[]int32] `schema:"xpGained"`
 	CountersZip  string          `schema:"countersZip"`
 	ItemUpdates  string          `schema:"itemUpdates"`
-	SimPlayerIDs i.Json[[]int32] `schema:"simplayerIDs"`
+	// simplayerIDs is a client-side unsigned value: AoE III sends 4294967295
+	// (0xFFFFFFFF, "no sim player") and int32 cannot hold it, which failed the
+	// whole bind and dropped the match. It is only logged, so int64 is enough.
+	SimPlayerIDs i.Json[[]int64] `schema:"simplayerIDs"`
 	CheckSums    i.Json[[]int32] `schema:"checkSums"`
 	LastCallTime int64           `schema:"lastCallTime"`
 }

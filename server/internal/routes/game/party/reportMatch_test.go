@@ -227,3 +227,29 @@ func TestGameResultNotificationMatchesOfficialShape(t *testing.T) {
 		t.Fatalf("leaderboard stat row = %#v", stats[0])
 	}
 }
+
+// AoE III sends simplayerIDs=[4294967295] (0xFFFFFFFF, "no sim player"). With
+// int32 the whole bind failed and the match was dropped, so the report never
+// reached the history and no replay descriptor was issued.
+func TestReportMatchBindsUnsignedSimPlayerIDs(t *testing.T) {
+	form := url.Values{
+		"match_id":     {"1426698940"},
+		"profile_ids":  {"[1786186287]"},
+		"results":      {"[3]"},
+		"teamIDs":      {"[1]"},
+		"race_ids":     {"[16]"},
+		"xpGained":     {"[0]"},
+		"simplayerIDs": {"[4294967295]"},
+		"checkSums":    {"[0]"},
+	}
+	request := httptest.NewRequest("POST", "/game/party/reportMatch", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	var got reportMatchRequest
+	if err := i.Bind(request, &got); err != nil {
+		t.Fatalf("bind must accept an unsigned simplayerIDs: %v", err)
+	}
+	if len(got.SimPlayerIDs.Data) != 1 || got.SimPlayerIDs.Data[0] != 4294967295 {
+		t.Fatalf("simplayerIDs = %v, want [4294967295]", got.SimPlayerIDs.Data)
+	}
+}
