@@ -22,14 +22,14 @@ import (
 // as JSON arrays, which i.Json decodes transparently. ItemUpdates is kept as
 // raw text so one malformed value cannot fail the whole bind.
 type reportMatchRequest struct {
-	MatchID      int64           `schema:"match_id"`
-	ProfileIDs   i.Json[[]int32] `schema:"profile_ids"`
-	Results      i.Json[[]int32] `schema:"results"`
-	TeamIDs      i.Json[[]int32] `schema:"teamIDs"`
-	RaceIDs      i.Json[[]int32] `schema:"race_ids"`
-	XPGained     i.Json[[]int32] `schema:"xpGained"`
-	CountersZip  string          `schema:"countersZip"`
-	ItemUpdates  string          `schema:"itemUpdates"`
+	MatchID     int64           `schema:"match_id"`
+	ProfileIDs  i.Json[[]int32] `schema:"profile_ids"`
+	Results     i.Json[[]int32] `schema:"results"`
+	TeamIDs     i.Json[[]int32] `schema:"teamIDs"`
+	RaceIDs     i.Json[[]int32] `schema:"race_ids"`
+	XPGained    i.Json[[]int32] `schema:"xpGained"`
+	CountersZip string          `schema:"countersZip"`
+	ItemUpdates string          `schema:"itemUpdates"`
 	// simplayerIDs is a client-side unsigned value: AoE III sends 4294967295
 	// (0xFFFFFFFF, "no sim player") and int32 cannot hold it, which failed the
 	// whole bind and dropped the match. It is only logged, so int64 is enough.
@@ -40,10 +40,7 @@ type reportMatchRequest struct {
 
 const maxReportCountersSize = 1 << 20
 
-const (
-	rankedAutomatchQueueID int32 = 6
-	rankedAutomatchTypeID  int32 = 4
-)
+const rankedAutomatchQueueID int32 = 6
 
 // defaultMatchCustomUpdate holds the empty document used for a key the client
 // did not send. Unknown keys are kept as received so client-side data such as
@@ -154,6 +151,41 @@ func normalizeMatchCustomUpdates(updates []string, playerCount int) ([]string, e
 	return normalized, firstErr
 }
 
+// applyLobbyMetadata copies the lobby metadata the client sent when hosting the
+// advertisement into the match record. The official service echoes these blobs
+// back in getRecentMatchHistory as encodedOptions and encodedSlots, and the
+// client needs them to render the post-game results.
+func applyLobbyMetadata(r *http.Request, result *models.MatchResult) {
+	advertisements := models.G(r).Advertisements()
+	if advertisements == nil {
+		return
+	}
+	for _, profile := range result.Players {
+		adv := advertisements.GetUserAdvertisement(profile)
+		if adv == nil {
+			continue
+		}
+		advertisements.WithReadLock(adv.GetId(), func() {
+			if result.EncodedOptions == "" {
+				result.EncodedOptions = adv.UnsafeGetOptions()
+			}
+			if result.EncodedSlots == "" {
+				result.EncodedSlots = adv.UnsafeGetSlotInfo()
+			}
+			if result.MaxPlayers == 0 {
+				result.MaxPlayers = int32(adv.UnsafeGetMaxPlayers())
+			}
+			if result.Description == "" {
+				result.Description = adv.UnsafeGetDescription()
+			}
+			if result.MapName == "" {
+				result.MapName = adv.UnsafeGetMapName()
+			}
+		})
+		return
+	}
+}
+
 func ReportMatch(w http.ResponseWriter, r *http.Request) {
 	var req reportMatchRequest
 	if err := i.Bind(r, &req); err != nil {
@@ -197,6 +229,7 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 		logger.Printf("party.reportMatch: match=%d invalid itemUpdates: %s\n", req.MatchID, err)
 	}
 	result.CustomUpdates = customUpdates
+	applyLobbyMetadata(r, &result)
 
 	history := models.G(r).MatchHistory()
 	if history == nil {
@@ -250,12 +283,13 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 		rated,
 		strings.Join(updates, " "),
 	)
-	if rated {
-		notification := gameResultNotification(result, ratings, statGroupIDs)
-		for _, profile := range result.Players {
-			if session, found := models.G(r).Sessions().GetByUserId(profile); found {
-				wss.SendOrStoreMessage(session, "GameResultNotificationMessage", notification)
-			}
+	// The official service always answers a report with the result notification,
+	// rated or not: the post-game screen waits for it and stays on "Retrieving…"
+	// until it arrives. An unrated match simply carries the default rating.
+	notification := gameResultNotification(result, ratings, statGroupIDs)
+	for _, profile := range result.Players {
+		if session, found := models.G(r).Sessions().GetByUserId(profile); found {
+			wss.SendOrStoreMessage(session, "GameResultNotificationMessage", notification)
 		}
 	}
 	replays := replayDescriptorsFor(r, req.MatchID, reportMatchReplayKinds(models.G(r).Title()), false)
@@ -265,22 +299,47 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 func gameResultNotification(match models.MatchResult, ratings map[int32]*models.PlayerRating, statGroupIDs map[int32]int32) i.A {
 	results := make(i.A, 0, len(match.Players))
 	leaderboardStats := make(i.A, 0, len(match.Players))
+	// Slot 4 of every row is the list of teams that won, not the result of the
+	// row: the client looks its own team up in it to decide win or loss. Sending
+	// a fixed [0] makes every match a victory for team 0, and a client that lost
+	// answers with "the server disagreed ... Reporting Desync", which is the
+	// dialog the post-game screen shows. The official service leaves it empty
+	// when nobody won.
+	winningTeams := i.A{}
+	for idx, result := range match.Results {
+		if result != 1 || idx >= len(match.Teams) {
+			continue
+		}
+		winningTeams = append(winningTeams, match.Teams[idx])
+	}
 	for idx, profileID := range match.Players {
-		result := int32(-1)
-		if idx < len(match.Results) {
-			result = match.Results[idx]
+		teamID := int32(0)
+		if idx < len(match.Teams) {
+			teamID = match.Teams[idx]
+		}
+		raceID := int32(0)
+		if idx < len(match.Races) {
+			raceID = match.Races[idx]
+		}
+		xpGained := int32(0)
+		if idx < len(match.XPGained) {
+			xpGained = match.XPGained[idx]
+		}
+		counters := ""
+		if idx < len(match.Counters) {
+			counters = match.Counters[idx]
 		}
 		statGroupID := statGroupIDs[profileID]
 		results = append(results, i.A{
 			profileID,
 			rankedAutomatchQueueID,
-			rankedAutomatchTypeID,
-			result,
-			i.A{0},
+			raceID,
+			teamID,
+			winningTeams,
 			statGroupID,
-			i.A{},
+			countersPairs(counters),
 			0,
-			0,
+			xpGained,
 			i.A{},
 			nil,
 			i.A{},
@@ -307,4 +366,39 @@ func gameResultNotification(match models.MatchResult, ratings map[int32]*models.
 	}
 
 	return i.A{results, leaderboardStats, i.A{}, match.MatchID, "", i.A{}}
+}
+
+// countersPairs turns the counters JSON object the client sent into the
+// [[key, value], ...] array the official service sends in the notification.
+// The key order of the payload is preserved: encoding/json would sort it.
+func countersPairs(raw string) i.A {
+	pairs := i.A{}
+	if strings.TrimSpace(raw) == "" {
+		return pairs
+	}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	token, err := decoder.Token()
+	if err != nil {
+		return pairs
+	}
+	if delim, ok := token.(json.Delim); !ok || delim != '{' {
+		return pairs
+	}
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return pairs
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return pairs
+		}
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			return pairs
+		}
+		pairs = append(pairs, i.A{key, value})
+	}
+	return pairs
 }
