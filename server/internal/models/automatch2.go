@@ -138,16 +138,16 @@ type MatchNotification struct {
 }
 
 type automatchQueueEntry struct {
-	Session        Session
-	UserID         int32
-	PollID         int32
-	SearchToken    int32
-	PartySessionID int64
-	MatchTypes     []int32
-	RelayRegion    string
-	MatchID        int32
-	Stopped        bool
-	LocalIP        string
+	Session         Session
+	UserID          int32
+	PollID          int32
+	EstimatedWaitMs int32
+	PartySessionID  int64
+	MatchTypes      []int32
+	RelayRegion     string
+	MatchID         int32
+	Stopped         bool
+	LocalIP         string
 	CreatedAt      time.Time
 	// QueuedAt is FIFO order and is preserved across requeues (D14).
 	QueuedAt time.Time
@@ -276,12 +276,12 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 	entry, exists := mm.byUser[userID]
 	if !exists {
 		entry = &automatchQueueEntry{
-			UserID:      userID,
-			PollID:      mm.newPollIDLocked(),
-			SearchToken: mm.newSearchTokenLocked(),
-			CreatedAt:   time.Now(),
-			QueuedAt:    time.Now(),
-			SearchState: 1,
+			UserID:          userID,
+			PollID:          mm.newPollIDLocked(),
+			EstimatedWaitMs: estimatedWaitMillis(),
+			CreatedAt:       time.Now(),
+			QueuedAt:        time.Now(),
+			SearchState:     1,
 		}
 		mm.byUser[userID] = entry
 		mm.byPoll[entry.PollID] = entry
@@ -297,7 +297,7 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 	if newSearch && entry.MatchID == 0 {
 		entry.CreatedAt = time.Now()
 		entry.QueuedAt = time.Now()
-		entry.SearchToken = mm.newSearchTokenLocked()
+		entry.EstimatedWaitMs = estimatedWaitMillis()
 		entry.unknownLogged = false
 	}
 	entry.Stopped = false
@@ -319,10 +319,10 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 	if !exists || wasStopped || !slices.Equal(previousMatchTypes, matchTypes) ||
 		previousPartySessionID != request.PartySessionID || previousRelayRegion != request.RelayRegion {
 		logger.Printf(
-			"automatch2: poll user=%d poll=%d token=%d call=%d matchTypes=%v party=%d relay=%q profiles=%v races=%v factions=%v vetoMapKey=%v vetoMaps=%v notified=%t previousMatch=%d\n",
+			"automatch2: poll user=%d poll=%d estimatedWaitMs=%d call=%d matchTypes=%v party=%d relay=%q profiles=%v races=%v factions=%v vetoMapKey=%v vetoMaps=%v notified=%t previousMatch=%d\n",
 			userID,
 			entry.PollID,
-			entry.SearchToken,
+			entry.EstimatedWaitMs,
 			request.CallNum,
 			matchTypes,
 			request.PartySessionID,
@@ -377,7 +377,7 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 
 	if len(matchTypes) == 0 {
 		mm.removeFromQueueLocked(entry)
-		return automatchUnmatchedResponse(entry.SearchToken, nil, nil, 1, 0), nil
+		return automatchUnmatchedResponse(entry.EstimatedWaitMs, nil, nil, 1, 0), nil
 	}
 
 	entry.MatchTypes = matchTypes
@@ -679,7 +679,7 @@ func internalAssumeQueue() string {
 }
 
 func (mm *MainMatchmaking) unmatchedLocked(entry *automatchQueueEntry, matchTypes []int32, state int, matchID int32) i.A {
-	return automatchUnmatchedResponse(entry.SearchToken, matchTypes, entry.RaceInfoRaces, state, matchID)
+	return automatchUnmatchedResponse(entry.EstimatedWaitMs, matchTypes, entry.RaceInfoRaces, state, matchID)
 }
 
 func (mm *MainMatchmaking) StopPolling(session Session, request *AutomatchStopPollingRequest) i.A {
@@ -1289,7 +1289,7 @@ func (mm *MainMatchmaking) matchedResponseLocked(entry *automatchQueueEntry, mat
 	}
 	ports := encodeRelayPorts(battleServer)
 	response := encodeMatchedResponse(automatchMatchedParams{
-		Token:           entry.SearchToken,
+		EstimatedWaitMs: entry.EstimatedWaitMs,
 		MatchTypes:      entry.MatchTypes,
 		RaceIDs:         entry.RaceInfoRaces,
 		HostProfileID:   match.HostID,
@@ -1495,17 +1495,15 @@ func (mm *MainMatchmaking) newPollIDLocked() int32 {
 	}
 }
 
-func (mm *MainMatchmaking) newSearchTokenLocked() int32 {
-	for {
-		var id int32
-		i.WithRng(func(rand *i.RandReader) {
-			id = int32(rand.Uint32() & 0x7fffffff)
-		})
-		if id <= 0 {
-			continue
-		}
-		return id
-	}
+// estimatedWaitMillis is the value of polling response slot 2. The client
+// renders it as an H:MM:SS estimated wait (e.g. 180000 renders 00:03:00 and
+// 567932821 renders 157:45:32), so the official service's tokens observed in
+// the captures (180000, 33587, 1001, 1267, 5679) are really wait estimates in
+// milliseconds. The LAN server cannot predict a wait, so it reports 0, which
+// the client shows as 00:00:00. If a predictor is ever added (F5 metrics),
+// this is the single point to change.
+func estimatedWaitMillis() int32 {
+	return 0
 }
 
 func (mm *MainMatchmaking) newMatchIDLocked() int32 {
@@ -1574,11 +1572,14 @@ func (mm *MainMatchmaking) cancelMatchLocked(match *automatchMatch, requeue bool
 
 // AutomatchUnmatchedResponse returns a response with the same shape as the
 // official server when no match has been found yet.
-func AutomatchUnmatchedResponse(pollID int32, matchTypes []int32) i.A {
-	return automatchUnmatchedResponse(pollID, matchTypes, nil, 1, 0)
+func AutomatchUnmatchedResponse(estimatedWaitMs int32, matchTypes []int32) i.A {
+	return automatchUnmatchedResponse(estimatedWaitMs, matchTypes, nil, 1, 0)
 }
 
-func automatchUnmatchedResponse(token int32, matchTypes []int32, raceIDs []int32, state int, matchID int32) i.A {
+// automatchUnmatchedResponse mirrors the official unmatched body. Slot 2 is
+// the estimated wait in milliseconds (rendered by the client as H:MM:SS, see
+// estimatedWaitMillis).
+func automatchUnmatchedResponse(estimatedWaitMs int32, matchTypes []int32, raceIDs []int32, state int, matchID int32) i.A {
 	assigned := int32(-1)
 	if matchID != 0 {
 		assigned = matchID
@@ -1586,7 +1587,7 @@ func automatchUnmatchedResponse(token int32, matchTypes []int32, raceIDs []int32
 	return i.A{
 		0,
 		encodeUnmatchedAutomatchQueueStatuses(matchTypes, raceIDs, state),
-		token,
+		estimatedWaitMs,
 		nil,
 		-1,
 		"",
@@ -1632,7 +1633,7 @@ func encodeUnmatchedAutomatchQueueStatuses(matchTypes []int32, raceIDs []int32, 
 }
 
 type automatchMatchedParams struct {
-	Token           int32
+	EstimatedWaitMs int32
 	MatchTypes      []int32
 	RaceIDs         []int32
 	HostProfileID   int32
@@ -1662,7 +1663,7 @@ func encodeMatchedResponse(p automatchMatchedParams) i.A {
 	return i.A{
 		0,
 		encodeUnmatchedAutomatchQueueStatuses(p.MatchTypes, p.RaceIDs, 0),
-		p.Token,
+		p.EstimatedWaitMs,
 		nil,
 		p.HostProfileID,
 		p.MapName,

@@ -198,6 +198,15 @@ func TestAutomatchUnmatchedResponseGolden(t *testing.T) {
 	}
 }
 
+// The client renders polling response slot 2 as an H:MM:SS estimated wait:
+// a random token made Quick Play show "157:45:32" (567932821 ms). The LAN
+// server cannot predict waits, so the estimate must stay 0 (00:00:00).
+func TestEstimatedWaitMillisIsZero(t *testing.T) {
+	if got := estimatedWaitMillis(); got != 0 {
+		t.Fatalf("estimated wait = %d ms, want 0 (rendered by the client as H:MM:SS)", got)
+	}
+}
+
 func TestAutomatchUnmatchedResponseCarriesAssignedMatchID(t *testing.T) {
 	response := automatchUnmatchedResponse(1001, []int32{57}, []int32{0}, 0, 508712036)
 	if response[12] != int32(508712036) {
@@ -210,7 +219,7 @@ func TestEncodeMatchedResponseGoldenShape(t *testing.T) {
 		{508712036, 19375011, -1, 4220944, 0, 0, "/10.0.11.16"},
 	}
 	response := encodeMatchedResponse(automatchMatchedParams{
-		Token:           1001,
+		EstimatedWaitMs: 1001,
 		MatchTypes:      []int32{6},
 		RaceIDs:         []int32{0},
 		HostProfileID:   19375011,
