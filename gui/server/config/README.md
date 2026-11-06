@@ -4,7 +4,7 @@ The GUI loads and edits the official `config.toml` contract. It can also create 
 
 The load screen accepts files dragged from the operating system. Wails supplies the native path to Go, where the file is parsed and validated before it reaches the editor. On startup the app tries the default configuration paths; when none exists it stays on the load screen and does not open the picker automatically.
 
-Each game has its own page in the sidebar: **Hosts**, then a **Battle servers** section with a **Standalone** card (the servers this document announces) and an **Embedded** card (the battle server that runs inside the age server process). The page notes that the server also uses the battle servers the battle-server-manager finds on the PC. **Replays** configures the recording of the match data the embedded battle server receives.
+Each game has its own page in the sidebar: **Hosts**, then a **Battle servers** section with a **Standalone** card (the servers this document announces) and an **Embedded** card (the battle server that runs inside the age server process). The page notes that the server also uses the battle servers the battle-server-manager finds on the PC. **Replays** configures the uploads of the replays the game records after a match.
 
 Pages whose feature has one master switch (Internet, Announcement, Custom files, Replays) carry it next to the page title, as a game page does with the game's switch; the page body only lists what that switch turns on.
 

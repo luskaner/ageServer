@@ -92,12 +92,11 @@ function toServiceConfiguration(config: AppConfig): Configuration {
         },
         Announcement: config.Announcement,
         CustomFiles: config.CustomFiles,
-        BattleServerReplays: config.BattleServerReplays ?? {
-            Enabled: false,
-            Folder: 'auto',
+        Replays: config.Replays ?? {
+            Enabled: true,
             MaxFileSize: '32MB',
-            MaxTotalSize: '256MB',
-            Expiry: '12h',
+            MaxTotalSize: '1GB',
+            Expiry: '-1s',
         },
     };
 }
@@ -109,7 +108,7 @@ const SECTION_LABELS: Record<StaticSectionKey, { title: string; subtitle: string
     internet: { title: 'Internet', subtitle: 'Internet access and the address the server announces.' },
     announcement: { title: 'Announcement', subtitle: 'Configure LAN discovery and announcement settings.' },
     customFiles: { title: 'Custom files', subtitle: 'Storage of the savegames and replays uploaded by the game.' },
-    replays: { title: 'Replays', subtitle: 'Recording of the match data the embedded battle server receives.' },
+    replays: { title: 'Replays', subtitle: 'Uploads of the replays the game records after a match.' },
     sign: { title: 'Sign', subtitle: 'Configure catalogue signing and platform user exceptions.' },
 };
 function isGameSection(section: SectionKey): section is GameSectionKey {
@@ -159,7 +158,7 @@ const AUTH_OPTIONS = [
     if (field.startsWith('Internet.')) return 'internet';
     if (field.startsWith('Announcement.')) return 'announcement';
     if (field.startsWith('CustomFiles.')) return 'customFiles';
-    if (field.startsWith('BattleServerReplays.')) return 'replays';
+    if (field.startsWith('Replays.')) return 'replays';
     if (field.startsWith('Sign.')) return 'sign';
     return 'general';
 }
@@ -462,7 +461,7 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
             case 'customFiles':
                 return { ...switchProps('CustomFiles.Enabled'), ariaLabel: 'Custom files' };
             case 'replays':
-                return { ...switchProps('BattleServerReplays.Enabled'), ariaLabel: 'Replay recording' };
+                return { ...switchProps('Replays.Enabled'), ariaLabel: 'Replay uploads' };
             default:
                 return null;
         }
@@ -917,66 +916,54 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                     {/* SECTION 6: REPLAYS */}
                     {activeSection === 'replays' && (
                         <Stack gap="sm">
-                            <AutoManualCard
-                                icon={<IconFolder size={20} stroke={1.6} />}
-                                title="Storage folder"
-                                description="Folder where the replays are stored. Automatic uses the user data folder of the server (<resources>/userData/<game>/replays)."
-                                error={allErrors['BattleServerReplays.Folder']}
-                                value={config.BattleServerReplays.Folder}
-                                onChange={(value) => form.setFieldValue('BattleServerReplays.Folder', value)}
-                                onCommit={requestValidation}
-                                disabled={!config.BattleServerReplays.Enabled}
-                            >
-                                {(manual) => <FolderPickerInput {...manual} onSelect={requestValidation} />}
-                            </AutoManualCard>
                             <SettingCard
                                 icon={<IconFile size={20} stroke={1.6} />}
                                 title="Maximum replay size"
-                                description="Largest single .replay file kept, in megabytes or gigabytes (default: 32MB)."
-                                error={allErrors['BattleServerReplays.MaxFileSize']}
-                                disabled={!config.BattleServerReplays.Enabled}
+                                description="Largest single replay file accepted, in megabytes or gigabytes (default: 32MB)."
+                                error={allErrors['Replays.MaxFileSize']}
+                                disabled={!config.Replays.Enabled}
                                 control={
                                     <UnitInput
-                                        value={config.BattleServerReplays.MaxFileSize}
-                                        onChange={(value) => form.setFieldValue('BattleServerReplays.MaxFileSize', value)}
+                                        value={config.Replays.MaxFileSize}
+                                        onChange={(value) => form.setFieldValue('Replays.MaxFileSize', value)}
                                         units={SIZE_UNITS}
                                         ariaLabel="Maximum replay size"
                                         onCommit={requestValidation}
-                                        disabled={!config.BattleServerReplays.Enabled}
+                                        disabled={!config.Replays.Enabled}
                                     />
                                 }
                             />
                             <SettingCard
                                 icon={<IconDatabase size={20} stroke={1.6} />}
                                 title="Total size limit"
-                                description="Maximum accumulated size per game. When exceeded, the oldest replays are evicted first (default: 256MB)."
-                                error={allErrors['BattleServerReplays.MaxTotalSize']}
-                                disabled={!config.BattleServerReplays.Enabled}
+                                description="Maximum accumulated size per game. When exceeded, the oldest replays are evicted first (default: 1GB)."
+                                error={allErrors['Replays.MaxTotalSize']}
+                                disabled={!config.Replays.Enabled}
                                 control={
                                     <UnitInput
-                                        value={config.BattleServerReplays.MaxTotalSize}
-                                        onChange={(value) => form.setFieldValue('BattleServerReplays.MaxTotalSize', value)}
+                                        value={config.Replays.MaxTotalSize}
+                                        onChange={(value) => form.setFieldValue('Replays.MaxTotalSize', value)}
                                         units={SIZE_UNITS}
                                         ariaLabel="Replay total size limit"
                                         onCommit={requestValidation}
-                                        disabled={!config.BattleServerReplays.Enabled}
+                                        disabled={!config.Replays.Enabled}
                                     />
                                 }
                             />
                             <SettingCard
                                 icon={<IconClock size={20} stroke={1.6} />}
                                 title="Replay expiry"
-                                description="How long a replay is kept since its last write, in hours or days (default: 12h). 0 keeps them forever."
-                                error={allErrors['BattleServerReplays.Expiry']}
-                                disabled={!config.BattleServerReplays.Enabled}
+                                description="How long a replay is kept since its last write, in hours or days. Leave -1s to keep them forever (default: -1s)."
+                                error={allErrors['Replays.Expiry']}
+                                disabled={!config.Replays.Enabled}
                                 control={
                                     <UnitInput
-                                        value={config.BattleServerReplays.Expiry}
-                                        onChange={(value) => form.setFieldValue('BattleServerReplays.Expiry', value)}
+                                        value={config.Replays.Expiry}
+                                        onChange={(value) => form.setFieldValue('Replays.Expiry', value)}
                                         units={EXPIRY_UNITS}
                                         ariaLabel="Replay expiry"
                                         onCommit={requestValidation}
-                                        disabled={!config.BattleServerReplays.Enabled}
+                                        disabled={!config.Replays.Enabled}
                                     />
                                 }
                             />

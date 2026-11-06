@@ -11,7 +11,6 @@ export {
 export type {
     AnnouncementConfig,
     BattleServerConfig,
-    BattleServerReplaysConfiguration,
     ConfigFile,
     Configuration,
     CustomFilesConfiguration,
@@ -20,6 +19,7 @@ export type {
     GameConfig,
     GamesConfiguration,
     InternetConfiguration,
+    ReplaysConfiguration,
     SignConfig,
     ValidationError
 } from "./models.js";

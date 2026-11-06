@@ -23,7 +23,7 @@ The model in `models.go` mirrors `server/internal/config.go`. Do not invent keys
 | `[[Games.<game>.BattleServers]]` | One table per battle server. See below. |
 | `[Announcement]` | `Enabled`, `Multicast`, `Port`, `MulticastGroup`. |
 | `[CustomFiles]` | `Enabled`, `Folder`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. |
-| `[BattleServerReplays]` | Recording of the data the embedded battle server receives: `Enabled`, `Folder`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. `Expiry` `<= 0` keeps replays forever. |
+| `[Replays]` | Replays uploaded by the game: `Enabled`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. They are always stored under `<resources>/responses/cloud/<game>/replays`, so there is no `Folder`. `Expiry` `<= 0` keeps replays forever. |
 
 ### Battle servers
 
@@ -140,7 +140,8 @@ settings must stay byte-identical.
 `Authentication = 'disabled'`, `Sign.Enabled = false`, `Internet.Enabled = true`,
 `Internet.IP = 'auto'`, `Announcement` enabled with port `31978` and group
 `239.31.97.8`, `CustomFiles` enabled with `auto`/`32MB`/`256MB`/`12h`, and
-`Hosts = ['0.0.0.0']` for every game.
+`Hosts = ['0.0.0.0']` for every game. `Replays` defaults to enabled with
+`32MB`/`1GB`/`-1s`.
 
 ## Validation
 
@@ -163,8 +164,9 @@ do not. It mirrors what the server would do at startup:
 - the embedded battle server accepts every key empty: `StartIfMissing` must be
   `true`, `false` or `required` when set, `IPv4` `auto` or an IPv4 address, the
   ports `0..65535` and `LogLevel` one of the six levels;
-- announcement port/group, and custom file sizes/duration (sizes accept
-  `B/KB/MB/GB`, durations are Go durations).
+- announcement port/group, custom file sizes/duration (sizes accept
+  `B/KB/MB/GB`, durations are Go durations), and replay sizes/duration with the
+  same rules (`Expiry` may be `0` or negative to keep replays forever).
 
 ## Look and feel
 
