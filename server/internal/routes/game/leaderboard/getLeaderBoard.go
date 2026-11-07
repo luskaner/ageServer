@@ -91,7 +91,7 @@ func GetLeaderBoard(w http.ResponseWriter, r *http.Request) {
 				i.A{user.GetId()},
 			})
 			profiles = append(profiles, user.EncodeProfileInfo(clientLibVersion))
-			stats = append(stats, user.EncodeLeaderboardStat(rating))
+			stats = append(stats, models.EncodeLeaderboardStatForGame(game.Title(), user.GetStatGroupID(), user.GetRating(), rating))
 			live++
 			continue
 		}
@@ -123,7 +123,7 @@ func GetLeaderBoard(w http.ResponseWriter, r *http.Request) {
 			i.A{profile.ProfileID},
 		})
 		profiles = append(profiles, models.EncodeStoredProfileInfo(profile, clientLibVersion))
-		stats = append(stats, models.EncodeLeaderboardStatFor(statGroupID, rating.Rating, rating))
+		stats = append(stats, models.EncodeLeaderboardStatForGame(game.Title(), statGroupID, rating.Rating, rating))
 	}
 	logger.Printf(
 		"leaderboard.getLeaderBoard: leaderboard=%d start=%d count=%d total=%d returned=%d live=%d offline=%d placeholder=%d\n",

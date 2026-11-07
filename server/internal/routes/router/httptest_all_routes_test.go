@@ -116,15 +116,25 @@ func (f *fakeResources) CloudFiles() *models.CloudFiles                   { retu
 // helpers
 // -------------------------------------------------------------------
 
+// newTestGame is newTestGameCloud with a throwaway cloud folder.
 func newTestGame(t *testing.T, gameId string) models.Game {
 	t.Helper()
 	return newTestGameWithCloud(t, gameId, filepath.Join(t.TempDir(), "cloud"))
 }
 
+// newTestGameWithResourceSetup lets a test fill the in-memory resources before
+// the game is created, which is what the matchmaking catalog is loaded from.
+func newTestGameWithResourceSetup(t *testing.T, gameId string, setup func(*fakeResources)) models.Game {
+	t.Helper()
+	return newTestGameWithCloud(t, gameId, filepath.Join(t.TempDir(), "cloud"), setup)
+}
+
 // newTestGameWithCloud is newTestGame with the cloud store rooted at a folder
 // the caller controls, so a test can drop files under builtin/ before the store
-// indexes them.
-func newTestGameWithCloud(t *testing.T, gameId, cloudFolder string) models.Game {
+// indexes them. The optional setup runs on the resources before CreateMainGame,
+// so a resource the game loads during construction (the automatch catalog) can
+// be provided.
+func newTestGameWithCloud(t *testing.T, gameId, cloudFolder string, setup ...func(*fakeResources)) models.Game {
 	t.Helper()
 	// ensure auth disabled so platformlogin doesn't try to contact upstream
 	origAuth := i.Authentication
@@ -152,6 +162,9 @@ func newTestGameWithCloud(t *testing.T, gameId, cloudFolder string) models.Game 
 		Expiry:       time.Hour,
 	})
 	t.Cleanup(fake.cloudFiles.Close)
+	for _, fn := range setup {
+		fn(fake)
+	}
 	opts := &models.CreateMainGameOpts{
 		Instances: &models.InstanceOpts{
 			Resources: fake,
@@ -449,7 +462,7 @@ func buildExpectedRoutes(gameId string) []routeCase {
 		add("POST", "/game/automatch2/stoppolling")
 		add("POST", "/game/automatch2/updateStatus")
 	}
-	if gameId == game.AoE2 {
+	if gameId == game.AoE2 || gameId == game.AoE1 {
 		add("POST", "/game/automatch2/polling")
 		add("GET", "/game/automatch2/polling")
 		add("POST", "/game/automatch2/stoppolling")

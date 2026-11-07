@@ -160,7 +160,7 @@ func TestAssumeQueueFallbackIsUnrated(t *testing.T) {
 }
 
 func TestEncodeUnmatchedStatusesEchoesRaceIDs(t *testing.T) {
-	statuses := encodeUnmatchedAutomatchQueueStatuses([]int32{57, 58, 59}, []int32{0, 1, 2}, 1)
+	statuses := encodeAutomatchQueueStatuses([]int32{57, 58, 59}, []int32{0, 1, 2}, []int{1, 2, 3})
 	if len(statuses) != 3 {
 		t.Fatalf("statuses = %d", len(statuses))
 	}
@@ -168,8 +168,8 @@ func TestEncodeUnmatchedStatusesEchoesRaceIDs(t *testing.T) {
 		if row[0] != strconv.Itoa(57+index) {
 			t.Fatalf("status %d matchType = %#v", index, row[0])
 		}
-		if row[1] != 1 {
-			t.Fatalf("status %d state = %#v, want 1", index, row[1])
+		if row[1] != index+1 {
+			t.Fatalf("status %d players = %#v, want %d", index, row[1], index+1)
 		}
 		mapRow, ok := row[2].(i.A)
 		if !ok || len(mapRow) != 1 {
@@ -187,12 +187,12 @@ func strconvID(id int32) string {
 }
 
 func TestAutomatchUnmatchedResponseGolden(t *testing.T) {
-	response := automatchUnmatchedResponse(1001, []int32{57, 58, 59}, []int32{0, 0, 0}, 1, 0)
+	response := automatchUnmatchedResponse("", estimatedWaitMillis(), []int32{57, 58, 59}, []int32{0, 0, 0}, []int{1, 1, 1}, 0)
 	encoded, err := json.Marshal(response)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `[0,[["57",1,[[0,1]],"0"],["58",1,[[0,1]],"0"],["59",1,[[0,1]],"0"]],1001,null,-1,"",-1,-1,-1,"0","0","-1",-1,"authtoken","0.0.0.0",0,0,0,"",[],null,0]`
+	want := `[0,[["57",1,[[0,1]],"0"],["58",1,[[0,1]],"0"],["59",1,[[0,1]],"0"]],0,null,-1,"",-1,-1,-1,"0","0","-1",-1,"authtoken","0.0.0.0",0,0,0,"",[],null,0]`
 	if string(encoded) != want {
 		t.Fatalf("unmatched response:\n got %s\nwant %s", encoded, want)
 	}
@@ -208,7 +208,7 @@ func TestEstimatedWaitMillisIsZero(t *testing.T) {
 }
 
 func TestAutomatchUnmatchedResponseCarriesAssignedMatchID(t *testing.T) {
-	response := automatchUnmatchedResponse(1001, []int32{57}, []int32{0}, 0, 508712036)
+	response := automatchUnmatchedResponse("", estimatedWaitMillis(), []int32{57}, []int32{0}, []int{0}, 508712036)
 	if response[12] != int32(508712036) {
 		t.Fatalf("slot 12 = %#v, want the assigned matchID", response[11])
 	}
@@ -219,9 +219,11 @@ func TestEncodeMatchedResponseGoldenShape(t *testing.T) {
 		{508712036, 19375011, -1, 4220944, 0, 0, "/10.0.11.16"},
 	}
 	response := encodeMatchedResponse(automatchMatchedParams{
+		Title:           "age2",
 		EstimatedWaitMs: 1001,
 		MatchTypes:      []int32{6},
 		RaceIDs:         []int32{0},
+		Counts:          []int{0},
 		HostProfileID:   19375011,
 		MapName:         "Arabia.rms",
 		MapID:           1,
@@ -254,7 +256,7 @@ func TestEncodeAutomatchGameMessageIsPositional(t *testing.T) {
 	}
 	recipient := &automatchQueueEntry{RaceInfoRaces: []int32{0}}
 	peers := []i.A{{508712036, 5278568, -1, 4220944, 0, 0, "/10.0.11.16"}}
-	message := encodeAutomatchGameMessageLocked(match, recipient, "20.90.13.208", []int{27014, 27114, 27214}, peers)
+	message := encodeAutomatchGameMessageLocked("age2", match, recipient, "20.90.13.208", []int{27014, 27114, 27214}, peers)
 	if len(message) != 15 {
 		t.Fatalf("wss payload has %d fields, want 15", len(message))
 	}
@@ -287,6 +289,148 @@ func TestAssignTeamsKeepsPartiesTogether(t *testing.T) {
 	}
 }
 
+func TestLoadQueueCatalogAge1FromBundledPool(t *testing.T) {
+	resources := bundledResources(t, "age1", "automatchMaps.json", "automatchQueues.json")
+	catalog, err := LoadQueueCatalog("age1", resources, nil)
+	if err != nil {
+		t.Fatalf("LoadQueueCatalog: %v", err)
+	}
+	if catalog.Len() != 8 {
+		t.Fatalf("queues = %d, want the eight captured Quick Match queues", catalog.Len())
+	}
+	// matchTypes 1-4 are Random Map 1v1..4v4, 5-8 Death Match 1v1..4v4.
+	for matchType, want := range map[int32]struct {
+		players int
+		ladder  int32
+		mode    string
+	}{
+		1: {2, 1, "RANDOM"},
+		2: {4, 1, "RANDOM"},
+		3: {6, 1, "RANDOM"},
+		4: {8, 1, "RANDOM"},
+		5: {2, 3, "DEATHMATCH"},
+		6: {4, 3, "DEATHMATCH"},
+		7: {6, 3, "DEATHMATCH"},
+		8: {8, 3, "DEATHMATCH"},
+	} {
+		queue, ok := catalog.Queue(matchType)
+		if !ok {
+			t.Fatalf("matchType %d missing from the age1 pool", matchType)
+		}
+		if queue.MaxPlayers != want.players || queue.Teams != 2 || queue.TeamSize != want.players/2 {
+			t.Fatalf("matchType %d shape = %+v", matchType, queue)
+		}
+		if !queue.Rated || queue.LeaderboardID != want.ladder {
+			t.Fatalf("matchType %d rating = rated %t ladder %d", matchType, queue.Rated, queue.LeaderboardID)
+		}
+		if !queue.MatchTypeIsAdvertisement {
+			t.Fatalf("matchType %d must use the queue id as advertisement matchtype", matchType)
+		}
+		if len(queue.Maps) != 1 || queue.Maps[0].Name != want.mode {
+			t.Fatalf("matchType %d maps = %+v, want %q", matchType, queue.Maps, want.mode)
+		}
+	}
+	// "Any" is the client sending several matchTypes at once: they resolve to
+	// the first queue of the catalog the player asked for.
+	if queue, ok := catalog.QueueForMatchTypes([]int32{5, 6, 7, 8}); !ok || queue.ID != 5 {
+		t.Fatalf("Any DM queue = %+v, %t; want the 1v1 Death Match pool", queue, ok)
+	}
+	if queue, ok := catalog.QueueForMatchTypes([]int32{2, 3, 4}); !ok || queue.ID != 2 {
+		t.Fatalf("Any RM queue = %+v, %t; want the 2v2 Random Map pool", queue, ok)
+	}
+}
+
+func TestAoE1UnmatchedResponseHasTwentyFields(t *testing.T) {
+	response := automatchUnmatchedResponse("age1", 0, []int32{5, 6}, []int32{17, 17}, []int{1, 2}, 0)
+	encoded, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `[0,[["5",1,[[17,1]],"0"],["6",2,[[17,1]],"0"]],0,null,-1,"",-1,-1,-1,"0","0","-1",-1,"authtoken","0.0.0.0",0,0,"",[],null]`
+	if string(encoded) != want {
+		t.Fatalf("aoe1 unmatched response:\n got %s\nwant %s", encoded, want)
+	}
+}
+
+func TestAoE1MatchedResponseOnlyCarriesMatchID(t *testing.T) {
+	response := encodeMatchedResponse(automatchMatchedParams{
+		Title:      "age1",
+		MatchTypes: []int32{5},
+		RaceIDs:    []int32{17},
+		Counts:     []int{0},
+		MatchID:    5345077,
+	})
+	if len(response) != 20 {
+		t.Fatalf("aoe1 matched response has %d fields, want 20", len(response))
+	}
+	if response[12] != int32(5345077) {
+		t.Fatalf("slot 12 = %#v, want the matchID", response[12])
+	}
+	if response[4] != -1 || response[5] != "" {
+		t.Fatalf("aoe1 matched response leaked host/map: %#v", response[4:6])
+	}
+}
+
+func TestAoE1GameMessageShape(t *testing.T) {
+	match := &automatchMatch{
+		ID:      5345077,
+		HostID:  4560039,
+		MapName: "DEATHMATCH",
+		Queue:   &automatchQueue{Teams: 2, MaxPlayers: 2, TeamSize: 1, Rated: true},
+	}
+	recipient := &automatchQueueEntry{RaceInfoRaces: []int32{17}}
+	peers := []i.A{
+		{5345077, 4560039, -1, 955103, 17, 0, "/10.0.11.16"},
+		{5345077, 19375011, -1, 2154661, 17, 1, "/10.0.11.15"},
+	}
+	message := encodeAutomatchGameMessageLocked("age1", match, recipient, "51.124.194.157", []int{27012, 27112, 27212}, peers)
+	encoded, err := json.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `[4560039,5345077,"DEATHMATCH",17,"1","0","2","1","authtoken","51.124.194.157",27012,27112,[[5345077,4560039,-1,955103,17,0,"/10.0.11.16"],[5345077,19375011,-1,2154661,17,1,"/10.0.11.15"]],""]`
+	if string(encoded) != want {
+		t.Fatalf("aoe1 wss payload:\n got %s\nwant %s", encoded, want)
+	}
+}
+
+// Regression: sameParty only links positive party ids, so a solo entry used to
+// produce an empty group and two solo players could never pair. The AoE1
+// pairing test caught it through the HTTP route.
+func TestSoloEntryFormsACompleteGroup(t *testing.T) {
+	entry := &automatchQueueEntry{UserID: 1, MatchTypes: []int32{5}, QueuedAt: time.Unix(100, 0)}
+	mm := &MainMatchmaking{queue: map[int32]*automatchQueueEntry{1: entry}}
+	group := mm.groupForEntryLocked(entry, nil)
+	if group == nil {
+		t.Fatal("solo entry produced no group")
+	}
+	if len(group.Entries) != 1 || !group.Complete || group.RosterSize != 1 {
+		t.Fatalf("solo group = %+v", group)
+	}
+	if !group.QueuedAt.Equal(entry.QueuedAt) {
+		t.Fatalf("group queuedAt = %s, want %s", group.QueuedAt, entry.QueuedAt)
+	}
+	// The candidate filter must recognise the polling unit even when it is
+	// wrapped by a different group object.
+	if !groupContainsEntry(group, entry) {
+		t.Fatal("groupContainsEntry did not find the polling entry")
+	}
+	if groupContainsEntry(&automatchPartyGroup{}, entry) {
+		t.Fatal("groupContainsEntry matched an unrelated group")
+	}
+}
+
+func TestUsesPartiesPerTitle(t *testing.T) {
+	if usesPartiesForTitle("age1") {
+		t.Fatal("AoE1 has no party queue: its entries must be units of one")
+	}
+	for _, title := range []string{"age2", "age4"} {
+		if !usesPartiesForTitle(title) {
+			t.Fatalf("%s queues parties as one unit", title)
+		}
+	}
+}
+
 func TestIsAutomatchHostRequestPerTitle(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -304,8 +448,11 @@ func TestIsAutomatchHostRequestPerTitle(t *testing.T) {
 		{"aoe2 matchmaking host", "age2", AutomatchMatchDescription, 19, -1, true},
 		{"aoe2 party lobby", "age2", AutomatchMatchDescription, 1, -1, false},
 		{"aoe2 with poll id", "age2", "", 1, 7, true},
+		// AoE1 party/session lobby: SESSION_MATCH_KEY with matchtype 0.
+		{"aoe1 party lobby", "age1", AutomatchMatchDescription, 0, -1, false},
+		{"aoe1 match advertisement", "age1", AutomatchAutoMatchDescription, 5, -1, true},
+		{"aoe1 with poll id", "age1", AutomatchMatchDescription, 0, 9, true},
 		// Titles without a captured queue endpoint never claim a host request.
-		{"age1", "age1", AutomatchMatchDescription, 19, -1, false},
 		{"age3", "age3", AutomatchMatchDescription, 19, -1, false},
 		{"aom", "athens", AutomatchMatchDescription, 19, -1, false},
 	}

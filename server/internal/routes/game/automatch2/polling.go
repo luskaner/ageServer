@@ -17,7 +17,7 @@ func Polling(w http.ResponseWriter, r *http.Request) {
 	var req models.AutomatchPollingRequest
 	if err := i.Bind(r, &req); err != nil {
 		logger.Printf("automatch2: could not bind polling request: %v\n", err)
-		i.JSON(&w, models.AutomatchUnmatchedResponse(0, nil))
+		i.JSON(&w, models.AutomatchUnmatchedResponse(g.Title(), 0, nil))
 		return
 	}
 	sess := models.SessionOrPanic(r)

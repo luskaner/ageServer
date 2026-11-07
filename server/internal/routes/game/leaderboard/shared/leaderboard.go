@@ -81,7 +81,7 @@ func GetStatGroups(r *http.Request, idsQuery string, isProfileId bool, includeLe
 		})
 		profileInfos = append(profileInfos, u.EncodeProfileInfo(clientLibVersion))
 		if includeLeaderboardStats {
-			leaderboardStats = append(leaderboardStats, u.EncodeLeaderboardStat(rating))
+			leaderboardStats = append(leaderboardStats, models.EncodeLeaderboardStatForGame(game.Title(), u.GetStatGroupID(), u.GetRating(), rating))
 		}
 	}
 
@@ -148,7 +148,7 @@ func GetPersonalStat(r *http.Request, idsQuery string) i.A {
 			i.A{u.GetId()},
 		})
 		profileInfos = append(profileInfos, u.EncodeProfileInfo(clientLibVersion))
-		leaderboardStats = append(leaderboardStats, u.EncodeLeaderboardStat(rating))
+		leaderboardStats = append(leaderboardStats, models.EncodeLeaderboardStatForGame(game.Title(), u.GetStatGroupID(), u.GetRating(), rating))
 		if avatarStats := u.GetAvatarStats(); avatarStats != nil {
 			_ = avatarStats.WithReadOnly(func(data *models.AvatarStats) error {
 				personalStats = append(personalStats, data.Encode(u.GetId())...)

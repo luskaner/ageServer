@@ -32,11 +32,11 @@ const (
 	assumeQueueRandomMapSolo = "rm-solo"
 )
 
-// AutomatchGameTitles lists the titles that use the automatch2 flow. AoE4 is
-// implemented from the captures in docs/matchmaking.md §2.5; AoE1/AoE3/AoM stay
-// out until F0 identifies their queue endpoint.
+// AutomatchGameTitles lists the titles that use the automatch2 flow. AoE2 and
+// AoE4 come from docs/matchmaking.md; AoE1 was captured on 2026-11-07.
+// AoE3/AoM stay out until F0 identifies their queue endpoint.
 func AutomatchGameTitles() []string {
-	return []string{game.AoE2, game.AoE4}
+	return []string{game.AoE1, game.AoE2, game.AoE4}
 }
 
 // AutomatchSupported reports whether a title uses the automatch2 engine.
@@ -219,6 +219,10 @@ type Matchmaking interface {
 	PrepareHostAdvertisement(hostID int32, advertisementID int32) (AutomatchHostReservation, bool)
 	HostCreated(pollID int32, advertisementID int32, hostID int32) []MatchNotification
 	SetPlatformSessionID(userID int32, matchID int32, platformSessionID uint64) bool
+	// AttachMatchPeers adds every player of a reserved match to its
+	// advertisement as a peer. AoE1 never calls /advertisement/join: the
+	// server adds both players when the host creates the match advertisement.
+	AttachMatchPeers(advertisementID int32) bool
 	HostFailed(hostID int32, pollID int32)
 	RemoveUser(userID int32)
 }
@@ -261,7 +265,7 @@ func (mm *MainMatchmaking) Initialize(game Game) {
 
 func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingRequest, r *http.Request) (i.A, []MatchNotification) {
 	if mm.game == nil || session == nil {
-		return AutomatchUnmatchedResponse(0, nil), nil
+		return AutomatchUnmatchedResponse(gameTitle(mm.game), 0, nil), nil
 	}
 	if request == nil {
 		request = &AutomatchPollingRequest{}
@@ -368,7 +372,7 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 				// The joiner already knows its reserved matchID (slot 12) but
 				// waits for the host advertisement before receiving the full
 				// matched payload.
-				return mm.unmatchedLocked(entry, matchTypes, 0, match.ID), nil
+				return mm.unmatchedLocked(entry, matchTypes, match.ID), nil
 			}
 		} else {
 			entry.MatchID = 0
@@ -377,7 +381,7 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 
 	if len(matchTypes) == 0 {
 		mm.removeFromQueueLocked(entry)
-		return automatchUnmatchedResponse(entry.EstimatedWaitMs, nil, nil, 1, 0), nil
+		return automatchUnmatchedResponse(gameTitle(mm.game), entry.EstimatedWaitMs, nil, nil, nil, 0), nil
 	}
 
 	entry.MatchTypes = matchTypes
@@ -391,11 +395,11 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 				return response, nil
 			}
 		} else {
-			return mm.unmatchedLocked(entry, matchTypes, 0, match.ID), nil
+			return mm.unmatchedLocked(entry, matchTypes, match.ID), nil
 		}
 	}
 
-	return mm.unmatchedLocked(entry, matchTypes, 1, 0), nil
+	return mm.unmatchedLocked(entry, matchTypes, 0), nil
 }
 
 func matchHasUser(match *automatchMatch, userID int32) bool {
@@ -427,10 +431,14 @@ func (mm *MainMatchmaking) tryCreateMatchLocked(entry *automatchQueueEntry, matc
 		groups := mm.groupsForQueueLocked(queue)
 		candidates := make([]*automatchPartyGroup, 0, len(groups))
 		for _, group := range groups {
-			if group == pollingGroup || !group.Complete {
+			// Compare by member, not by pointer: the polling group is built for
+			// a different queue filter, so it is a distinct object holding the
+			// same entry.
+			if groupContainsEntry(group, entry) || !group.Complete {
 				continue
 			}
-			if pollingGroup.PartySessionID > 0 && group.PartySessionID == pollingGroup.PartySessionID {
+			if mm.usesParties() && pollingGroup.PartySessionID > 0 &&
+				group.PartySessionID == pollingGroup.PartySessionID {
 				continue
 			}
 			candidates = append(candidates, group)
@@ -460,6 +468,12 @@ func (mm *MainMatchmaking) tryCreateMatchLocked(entry *automatchQueueEntry, matc
 		if total != queue.MaxPlayers {
 			continue
 		}
+		// Place the oldest unit first so the host ends up on team 0: AoE1
+		// sends the real team ids in the peer rows, and the client expects the
+		// host there.
+		slices.SortFunc(selected, func(a, b *automatchPartyGroup) int {
+			return a.QueuedAt.Compare(b.QueuedAt)
+		})
 		players, teamIDs, ok := assignTeams(selected, queue)
 		if !ok {
 			continue
@@ -490,12 +504,38 @@ func (mm *MainMatchmaking) tryCreateMatchLocked(entry *automatchQueueEntry, matc
 	return nil
 }
 
+// usesParties reports whether a title lets several players queue together.
+// AoE1 has no groups: every Quick Match entry is a unit of one, and its
+// partySessionID is just the player's own session advertisement. Ignoring it
+// here keeps the queue from depending on that advertisement existing (or on it
+// having exactly one peer).
+func (mm *MainMatchmaking) usesParties() bool {
+	return usesPartiesForTitle(gameTitle(mm.game))
+}
+
+// usesPartiesForTitle is the title-level form of usesParties.
+func usesPartiesForTitle(title string) bool {
+	return title != game.AoE1
+}
+
 // groupForEntryLocked builds the party group that contains entry. When queue
 // is nil the group keeps every entry of the party in the queue.
 func (mm *MainMatchmaking) groupForEntryLocked(entry *automatchQueueEntry, queue *automatchQueue) *automatchPartyGroup {
 	group := &automatchPartyGroup{
 		PartySessionID: entry.PartySessionID,
 		RosterSize:     1,
+	}
+	if entry.PartySessionID <= 0 || !mm.usesParties() {
+		// A solo player is a unit of one. sameParty only links positive party
+		// ids, so without this branch the group would stay empty and two solo
+		// players could never pair.
+		if queue != nil && !slices.Contains(entry.MatchTypes, queue.ID) {
+			return nil
+		}
+		group.Entries = []*automatchQueueEntry{entry}
+		group.QueuedAt = entry.QueuedAt
+		group.Complete = true
+		return group
 	}
 	for _, candidate := range mm.queue {
 		if !sameParty(entry, candidate) {
@@ -513,9 +553,7 @@ func (mm *MainMatchmaking) groupForEntryLocked(entry *automatchQueueEntry, queue
 		return a.QueuedAt.Compare(b.QueuedAt)
 	})
 	group.QueuedAt = group.Entries[0].QueuedAt
-	if entry.PartySessionID > 0 {
-		group.RosterSize = mm.partyRosterSizeLocked(entry.PartySessionID)
-	}
+	group.RosterSize = mm.partyRosterSizeLocked(entry.PartySessionID)
 	group.Complete = len(group.Entries) == group.RosterSize
 	return group
 }
@@ -528,7 +566,7 @@ func (mm *MainMatchmaking) groupsForQueueLocked(queue *automatchQueue) []*automa
 			continue
 		}
 		key := "u:" + strconv.Itoa(int(entry.UserID))
-		if entry.PartySessionID > 0 {
+		if entry.PartySessionID > 0 && mm.usesParties() {
 			key = "p:" + strconv.FormatInt(entry.PartySessionID, 10)
 		}
 		if _, ok := seen[key]; ok {
@@ -565,6 +603,21 @@ func (mm *MainMatchmaking) partyRosterSizeLocked(partySessionID int64) int {
 		return 1
 	}
 	return peers.Len()
+}
+
+// groupContainsEntry reports whether the group already holds the entry. It is
+// the identity test used to exclude the polling unit from its own candidate
+// list (two group objects can wrap the same entry).
+func groupContainsEntry(group *automatchPartyGroup, entry *automatchQueueEntry) bool {
+	if group == nil || entry == nil {
+		return false
+	}
+	for _, member := range group.Entries {
+		if member == entry {
+			return true
+		}
+	}
+	return false
 }
 
 func groupSupportsQueue(group *automatchPartyGroup, queueID int32) bool {
@@ -685,7 +738,7 @@ func oldestEntry(entries []*automatchQueueEntry) *automatchQueueEntry {
 // forced Rated=false so it cannot contaminate a ladder.
 func (mm *MainMatchmaking) tryAssumeQueueMatchLocked(entry *automatchQueueEntry) *automatchMatch {
 	queue := mm.assumeQueueLocked()
-	if entry.PartySessionID > 0 {
+	if entry.PartySessionID > 0 && mm.usesParties() {
 		logger.Warn("automatch2: assume-queue does not group parties; user=%d will wait matchTypes=[%s]", entry.UserID, describeMatchTypes(entry.MatchTypes))
 		return nil
 	}
@@ -694,7 +747,7 @@ func (mm *MainMatchmaking) tryAssumeQueueMatchLocked(entry *automatchQueueEntry)
 		if candidate.UserID == entry.UserID || candidate.MatchID != 0 || len(candidate.MatchTypes) == 0 {
 			continue
 		}
-		if candidate.PartySessionID > 0 {
+		if candidate.PartySessionID > 0 && mm.usesParties() {
 			continue
 		}
 		if mm.catalog.HasKnownMatchType(candidate.MatchTypes) {
@@ -737,8 +790,31 @@ func internalAssumeQueue() string {
 	return i.AutomatchAssumeQueue
 }
 
-func (mm *MainMatchmaking) unmatchedLocked(entry *automatchQueueEntry, matchTypes []int32, state int, matchID int32) i.A {
-	return automatchUnmatchedResponse(entry.EstimatedWaitMs, matchTypes, entry.RaceInfoRaces, state, matchID)
+func (mm *MainMatchmaking) unmatchedLocked(entry *automatchQueueEntry, matchTypes []int32, matchID int32) i.A {
+	return automatchUnmatchedResponse(
+		gameTitle(mm.game),
+		entry.EstimatedWaitMs,
+		matchTypes,
+		entry.RaceInfoRaces,
+		mm.queueCountsLocked(matchTypes),
+		matchID,
+	)
+}
+
+// queueCountsLocked reports how many players are waiting for each requested
+// matchType. It is what the client renders as the queue population (AoE1 shows
+// it directly), and it is why a matched player sees the remaining count: the
+// pairing already removed them from the queue.
+func (mm *MainMatchmaking) queueCountsLocked(matchTypes []int32) []int {
+	counts := make([]int, len(matchTypes))
+	for index, matchType := range matchTypes {
+		for _, entry := range mm.queue {
+			if slices.Contains(entry.MatchTypes, matchType) {
+				counts[index]++
+			}
+		}
+	}
+	return counts
 }
 
 func (mm *MainMatchmaking) StopPolling(session Session, request *AutomatchStopPollingRequest) i.A {
@@ -781,8 +857,9 @@ func (mm *MainMatchmaking) StopPolling(session Session, request *AutomatchStopPo
 	}
 	mm.removeQueueEntryLocked(entry)
 	// A party stops as one unit: leaving one member out of the queue would
-	// leave the others searching for a roster that can never complete.
-	if entry.PartySessionID > 0 {
+	// leave the others searching for a roster that can never complete. AoE1
+	// has no parties, so its entries stop individually.
+	if entry.PartySessionID > 0 && mm.usesParties() {
 		for _, candidate := range mm.byUser {
 			if candidate.UserID == userID || candidate.PartySessionID != entry.PartySessionID ||
 				candidate.MatchID != 0 {
@@ -921,7 +998,9 @@ func (mm *MainMatchmaking) reservationLocked(match *automatchMatch, battleServer
 	if match.Queue != nil {
 		reservation.MaxPlayers = match.Queue.AdvertisementMaxPlayers()
 		reservation.MatchType = match.Queue.AdvertisementMatchType(AutomatchAdvertisementMatchType)
-		if gameTitle(mm.game) == game.AoE4 {
+		// AoE1 and AoE4 use description=AUTOMATCH for the match
+		// advertisement; AoE2 keeps SESSION_MATCH_KEY.
+		if title := gameTitle(mm.game); title == game.AoE4 || title == game.AoE1 {
 			reservation.Description = AutomatchAutoMatchDescription
 		}
 	}
@@ -1004,6 +1083,67 @@ func (mm *MainMatchmaking) SetPlatformSessionID(userID int32, matchID int32, pla
 	return true
 }
 
+// AttachMatchPeers adds every player of a reserved match to its
+// advertisement as a peer. AoE1 never calls /advertisement/join: the official
+// service adds both players when the host creates the match advertisement, and
+// the client needs them there both for getAdvertisements and for the
+// MatchStartMessage fan-out (which iterates the advertisement peers).
+func (mm *MainMatchmaking) AttachMatchPeers(advertisementID int32) bool {
+	mm.mu.Lock()
+	match, ok := mm.matches[advertisementID]
+	if !ok {
+		mm.mu.Unlock()
+		return false
+	}
+	players := make([]int32, 0, len(match.Players))
+	teams := make(map[int32]int32, len(match.Players))
+	for index, player := range match.Players {
+		team := int32(-1)
+		if index < len(match.TeamIDs) {
+			team = match.TeamIDs[index]
+		}
+		players = append(players, player.UserID)
+		teams[player.UserID] = team
+	}
+	// Do not hold mm.mu while taking the advertisement lock: update.go takes
+	// them in the opposite order.
+	mm.mu.Unlock()
+
+	users := mm.game.Users()
+	advertisements := mm.game.Advertisements()
+	added := 0
+	advertisements.WithWriteLock(advertisementID, func() {
+		advertisement, found := advertisements.GetAdvertisement(advertisementID)
+		if !found {
+			return
+		}
+		for _, userID := range players {
+			user, found := users.GetUserById(userID)
+			if !found {
+				continue
+			}
+			if advertisements.UnsafeNewPeer(
+				advertisementID,
+				advertisement.GetIp(),
+				userID,
+				user.GetStatGroupID(),
+				-1,
+				0,
+				teams[userID],
+			) != nil {
+				added++
+			}
+		}
+	})
+	logger.Printf(
+		"automatch2: attached match peers adv=%d players=%d added=%d\n",
+		advertisementID,
+		len(players),
+		added,
+	)
+	return added > 0
+}
+
 func (mm *MainMatchmaking) HostCreated(pollID int32, advertisementID int32, hostID int32) []MatchNotification {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
@@ -1075,7 +1215,7 @@ func (mm *MainMatchmaking) HostCreated(pollID int32, advertisementID int32, host
 			)
 		}
 		peers := mm.matchPeersLocked(match, ip)
-		message := encodeAutomatchGameMessageLocked(match, player, ip, ports, peers)
+		message := encodeAutomatchGameMessageLocked(gameTitle(mm.game), match, player, ip, ports, peers)
 		notifications = append(notifications, MatchNotification{
 			Session: player.Session,
 			Action:  automatchGameMessage,
@@ -1144,8 +1284,9 @@ func (mm *MainMatchmaking) RemoveUser(userID int32) {
 	}
 	mm.removeQueueEntryLocked(entry)
 	// A party leaves atomically: a member dropping out cancels the unit
-	// instead of leaving the other members searching alone (§4.3.1).
-	if partySessionID > 0 {
+	// instead of leaving the other members searching alone (§4.3.1). AoE1 has
+	// no parties, so its entries leave individually.
+	if partySessionID > 0 && mm.usesParties() {
 		for _, candidate := range mm.byUser {
 			if candidate.UserID == userID || candidate.PartySessionID != partySessionID {
 				continue
@@ -1316,6 +1457,21 @@ func (mm *MainMatchmaking) expireMatch(matchID int32) {
 }
 
 func (mm *MainMatchmaking) matchedResponseLocked(entry *automatchQueueEntry, match *automatchMatch, r *http.Request) (i.A, bool) {
+	counts := mm.queueCountsLocked(entry.MatchTypes)
+	title := gameTitle(mm.game)
+	if title == game.AoE1 {
+		// AoE1's matched polling body is its 20-field searching body with the
+		// match id in slot 12; host, map and relay details travel in the wss
+		// Automatch2GameMessage, so no BattleServer is needed here.
+		return automatchUnmatchedResponse(
+			title,
+			entry.EstimatedWaitMs,
+			entry.MatchTypes,
+			entry.RaceInfoRaces,
+			counts,
+			match.ID,
+		), true
+	}
 	advertisementID := match.AdvertisementID
 	var advertisement Advertisement
 	if advertisementID == 0 {
@@ -1348,9 +1504,11 @@ func (mm *MainMatchmaking) matchedResponseLocked(entry *automatchQueueEntry, mat
 	}
 	ports := encodeRelayPorts(battleServer)
 	response := encodeMatchedResponse(automatchMatchedParams{
+		Title:           title,
 		EstimatedWaitMs: entry.EstimatedWaitMs,
 		MatchTypes:      entry.MatchTypes,
 		RaceIDs:         entry.RaceInfoRaces,
+		Counts:          counts,
 		HostProfileID:   match.HostID,
 		MapName:         match.MapName,
 		MapID:           match.MapID,
@@ -1396,14 +1554,31 @@ func encodeRelayPorts(battleServer BattleServer) []int {
 }
 
 // matchPeersLocked encodes the positional peer rows of the matched polling
-// response and the wss message. E4 shows teamID=-1 for every peer: the real
-// team assignment travels in match.Teams and in the advertisement slots.
+// response and the wss message. AoE2 and AoE4 show teamID=-1 for every peer
+// (E4: the real assignment travels in match.Teams and the advertisement
+// slots); the AoE1 capture carries the real team in the peer row, which is
+// what its client uses to place players.
 func (mm *MainMatchmaking) matchPeersLocked(match *automatchMatch, ip string) []i.A {
+	realTeams := gameTitle(mm.game) == game.AoE1
+	teams := make(map[int32]int32, len(match.Players))
+	if realTeams {
+		for index, player := range match.Players {
+			team := int32(-1)
+			if index < len(match.TeamIDs) {
+				team = match.TeamIDs[index]
+			}
+			teams[player.UserID] = team
+		}
+	}
 	peers := make([]i.A, 0, len(match.Players))
 	for _, player := range match.Players {
 		user, ok := mm.game.Users().GetUserById(player.UserID)
 		if !ok {
 			continue
+		}
+		team := int32(-1)
+		if realTeams {
+			team = teams[player.UserID]
 		}
 		peer := NewPeer(
 			match.ID,
@@ -1412,7 +1587,7 @@ func (mm *MainMatchmaking) matchPeersLocked(match *automatchMatch, ip string) []
 			user.GetStatGroupID(),
 			-1,
 			0,
-			-1,
+			team,
 		)
 		peers = append(peers, peer.Encode())
 	}
@@ -1650,21 +1825,51 @@ func (mm *MainMatchmaking) cancelMatchLocked(match *automatchMatch, requeue bool
 
 // AutomatchUnmatchedResponse returns a response with the same shape as the
 // official server when no match has been found yet.
-func AutomatchUnmatchedResponse(estimatedWaitMs int32, matchTypes []int32) i.A {
-	return automatchUnmatchedResponse(estimatedWaitMs, matchTypes, nil, 1, 0)
+func AutomatchUnmatchedResponse(title string, estimatedWaitMs int32, matchTypes []int32) i.A {
+	counts := make([]int, len(matchTypes))
+	for index := range counts {
+		counts[index] = 1
+	}
+	return automatchUnmatchedResponse(title, estimatedWaitMs, matchTypes, nil, counts, 0)
 }
 
 // automatchUnmatchedResponse mirrors the official unmatched body. Slot 2 is
 // the estimated wait in milliseconds (rendered by the client as H:MM:SS, see
-// estimatedWaitMillis).
-func automatchUnmatchedResponse(estimatedWaitMs int32, matchTypes []int32, raceIDs []int32, state int, matchID int32) i.A {
+// estimatedWaitMillis). AoE1's older client library omits the third relay port
+// and the completion slot, so its body has 20 fields instead of 22.
+func automatchUnmatchedResponse(title string, estimatedWaitMs int32, matchTypes []int32, raceIDs []int32, counts []int, matchID int32) i.A {
 	assigned := int32(-1)
 	if matchID != 0 {
 		assigned = matchID
 	}
+	statuses := encodeAutomatchQueueStatuses(matchTypes, raceIDs, counts)
+	if title == game.AoE1 {
+		return i.A{
+			0,
+			statuses,
+			estimatedWaitMs,
+			nil,
+			-1,
+			"",
+			-1,
+			-1,
+			-1,
+			"0",
+			"0",
+			"-1",
+			assigned,
+			"authtoken",
+			"0.0.0.0",
+			0,
+			0,
+			"",
+			[]i.A{},
+			nil,
+		}
+	}
 	return i.A{
 		0,
-		encodeUnmatchedAutomatchQueueStatuses(matchTypes, raceIDs, state),
+		statuses,
 		estimatedWaitMs,
 		nil,
 		-1,
@@ -1688,9 +1893,13 @@ func automatchUnmatchedResponse(estimatedWaitMs int32, matchTypes []int32, raceI
 	}
 }
 
-// encodeUnmatchedAutomatchQueueStatuses emits one status per requested
-// matchType, in the same order, echoing raceInfoRaceID in the map slot (E2).
-func encodeUnmatchedAutomatchQueueStatuses(matchTypes []int32, raceIDs []int32, state int) []i.A {
+// encodeAutomatchQueueStatuses emits one status per requested matchType, in
+// the same order, echoing raceInfoRaceID in the map slot (E2). The second
+// field is the number of players currently waiting for that queue, which the
+// AoE1 client renders as the queue population; AoE2/AoE4 show it as the
+// searching estimate. A player searching alone therefore sees 1 and a matched
+// player sees the remaining population (0 when the match took everyone).
+func encodeAutomatchQueueStatuses(matchTypes []int32, raceIDs []int32, counts []int) []i.A {
 	if len(matchTypes) == 0 {
 		return []i.A{}
 	}
@@ -1700,9 +1909,13 @@ func encodeUnmatchedAutomatchQueueStatuses(matchTypes []int32, raceIDs []int32, 
 		if index < len(raceIDs) {
 			raceID = raceIDs[index]
 		}
+		players := 1
+		if index < len(counts) {
+			players = counts[index]
+		}
 		statuses = append(statuses, i.A{
 			strconv.Itoa(int(matchType)),
-			state,
+			players,
 			i.A{i.A{int(raceID), 1}},
 			"0",
 		})
@@ -1711,9 +1924,11 @@ func encodeUnmatchedAutomatchQueueStatuses(matchTypes []int32, raceIDs []int32, 
 }
 
 type automatchMatchedParams struct {
+	Title           string
 	EstimatedWaitMs int32
 	MatchTypes      []int32
 	RaceIDs         []int32
+	Counts          []int
 	HostProfileID   int32
 	MapName         string
 	MapID           int32
@@ -1729,8 +1944,13 @@ type automatchMatchedParams struct {
 }
 
 // encodeMatchedResponse builds the positional matched response captured in
-// docs/matchmaking.md §2.2/§2.5.
+// docs/matchmaking.md §2.2/§2.5. AoE1 reuses its 20-field body: the match id is
+// the only new value, and the host/map/relay details travel in the wss
+// Automatch2GameMessage instead.
 func encodeMatchedResponse(p automatchMatchedParams) i.A {
+	if p.Title == game.AoE1 {
+		return automatchUnmatchedResponse(p.Title, p.EstimatedWaitMs, p.MatchTypes, p.RaceIDs, p.Counts, p.MatchID)
+	}
 	ports := p.Ports
 	for len(ports) < 3 {
 		ports = append(ports, 0)
@@ -1740,7 +1960,7 @@ func encodeMatchedResponse(p automatchMatchedParams) i.A {
 	}
 	return i.A{
 		0,
-		encodeUnmatchedAutomatchQueueStatuses(p.MatchTypes, p.RaceIDs, 0),
+		encodeAutomatchQueueStatuses(p.MatchTypes, p.RaceIDs, p.Counts),
 		p.EstimatedWaitMs,
 		nil,
 		p.HostProfileID,
@@ -1764,10 +1984,13 @@ func encodeMatchedResponse(p automatchMatchedParams) i.A {
 	}
 }
 
-// encodeAutomatchGameMessageLocked builds the inner 15-field positional array
-// of Automatch2GameMessage (D16). The wss layer prepends
+// encodeAutomatchGameMessageLocked builds the inner positional array of
+// Automatch2GameMessage (D16). The wss layer prepends
 // [0, "Automatch2GameMessage", recipientProfileID].
-func encodeAutomatchGameMessageLocked(match *automatchMatch, recipient *automatchQueueEntry, ip string, ports []int, peers []i.A) i.A {
+//
+// AoE1's message has 14 fields: only two relay ports, the queue shape as
+// (teams, players per team) and an explicit ranked flag in slot 4.
+func encodeAutomatchGameMessageLocked(title string, match *automatchMatch, recipient *automatchQueueEntry, ip string, ports []int, peers []i.A) i.A {
 	raceID := int32(0)
 	if len(recipient.RaceInfoRaces) > 0 {
 		raceID = recipient.RaceInfoRaces[0]
@@ -1777,6 +2000,28 @@ func encodeAutomatchGameMessageLocked(match *automatchMatch, recipient *automatc
 	}
 	if len(ports) < 3 {
 		ports = append(ports, 0, 0, 0)
+	}
+	if title == game.AoE1 {
+		ranked := "0"
+		if match.Queue.Rated {
+			ranked = "1"
+		}
+		return i.A{
+			match.HostID,
+			match.ID,
+			match.MapName,
+			raceID,
+			ranked,
+			"0",
+			strconv.Itoa(match.Queue.Teams),
+			strconv.Itoa(match.Queue.TeamSize),
+			"authtoken",
+			ip,
+			ports[0],
+			ports[1],
+			peers,
+			"",
+		}
 	}
 	return i.A{
 		match.HostID,
@@ -1843,13 +2088,10 @@ func IsAutomatchDescription(description string) bool {
 // The signal is per title because the same matchtype is reused:
 //   - AoE2: the matchmaking host uses matchtype 19 (the party/session lobby
 //     uses matchtype 1), or carries the automatch poll id.
-//   - AoE4: the party/session lobby ALSO uses matchtype 19 with
-//     description=SESSION_MATCH_KEY, map no_map and 8 players. Treating that
-//     as a matchmaking host made PrepareHost fail, the server answered error
-//     code 2 and the client aborted the search ("we're not polling at the
-//     moment, ignoring"). The AoE4 match advertisement is created through
-//     /advertisement/update with the reserved id, so only an explicit
-//     AUTOMATCH description or a poll id identifies the matchmaking host.
+//   - AoE4/AoE1: the party/session lobby uses description=SESSION_MATCH_KEY
+//     (AoE1 even with matchtype 0), so only an explicit AUTOMATCH description
+//     or a poll id identifies the matchmaking host. The AoE4 and AoE1 match
+//     advertisements use description=AUTOMATCH and the queue id as matchtype.
 func IsAutomatchHostRequest(gameTitle string, description string, matchType uint16, pollID int32) bool {
 	if pollID > 0 {
 		return true
@@ -1857,7 +2099,7 @@ func IsAutomatchHostRequest(gameTitle string, description string, matchType uint
 	switch gameTitle {
 	case game.AoE2:
 		return matchType == AutomatchAdvertisementMatchType
-	case game.AoE4:
+	case game.AoE1, game.AoE4:
 		return description == AutomatchAutoMatchDescription
 	default:
 		return false

@@ -302,7 +302,7 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 	// The official service always answers a report with the result notification,
 	// rated or not: the post-game screen waits for it and stays on "Retrieving…"
 	// until it arrives. An unrated match simply carries the default rating.
-	notification := gameResultNotification(result, ratings, statGroupIDs)
+	notification := gameResultNotification(models.G(r).Title(), result, ratings, statGroupIDs)
 	for _, profile := range result.Players {
 		if session, found := models.G(r).Sessions().GetByUserId(profile); found {
 			wss.SendOrStoreMessage(session, "GameResultNotificationMessage", notification)
@@ -312,7 +312,7 @@ func ReportMatch(w http.ResponseWriter, r *http.Request) {
 	i.JSON(&w, reportMatchResponse(0, replays))
 }
 
-func gameResultNotification(match models.MatchResult, ratings map[int32]*models.PlayerRating, statGroupIDs map[int32]int32) i.A {
+func gameResultNotification(title string, match models.MatchResult, ratings map[int32]*models.PlayerRating, statGroupIDs map[int32]int32) i.A {
 	matchTypeID := match.MatchType
 	if matchTypeID <= 0 {
 		if queueID, ok := models.QueueIDFromQueueType(match.QueueType); ok {
@@ -383,7 +383,7 @@ func gameResultNotification(match models.MatchResult, ratings map[int32]*models.
 		}
 		leaderboardStats = append(
 			leaderboardStats,
-			models.EncodeLeaderboardStatFor(statGroupID, rating.Rating, rating),
+			models.EncodeLeaderboardStatForGame(title, statGroupID, rating.Rating, rating),
 		)
 	}
 

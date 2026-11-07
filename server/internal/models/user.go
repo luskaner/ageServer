@@ -512,6 +512,13 @@ func (u *MainUser) EncodeLeaderboardStat(r *PlayerRating) i.A {
 // is not loaded in memory. statGroupID and fallbackRating come from the stored
 // profile.
 func EncodeLeaderboardStatFor(statGroupID int32, fallbackRating int32, r *PlayerRating) i.A {
+	return EncodeLeaderboardStatForGame("", statGroupID, fallbackRating, r)
+}
+
+// EncodeLeaderboardStatForGame returns the leaderboardStat row the title
+// expects. AoE1's older client library ends the row with ["{}","{}", lastMatch]
+// and has 16 fields; the newer titles use the 19-field row above.
+func EncodeLeaderboardStatForGame(gameID string, statGroupID int32, fallbackRating int32, r *PlayerRating) i.A {
 	leaderboardID := int32(SoloRMRanked)
 	rating := fallbackRating
 	if rating <= 0 {
@@ -539,6 +546,26 @@ func EncodeLeaderboardStatFor(statGroupID int32, fallbackRating int32, r *Player
 		}
 		if !r.LastMatch.IsZero() {
 			lastMatch = r.LastMatch.Unix()
+		}
+	}
+	if gameID == game.AoE1 {
+		return i.A{
+			statGroupID,   // statGroupID
+			leaderboardID, // leaderboardID
+			wins,          // wins
+			losses,        // losses
+			streak,        // streak
+			0,             // disputes
+			0,             // drops
+			ranking,       // ranking
+			rankTotal,     // rankTotal
+			-1,            // regionRanking
+			-1,            // regionRankTotal
+			0,             // level
+			rating,        // rating
+			"{}",          // counters
+			"{}",          // custom updates
+			lastMatch,     // lastMatchTime
 		}
 	}
 	return i.A{

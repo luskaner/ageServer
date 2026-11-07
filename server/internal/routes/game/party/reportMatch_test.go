@@ -226,7 +226,7 @@ func TestGameResultNotificationMatchesOfficialShape(t *testing.T) {
 		},
 	}
 
-	got := gameResultNotification(match, ratings, map[int32]int32{
+	got := gameResultNotification("age2", match, ratings, map[int32]int32{
 		24916071: 13436792,
 		25344413: 13657770,
 	})
@@ -291,7 +291,7 @@ func TestGameResultNotificationHasNoWinningTeamOnDefeat(t *testing.T) {
 		Results: []int32{0},
 		Races:   []int32{9005920},
 	}
-	got := gameResultNotification(match, nil, map[int32]int32{1786186287: 195658309})
+	got := gameResultNotification("age2", match, nil, map[int32]int32{1786186287: 195658309})
 	rows, ok := got[0].([]any)
 	if !ok || len(rows) != 1 {
 		t.Fatalf("player results = %#v", got[0])
