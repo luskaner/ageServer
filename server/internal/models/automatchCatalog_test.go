@@ -592,6 +592,53 @@ func TestAoMGameMessageShape(t *testing.T) {
 	}
 }
 
+// The profile table is the single source of truth for the differences the
+// captures document. This test pins them so a refactor cannot silently change
+// one title's wire shape.
+func TestAutomatchTitleProfiles(t *testing.T) {
+	cases := map[string]struct {
+		pollingFields int
+		gameFields    int
+		relay         bool
+		serverPeers   bool
+		realTeams     bool
+		teamSize      bool
+		parties       bool
+		reservation   string
+	}{
+		"age1":   {20, 14, false, true, true, true, false, AutomatchAutoMatchDescription},
+		"age2":   {22, 15, true, false, false, false, true, AutomatchMatchDescription},
+		"age3":   {22, 15, false, true, true, true, true, AutomatchAutoMatchDescription},
+		"age4":   {22, 15, true, false, false, false, true, AutomatchAutoMatchDescription},
+		"athens": {22, 15, true, true, true, true, true, AutomatchAutoMatchDescription},
+	}
+	for title, want := range cases {
+		got := automatchProfile(title)
+		if got.PollingFields != want.pollingFields || got.GameMessageFields != want.gameFields {
+			t.Fatalf("%s wire shape = %d/%d, want %d/%d",
+				title, got.PollingFields, got.GameMessageFields, want.pollingFields, want.gameFields)
+		}
+		if got.MatchedPayloadHasRelay != want.relay || got.ServerAddsPeers != want.serverPeers ||
+			got.RealTeams != want.realTeams || got.GameMessageTeamSize != want.teamSize ||
+			got.Parties != want.parties || got.ReservationDescription != want.reservation {
+			t.Fatalf("%s profile = %+v, want %+v", title, got, want)
+		}
+	}
+	// Every supported title must have a profile, and unknown titles fall back
+	// to the shape the others started from.
+	for _, title := range AutomatchGameTitles() {
+		if _, ok := automatchProfiles[title]; !ok {
+			t.Fatalf("%s is supported but has no profile", title)
+		}
+		if automatchProfile(title).PollingFields == 0 {
+			t.Fatalf("%s has an empty profile", title)
+		}
+	}
+	if fallback := automatchProfile("unknown"); fallback != automatchProfiles["age2"] {
+		t.Fatalf("unknown title profile = %+v, want the AoE2 one", fallback)
+	}
+}
+
 func TestIsAutomatchHostRequestPerTitle(t *testing.T) {
 	cases := []struct {
 		name        string

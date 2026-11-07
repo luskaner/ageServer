@@ -51,22 +51,106 @@ func AutomatchSupported(title string) bool {
 // stays out of the pool until F0 captures it; the client currently hides the
 // mode on this server instead of showing it locked behind the DLC.
 
-// LeaderboardForQueue maps the legacy AoE2 pool ids to their ladder when the
-// catalog is not available (tests, migrations). New code resolves the ladder
-// from the queue catalog overlay.
-func LeaderboardForQueue(queueID int32) int32 {
-	switch queueID {
-	case 6, 71, 78, 86, 122, 123:
-		return SoloRMRanked
-	case 7, 8, 9, 72, 73, 74, 79, 80, 81, 87, 88, 89:
-		return 4 // TEAM_RM_RANKED
-	case 66:
-		return 1 // SOLO_DM_RANKED
-	case 67, 68, 69:
-		return 2 // TEAM_DM_RANKED
-	default:
-		return 0
+// automatchTitleProfile gathers the per-title differences documented by the
+// captures. The engine itself is title-agnostic: everything that varies lives
+// here, so adding a title is a table entry plus its queue resources.
+type automatchTitleProfile struct {
+	// PollingFields is the number of fields of the polling body.
+	PollingFields int
+	// GameMessageFields is the number of fields of the payload of the wss
+	// Automatch2GameMessage.
+	GameMessageFields int
+	// MatchedPayloadHasRelay reports whether the matched polling body carries
+	// the host, map and relay details. AoE1 and AoE3 only learn the matchID
+	// there.
+	MatchedPayloadHasRelay bool
+	// ServerAddsPeers reports whether the server has to put the whole roster
+	// in the match advertisement because the client never calls
+	// /advertisement/join.
+	ServerAddsPeers bool
+	// RealTeams reports whether peer rows carry the real team id instead of -1.
+	RealTeams bool
+	// GameMessageTeamSize reports whether the wss queue shape is
+	// (teams, players per team) instead of (teams, total players).
+	GameMessageTeamSize bool
+	// Parties reports whether the title lets several players queue together.
+	Parties bool
+	// ReservationDescription is the description the server writes on the
+	// reserved match advertisement.
+	ReservationDescription string
+}
+
+// automatchProfiles is the single source of truth for the per-title behaviour.
+var automatchProfiles = map[string]automatchTitleProfile{
+	// AoE1: 20-field polling body, 14-field game message with the queue shape
+	// and the ranked flag, real teams, no parties, no /advertisement/join.
+	game.AoE1: {
+		PollingFields:          20,
+		GameMessageFields:      14,
+		MatchedPayloadHasRelay: false,
+		ServerAddsPeers:        true,
+		RealTeams:              true,
+		GameMessageTeamSize:    true,
+		Parties:                false,
+		ReservationDescription: AutomatchAutoMatchDescription,
+	},
+	// AoE2: 22-field polling body with relay, 15-field game message with the
+	// total player count, parties, and the client joins the advertisement.
+	game.AoE2: {
+		PollingFields:          22,
+		GameMessageFields:      15,
+		MatchedPayloadHasRelay: true,
+		ServerAddsPeers:        false,
+		RealTeams:              false,
+		GameMessageTeamSize:    false,
+		Parties:                true,
+		ReservationDescription: AutomatchMatchDescription,
+	},
+	// AoE3: 22-field polling body but the matchID is all the matched body
+	// carries, 15-field game message with (teams, players per team), real
+	// teams, AUTOMATCH description and server-added peers.
+	game.AoE3: {
+		PollingFields:          22,
+		GameMessageFields:      15,
+		MatchedPayloadHasRelay: false,
+		ServerAddsPeers:        true,
+		RealTeams:              true,
+		GameMessageTeamSize:    true,
+		Parties:                true,
+		ReservationDescription: AutomatchAutoMatchDescription,
+	},
+	// AoE4: like AoE2 but with the AUTOMATCH reservation description.
+	game.AoE4: {
+		PollingFields:          22,
+		GameMessageFields:      15,
+		MatchedPayloadHasRelay: true,
+		ServerAddsPeers:        false,
+		RealTeams:              false,
+		GameMessageTeamSize:    false,
+		Parties:                true,
+		ReservationDescription: AutomatchAutoMatchDescription,
+	},
+	// AoM: 22-field polling body with relay, 15-field game message with
+	// (teams, players per team), real teams, parties and server-added peers.
+	game.AoM: {
+		PollingFields:          22,
+		GameMessageFields:      15,
+		MatchedPayloadHasRelay: true,
+		ServerAddsPeers:        true,
+		RealTeams:              true,
+		GameMessageTeamSize:    true,
+		Parties:                true,
+		ReservationDescription: AutomatchAutoMatchDescription,
+	},
+}
+
+// automatchProfile returns the profile of a title. Unknown titles behave like
+// AoE2, which is the shape every other title started from.
+func automatchProfile(title string) automatchTitleProfile {
+	if profile, ok := automatchProfiles[title]; ok {
+		return profile
 	}
+	return automatchProfiles[game.AoE2]
 }
 
 // AutomatchPollingRequest is the form body sent by the client to
@@ -528,7 +612,7 @@ func (mm *MainMatchmaking) usesParties() bool {
 
 // usesPartiesForTitle is the title-level form of usesParties.
 func usesPartiesForTitle(title string) bool {
-	return title != game.AoE1
+	return automatchProfile(title).Parties
 }
 
 // groupForEntryLocked builds the party group that contains entry. When queue
@@ -1011,10 +1095,10 @@ func (mm *MainMatchmaking) reservationLocked(match *automatchMatch, battleServer
 	if match.Queue != nil {
 		reservation.MaxPlayers = match.Queue.AdvertisementMaxPlayers()
 		reservation.MatchType = match.Queue.AdvertisementMatchType(AutomatchAdvertisementMatchType)
-		// AoE1 and AoE4 use description=AUTOMATCH for the match
-		// advertisement; AoE2 keeps SESSION_MATCH_KEY. AoE3 uses AUTOMATCH too.
-		if title := gameTitle(mm.game); title == game.AoE4 || title == game.AoE1 || title == game.AoE3 {
-			reservation.Description = AutomatchAutoMatchDescription
+		// The description the client expects on the reserved advertisement
+		// (AUTOMATCH for every title except AoE2) is part of the profile.
+		if title := gameTitle(mm.game); automatchProfile(title).ReservationDescription != "" {
+			reservation.Description = automatchProfile(title).ReservationDescription
 		}
 	}
 	return reservation
@@ -1124,18 +1208,27 @@ func (mm *MainMatchmaking) AttachMatchPeers(advertisementID int32) bool {
 
 	users := mm.game.Users()
 	advertisements := mm.game.Advertisements()
-	added := 0
+	attached := 0
 	advertisements.WithWriteLock(advertisementID, func() {
 		advertisement, found := advertisements.GetAdvertisement(advertisementID)
 		if !found {
 			return
 		}
+		peers := advertisement.GetPeers()
 		for _, userID := range players {
 			user, found := users.GetUserById(userID)
 			if !found {
 				continue
 			}
-			if advertisements.UnsafeNewPeer(
+			// The host is already a peer because the route that created the
+			// advertisement added it with the team from its request (often
+			// -1). Force the team the match assigned, keeping its race.
+			if existing, found := peers.Load(userID); found {
+				existing.UpdateMutable(existing.GetMutable().RaceID, teams[userID])
+				attached++
+				continue
+			}
+			advertisements.UnsafeNewPeer(
 				advertisementID,
 				advertisement.GetIp(),
 				userID,
@@ -1143,18 +1236,17 @@ func (mm *MainMatchmaking) AttachMatchPeers(advertisementID int32) bool {
 				-1,
 				0,
 				teams[userID],
-			) != nil {
-				added++
-			}
+			)
+			attached++
 		}
 	})
 	logger.Printf(
-		"automatch2: attached match peers adv=%d players=%d added=%d\n",
+		"automatch2: attached match peers adv=%d players=%d attached=%d\n",
 		advertisementID,
 		len(players),
-		added,
+		attached,
 	)
-	return added > 0
+	return attached > 0
 }
 
 func (mm *MainMatchmaking) HostCreated(pollID int32, advertisementID int32, hostID int32) []MatchNotification {
@@ -1588,7 +1680,7 @@ func matchRecipientTeam(match *automatchMatch, recipient *automatchQueueEntry) i
 // usesRealTeams reports whether the peer rows carry the real team id instead
 // of -1. AoE1 and AoE3 place players with it; AoE2/AoE4 use match.Teams.
 func usesRealTeams(title string) bool {
-	return title == game.AoE1 || title == game.AoE3 || title == game.AoM
+	return automatchProfile(title).RealTeams
 }
 
 func (mm *MainMatchmaking) matchPeersLocked(match *automatchMatch, ip string) []i.A {
@@ -1876,7 +1968,7 @@ func automatchUnmatchedResponse(title string, estimatedWaitMs int32, matchTypes 
 		assigned = matchID
 	}
 	statuses := encodeAutomatchQueueStatuses(matchTypes, raceIDs, counts)
-	if title == game.AoE1 {
+	if automatchProfile(title).PollingFields == 20 {
 		return i.A{
 			0,
 			statuses,
@@ -2036,7 +2128,7 @@ func encodeAutomatchGameMessageLocked(title string, match *automatchMatch, recip
 	if len(ports) < 3 {
 		ports = append(ports, 0, 0, 0)
 	}
-	if title == game.AoE1 {
+	if profile := automatchProfile(title); profile.GameMessageFields == 14 {
 		ranked := "0"
 		if match.Queue.Rated {
 			ranked = "1"
@@ -2062,7 +2154,7 @@ func encodeAutomatchGameMessageLocked(title string, match *automatchMatch, recip
 	// sends "2","2" with four players. AoE2/AoE4 keep the total they always
 	// sent.
 	players := match.Queue.MaxPlayers
-	if title == game.AoE3 || title == game.AoM {
+	if automatchProfile(title).GameMessageTeamSize {
 		players = match.Queue.TeamSize
 	}
 	return i.A{
@@ -2153,12 +2245,12 @@ func IsAutomatchHostRequest(gameTitle string, description string, matchType uint
 // /advertisement/join: the official service puts the whole roster in the match
 // advertisement, and MatchStartMessage iterates those peers.
 func AutomatchServerAddsPeers(title string) bool {
-	return title == game.AoE1 || title == game.AoE3 || title == game.AoM
+	return automatchProfile(title).ServerAddsPeers
 }
 
 // automatchMatchedPayloadHasRelay reports whether the matched polling body
 // carries the host, map and relay details. AoE1 and AoE3 only get the matchID
 // there; the rest travels in the wss Automatch2GameMessage.
 func automatchMatchedPayloadHasRelay(title string) bool {
-	return title != game.AoE1 && title != game.AoE3
+	return automatchProfile(title).MatchedPayloadHasRelay
 }
