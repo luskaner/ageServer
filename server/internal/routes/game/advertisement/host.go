@@ -81,12 +81,44 @@ func Host(w http.ResponseWriter, r *http.Request) {
 	}
 	// SESSION_MATCH_KEY is used both by ordinary session/party lobbies
 	// (matchtype 1, four empty slots) and by the actual matchmaking host
-	// (matchtype 19, no_map) in AoE2. AoE4 uses description AUTOMATCH.
-	automatch := models.AutomatchSupported(gameTitle) &&
-		(adv.AutomatchPollId > 0 ||
-			adv.MatchType == models.AutomatchAdvertisementMatchType ||
-			adv.Description == models.AutomatchAutoMatchDescription)
+	// (matchtype 19, no_map) in AoE2. In AoE4 the party/session lobby also
+	// uses matchtype 19, so the title decides what identifies a matchmaking
+	// host (see models.IsAutomatchHostRequest).
 	var reservation models.AutomatchHostReservation
+	automatch := false
+	if models.IsAutomatchHostRequest(gameTitle, adv.Description, adv.MatchType, adv.AutomatchPollId) {
+		hostID := adv.HostId
+		if hostID == 0 {
+			hostID = sess.GetUserId()
+		}
+		if hostID != sess.GetUserId() {
+			returnError(battleServers, gameTitle, sess.GetClientLibVersion(), r, &w)
+			return
+		}
+		reserved, ok := g.Matchmaking().PrepareHost(hostID, adv.AutomatchPollId)
+		if ok {
+			reservation = reserved
+			adv.HostId = hostID
+			automatch = true
+		} else if gameTitle == game.AoE4 {
+			// A stale or missing reservation must not abort the AoE4 search:
+			// the client treats the error as a failed host and cancels. Fall
+			// back to the ordinary lobby, which is what the party/session
+			// lobby of this title is anyway.
+			adv.HostId = hostID
+			logger.Printf(
+				"automatch2: host request without a reserved match user=%d poll=%d matchtype=%d map=%q max=%d; creating a regular lobby\n",
+				hostID,
+				adv.AutomatchPollId,
+				adv.MatchType,
+				adv.MapName,
+				adv.MaxPlayers,
+			)
+		} else {
+			returnError(battleServers, gameTitle, sess.GetClientLibVersion(), r, &w)
+			return
+		}
+	}
 	var battleServer models.BattleServer
 
 	if automatch {
@@ -107,22 +139,9 @@ func Host(w http.ResponseWriter, r *http.Request) {
 			adv.Party,
 			adv.RelayRegion,
 		)
-		if adv.HostId == 0 {
-			adv.HostId = sess.GetUserId()
-		}
-		if adv.HostId != sess.GetUserId() {
-			returnError(battleServers, gameTitle, sess.GetClientLibVersion(), r, &w)
-			return
-		}
 		// Matchmaking is a server-managed solo lobby. Ignore a party value
 		// supplied by the client (solo clients may send 0 instead of -1).
 		adv.Party = -1
-		var ok bool
-		reservation, ok = g.Matchmaking().PrepareHost(adv.HostId, adv.AutomatchPollId)
-		if !ok {
-			returnError(battleServers, gameTitle, sess.GetClientLibVersion(), r, &w)
-			return
-		}
 		if adv.Id != -1 && adv.Id != reservation.MatchID {
 			g.Matchmaking().HostFailed(sess.GetUserId(), adv.AutomatchPollId)
 			returnError(battleServers, gameTitle, sess.GetClientLibVersion(), r, &w)
@@ -149,7 +168,7 @@ func Host(w http.ResponseWriter, r *http.Request) {
 			adv.RelayRegion,
 		)
 	} else {
-		if gameTitle == game.AoE2 && models.IsAutomatchDescription(adv.Description) {
+		if models.IsAutomatchDescription(adv.Description) {
 			logger.Printf(
 				"automatch2: session host user=%d matchtype=%d map=%q max=%d party=%d relay=%q\n",
 				adv.HostId,

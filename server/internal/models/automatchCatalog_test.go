@@ -287,6 +287,38 @@ func TestAssignTeamsKeepsPartiesTogether(t *testing.T) {
 	}
 }
 
+func TestIsAutomatchHostRequestPerTitle(t *testing.T) {
+	cases := []struct {
+		name        string
+		gameTitle   string
+		description string
+		matchType   uint16
+		pollID      int32
+		want        bool
+	}{
+		// AoE4 Quick Match creates its party/session lobby with this exact
+		// combination; treating it as a matchmaking host aborted the search.
+		{"aoe4 party lobby", "age4", AutomatchMatchDescription, 19, -1, false},
+		{"aoe4 match advertisement", "age4", AutomatchAutoMatchDescription, 860, -1, true},
+		{"aoe4 with poll id", "age4", AutomatchMatchDescription, 19, 42, true},
+		{"aoe2 matchmaking host", "age2", AutomatchMatchDescription, 19, -1, true},
+		{"aoe2 party lobby", "age2", AutomatchMatchDescription, 1, -1, false},
+		{"aoe2 with poll id", "age2", "", 1, 7, true},
+		// Titles without a captured queue endpoint never claim a host request.
+		{"age1", "age1", AutomatchMatchDescription, 19, -1, false},
+		{"age3", "age3", AutomatchMatchDescription, 19, -1, false},
+		{"aom", "athens", AutomatchMatchDescription, 19, -1, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsAutomatchHostRequest(tc.gameTitle, tc.description, tc.matchType, tc.pollID); got != tc.want {
+				t.Fatalf("IsAutomatchHostRequest(%q, %q, %d, %d) = %t, want %t",
+					tc.gameTitle, tc.description, tc.matchType, tc.pollID, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCancelMatchPreservesFIFOQueuedAt(t *testing.T) {
 	host := &automatchQueueEntry{UserID: 1, QueuedAt: time.Unix(100, 0), MatchTypes: []int32{6}, Session: &SessionData{}}
 	joiner := &automatchQueueEntry{UserID: 2, QueuedAt: time.Unix(200, 0), MatchTypes: []int32{6}, Session: &SessionData{}}

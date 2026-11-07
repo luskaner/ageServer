@@ -29,6 +29,10 @@ type MatchHistory interface {
 	HasMatch(matchID int64) bool
 	GetRatings(profileIDs []int32) map[int32]*PlayerRating
 	GetRatingsForLeaderboard(leaderboardID int32, profileIDs []int32) map[int32]*PlayerRating
+	// GetMMR returns the hidden matchmaking rating of the profiles for a
+	// queue. Unlike the visible rating it survives season boundaries, and
+	// Quick Match has one even without a visible ladder.
+	GetMMR(queueID int32, leaderboardID int32, profileIDs []int32) map[int32]int32
 	GetRecentForProfile(profileID int32, limit int) []MatchResult
 	GetRecentForProfiles(profileIDs []int32, limit int) []MatchResult
 	GetLeaderboard(limit int) []*PlayerRating

@@ -148,7 +148,7 @@ type automatchQueueEntry struct {
 	MatchID         int32
 	Stopped         bool
 	LocalIP         string
-	CreatedAt      time.Time
+	CreatedAt       time.Time
 	// QueuedAt is FIFO order and is preserved across requeues (D14).
 	QueuedAt time.Time
 	RetryAt  time.Time
@@ -435,9 +435,17 @@ func (mm *MainMatchmaking) tryCreateMatchLocked(entry *automatchQueueEntry, matc
 			}
 			candidates = append(candidates, group)
 		}
-		slices.SortFunc(candidates, func(a, b *automatchPartyGroup) int {
-			return a.QueuedAt.Compare(b.QueuedAt)
-		})
+		// Prefer the candidate whose hidden MMR is closest to the polling
+		// group's; FIFO breaks ties. The MMR survives season boundaries, so
+		// the reset of the visible ladder does not change who you are matched
+		// against. Unrated queues have no ladder and therefore no MMR: every
+		// distance is 0 and the order stays FIFO.
+		pollingMMR := mm.groupMMRLocked(queue, pollingGroup)
+		mmrByGroup := make(map[*automatchPartyGroup]int32, len(candidates))
+		for _, candidate := range candidates {
+			mmrByGroup[candidate] = mm.groupMMRLocked(queue, candidate)
+		}
+		sortCandidatesByMMR(candidates, mmrByGroup, pollingMMR)
 		selected := []*automatchPartyGroup{pollingGroup}
 		total := len(pollingGroup.Entries)
 		for _, candidate := range candidates {
@@ -609,6 +617,57 @@ func assignTeams(groups []*automatchPartyGroup, queue *automatchQueue) ([]*autom
 		return nil, nil, false
 	}
 	return players, teamIDs, true
+}
+
+// sortCandidatesByMMR orders candidate groups by how close their hidden MMR is
+// to the polling group's, breaking ties (and equal/unknown MMR) by FIFO so the
+// queue stays deterministic.
+func sortCandidatesByMMR(candidates []*automatchPartyGroup, mmr map[*automatchPartyGroup]int32, target int32) {
+	slices.SortFunc(candidates, func(a, b *automatchPartyGroup) int {
+		distanceA := absInt32(mmr[a] - target)
+		distanceB := absInt32(mmr[b] - target)
+		if distanceA != distanceB {
+			if distanceA < distanceB {
+				return -1
+			}
+			return 1
+		}
+		return a.QueuedAt.Compare(b.QueuedAt)
+	})
+}
+
+func absInt32(value int32) int32 {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+// groupMMRLocked averages the hidden MMR of a group's members for a queue.
+// Every automatch queue of a seasonal title has one (Quick Match included);
+// without a history store the default rating makes the MMR ordering collapse
+// to FIFO.
+func (mm *MainMatchmaking) groupMMRLocked(queue *automatchQueue, group *automatchPartyGroup) int32 {
+	if mm.game == nil || mm.game.MatchHistory() == nil || queue == nil ||
+		group == nil || len(group.Entries) == 0 {
+		return DefaultRating
+	}
+	profiles := make([]int32, 0, len(group.Entries))
+	for _, entry := range group.Entries {
+		profiles = append(profiles, entry.UserID)
+	}
+	ratings := mm.game.MatchHistory().GetMMR(queue.ID, queue.LeaderboardID, profiles)
+	var total, count int32
+	for _, profile := range profiles {
+		if rating, ok := ratings[profile]; ok && rating > 0 {
+			total += rating
+			count++
+		}
+	}
+	if count == 0 {
+		return DefaultRating
+	}
+	return total / count
 }
 
 func oldestEntry(entries []*automatchQueueEntry) *automatchQueueEntry {
@@ -1389,14 +1448,33 @@ func normalizeMapName(name string) string {
 	return strings.Join(strings.Fields(name), " ")
 }
 
-func (entry *automatchQueueEntry) vetoesMap(candidate automatchMapCandidate) bool {
+// vetoesMap reports whether the entry vetoed candidate in the given queue.
+//
+// AoE4 sends vetoMapKey as the index (inside the client's matchTypes list)
+// that each vetoMaps name belongs to, so a veto only applies to its own queue:
+// the capture sends vetoMapKey=[0,0,0,1,1,1,2,2,2,3,3,3] with four matchTypes
+// and three map names per queue. Reading those values as map IDs vetoed maps
+// 0-3 in every queue. AoE2 sends no vetoMapKey, so every name applies to every
+// queue.
+func (entry *automatchQueueEntry) vetoesMap(queueID int32, candidate automatchMapCandidate) bool {
 	if entry == nil {
 		return false
 	}
-	if slices.Contains(entry.VetoMapKeys, candidate.ID) {
-		return true
-	}
 	candidateName := normalizeMapName(candidate.Name)
+	if len(entry.VetoMapKeys) > 0 && len(entry.VetoMapKeys) == len(entry.VetoMapNames) {
+		for index, key := range entry.VetoMapKeys {
+			if key < 0 || int(key) >= len(entry.MatchTypes) {
+				continue
+			}
+			if entry.MatchTypes[key] != queueID {
+				continue
+			}
+			if normalizeMapName(entry.VetoMapNames[index]) == candidateName {
+				return true
+			}
+		}
+		return false
+	}
 	for _, veto := range entry.VetoMapNames {
 		if normalizeMapName(veto) == candidateName {
 			return true
@@ -1409,17 +1487,17 @@ func (entry *automatchQueueEntry) vetoesMap(candidate automatchMapCandidate) boo
 // covered the whole pool, it preserves the match by relaxing the vetoes:
 // first the host's bans, then the joiner's bans, and finally all maps.
 func selectableMaps(candidates []automatchMapCandidate, host, joiner *automatchQueueEntry) ([]automatchMapCandidate, bool) {
-	return selectableMapsFor(candidates, []*automatchQueueEntry{host, joiner})
+	return selectableMapsFor(0, candidates, []*automatchQueueEntry{host, joiner})
 }
 
 // selectableMapsFor generalizes the veto resolution to N players: first the
 // maps nobody vetoed, then the maps at least one player allows, then all maps.
-func selectableMapsFor(candidates []automatchMapCandidate, players []*automatchQueueEntry) ([]automatchMapCandidate, bool) {
+func selectableMapsFor(queueID int32, candidates []automatchMapCandidate, players []*automatchQueueEntry) ([]automatchMapCandidate, bool) {
 	allowed := make([]automatchMapCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		vetoed := false
 		for _, player := range players {
-			if player.vetoesMap(candidate) {
+			if player.vetoesMap(queueID, candidate) {
 				vetoed = true
 				break
 			}
@@ -1436,7 +1514,7 @@ func selectableMapsFor(candidates []automatchMapCandidate, players []*automatchQ
 	// (host first, then joiner) so a party of N keeps a deterministic map.
 	for _, player := range players {
 		for _, candidate := range candidates {
-			if !player.vetoesMap(candidate) {
+			if !player.vetoesMap(queueID, candidate) {
 				allowed = append(allowed, candidate)
 			}
 		}
@@ -1453,7 +1531,7 @@ func (mm *MainMatchmaking) chooseMap(queue *automatchQueue, players []*automatch
 		// know is worse than not creating the match (D2/D7).
 		return "", 0, false
 	}
-	allowed, fallback := selectableMapsFor(queue.Maps, players)
+	allowed, fallback := selectableMapsFor(queue.ID, queue.Maps, players)
 	if fallback {
 		logger.Printf(
 			"automatch2: every map in queue=%d was vetoed; falling back to %d map(s)\n",
@@ -1757,4 +1835,31 @@ func numberToInt(value any) (int, bool) {
 // matchmaking flow.
 func IsAutomatchDescription(description string) bool {
 	return description == AutomatchMatchDescription || description == AutomatchAutoMatchDescription
+}
+
+// IsAutomatchHostRequest reports whether an /advertisement/host request is the
+// server-managed matchmaking lobby.
+//
+// The signal is per title because the same matchtype is reused:
+//   - AoE2: the matchmaking host uses matchtype 19 (the party/session lobby
+//     uses matchtype 1), or carries the automatch poll id.
+//   - AoE4: the party/session lobby ALSO uses matchtype 19 with
+//     description=SESSION_MATCH_KEY, map no_map and 8 players. Treating that
+//     as a matchmaking host made PrepareHost fail, the server answered error
+//     code 2 and the client aborted the search ("we're not polling at the
+//     moment, ignoring"). The AoE4 match advertisement is created through
+//     /advertisement/update with the reserved id, so only an explicit
+//     AUTOMATCH description or a poll id identifies the matchmaking host.
+func IsAutomatchHostRequest(gameTitle string, description string, matchType uint16, pollID int32) bool {
+	if pollID > 0 {
+		return true
+	}
+	switch gameTitle {
+	case game.AoE2:
+		return matchType == AutomatchAdvertisementMatchType
+	case game.AoE4:
+		return description == AutomatchAutoMatchDescription
+	default:
+		return false
+	}
 }

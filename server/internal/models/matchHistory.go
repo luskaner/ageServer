@@ -141,6 +141,9 @@ type MatchHistoryStore struct {
 	db     *sql.DB
 	path   string
 	gameID string
+	// now resolves the active ranked season. Tests replace it to move the
+	// clock across a season boundary.
+	now func() time.Time
 }
 
 // NewMatchHistoryStore opens (and creates when missing) the database in
@@ -148,6 +151,7 @@ type MatchHistoryStore struct {
 func NewMatchHistoryStore(dataDir string) *MatchHistoryStore {
 	s := &MatchHistoryStore{
 		path: filepath.Join(dataDir, "automatch2.db"),
+		now:  time.Now,
 	}
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		logger.Printf("matchHistory: cannot create data dir %s: %s\n", dataDir, err)
@@ -187,6 +191,19 @@ func NewMatchHistoryStoreForGame(gameId string) *MatchHistoryStore {
 	store := NewMatchHistoryStore(filepath.Join(userDataFolder, gameId))
 	store.gameID = gameId
 	return store
+}
+
+// season is the ranked season the store reads and writes. Titles without
+// seasons keep a single permanent ladder (season 0).
+func (s *MatchHistoryStore) season() int {
+	if !GameHasRankedSeasons(s.gameID) {
+		return 0
+	}
+	now := time.Now
+	if s.now != nil {
+		now = s.now
+	}
+	return CurrentRankedSeason(now()).Number
 }
 
 // defaultLeaderboard is the ladder used when a caller does not provide one.
@@ -245,6 +262,7 @@ func migrate(db *sql.DB) error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS ratings (
 			leaderboard_id INTEGER NOT NULL,
+			season         INTEGER NOT NULL DEFAULT 0,
 			profile_id     INTEGER NOT NULL,
 			stat_id        INTEGER NOT NULL DEFAULT 0,
 			rating         INTEGER NOT NULL DEFAULT 1000,
@@ -254,9 +272,20 @@ func migrate(db *sql.DB) error {
 			losses         INTEGER NOT NULL DEFAULT 0,
 			streak         INTEGER NOT NULL DEFAULT 0,
 			last_match     INTEGER NOT NULL DEFAULT 0,
-			PRIMARY KEY (leaderboard_id, profile_id)
+			PRIMARY KEY (leaderboard_id, season, profile_id)
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_ratings_ladder ON ratings(leaderboard_id, rating DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_ratings_ladder ON ratings(leaderboard_id, season, rating DESC)`,
+		// mmr is the hidden matchmaking rating. Unlike ratings it is not
+		// scoped by season: the official service keeps it across seasons and
+		// only resets the visible ladder. It is keyed by queue because Quick
+		// Match has one too, even without a visible ladder.
+		`CREATE TABLE IF NOT EXISTS mmr (
+			queue_id   INTEGER NOT NULL,
+			profile_id INTEGER NOT NULL,
+			mmr        INTEGER NOT NULL DEFAULT 1000,
+			updated_at INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (queue_id, profile_id)
+		)`,
 		`CREATE TABLE IF NOT EXISTS profiles (
 			profile_id       INTEGER PRIMARY KEY,
 			stat_group_id    INTEGER NOT NULL DEFAULT 0,
@@ -304,6 +333,10 @@ func migrate(db *sql.DB) error {
 		{name: "description", definition: "TEXT NOT NULL DEFAULT ''"},
 		{name: "encoded_options", definition: "TEXT NOT NULL DEFAULT ''"},
 		{name: "encoded_slots", definition: "TEXT NOT NULL DEFAULT ''"},
+		// mmr_applied marks that the hidden MMR of the queue was already
+		// updated for this match. It is separate from rated because Quick
+		// Match updates the MMR without moving any visible ladder.
+		{name: "mmr_applied", definition: "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		if err := ensureColumn(db, "matches", column.name, column.definition); err != nil {
 			return err
@@ -470,11 +503,12 @@ func (s *MatchHistoryStore) ApplyResult(m MatchResult) (map[int32]*PlayerRating,
 	var (
 		existingLeaderboard int32
 		existingRated       bool
+		existingMMRApplied  bool
 		existingReached     bool
 	)
 	if err = tx.QueryRow(
-		`SELECT leaderboard_id, rated FROM matches WHERE match_id = ?`, m.MatchID,
-	).Scan(&existingLeaderboard, &existingRated); err == nil {
+		`SELECT leaderboard_id, rated, mmr_applied FROM matches WHERE match_id = ?`, m.MatchID,
+	).Scan(&existingLeaderboard, &existingRated, &existingMMRApplied); err == nil {
 		existingReached = true
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		logger.Printf("matchHistory: lookup %d: %s\n", m.MatchID, err)
@@ -557,6 +591,18 @@ func (s *MatchHistoryStore) ApplyResult(m MatchResult) (map[int32]*PlayerRating,
 
 	resultRatings := map[int32]*PlayerRating{}
 	rated := false
+	// Hidden MMR: every automatch queue of a seasonal title has one, including
+	// Quick Match, which shows no visible rating but is still matched by skill.
+	// It is applied once per match (mmr_applied) and never reset by a season.
+	if !existingMMRApplied && ok && GameHasRankedSeasons(s.gameID) && m.QueueID > 0 &&
+		len(m.Players) == len(m.Teams) {
+		if s.applyMMRTx(tx, m.QueueID, m, winner) {
+			if _, err = tx.Exec(`UPDATE matches SET mmr_applied = 1 WHERE match_id = ?`, m.MatchID); err != nil {
+				logger.Printf("matchHistory: mark mmr applied %d: %s\n", m.MatchID, err)
+			}
+		}
+	}
+	// Visible ladder: only rated queues have one.
 	if !existingRated && ok && leaderboard > 0 && len(m.Players) == len(m.Teams) && len(m.Players) == len(m.Results) {
 		if updated, applied := s.applyEloTx(tx, leaderboard, m, winner); applied {
 			for id, r := range updated {
@@ -601,37 +647,129 @@ func winnerTeam(m MatchResult) (int32, bool) {
 	return -1, false
 }
 
-// applyEloTx must be called with s.mu held and inside tx.
-func (s *MatchHistoryStore) applyEloTx(tx *sql.Tx, leaderboard int32, m MatchResult, winner int32) (map[int32]*PlayerRating, bool) {
-	teams := map[int32][]int32{}
+// eloDeltas returns the rating change of each side for a two-team result.
+func eloDeltas(ratingA, ratingB float64, winnerIsA bool) (int32, int32) {
+	expectedA := 1.0 / (1.0 + math.Pow(10, (ratingB-ratingA)/400.0))
+	expectedB := 1.0 - expectedA
+	scoreA, scoreB := 0.0, 1.0
+	if winnerIsA {
+		scoreA, scoreB = 1.0, 0.0
+	}
+	return int32(math.Round(eloK * (scoreA - expectedA))), int32(math.Round(eloK * (scoreB - expectedB)))
+}
+
+// twoTeams splits a reported result into its two teams and validates the
+// winner. It returns false when the result is not a two-team game.
+func twoTeams(m MatchResult, winner int32) (teams map[int32][]int32, teamA, teamB int32, ok bool) {
+	if len(m.Teams) < len(m.Players) {
+		return nil, 0, 0, false
+	}
+	teams = map[int32][]int32{}
 	for i, profile := range m.Players {
 		team := m.Teams[i]
 		teams[team] = append(teams[team], profile)
 	}
 	if len(teams) != 2 {
-		return nil, false
+		return nil, 0, 0, false
 	}
 	teamIDs := make([]int32, 0, 2)
 	for team := range teams {
 		teamIDs = append(teamIDs, team)
 	}
 	sort.Slice(teamIDs, func(i, j int) bool { return teamIDs[i] < teamIDs[j] })
-	teamA, teamB := teamIDs[0], teamIDs[1]
+	teamA, teamB = teamIDs[0], teamIDs[1]
 	if winner != teamA && winner != teamB {
+		return nil, 0, 0, false
+	}
+	return teams, teamA, teamB, true
+}
+
+// applyMMRTx updates the hidden matchmaking rating of one queue. It is not
+// scoped by season: the official service keeps it across seasons, and Quick
+// Match has one too even though it shows no visible rating.
+func (s *MatchHistoryStore) applyMMRTx(tx *sql.Tx, queueID int32, m MatchResult, winner int32) bool {
+	teams, teamA, teamB, ok := twoTeams(m, winner)
+	if !ok {
+		return false
+	}
+	mmrOf := func(profile int32) (int32, error) {
+		var mmr int32
+		err := tx.QueryRow(
+			`SELECT mmr FROM mmr WHERE queue_id = ? AND profile_id = ?`,
+			queueID, profile,
+		).Scan(&mmr)
+		if errors.Is(err, sql.ErrNoRows) {
+			if _, err = tx.Exec(
+				`INSERT INTO mmr (queue_id, profile_id, mmr, updated_at)
+				 VALUES (?, ?, ?, ?) ON CONFLICT(queue_id, profile_id) DO NOTHING`,
+				queueID, profile, DefaultRating, time.Now().Unix(),
+			); err != nil {
+				return 0, err
+			}
+			return DefaultRating, nil
+		}
+		return mmr, err
+	}
+	before := make(map[int32]int32, len(m.Players))
+	for _, profile := range m.Players {
+		mmr, err := mmrOf(profile)
+		if err != nil {
+			logger.Printf("matchHistory: mmr %d/%d: %s\n", m.MatchID, profile, err)
+			return false
+		}
+		before[profile] = mmr
+	}
+	average := func(team int32) float64 {
+		var total float64
+		for _, profile := range teams[team] {
+			total += float64(before[profile])
+		}
+		return total / float64(len(teams[team]))
+	}
+	deltaA, deltaB := eloDeltas(average(teamA), average(teamB), winner == teamA)
+	for team, delta := range map[int32]int32{teamA: deltaA, teamB: deltaB} {
+		for _, profile := range teams[team] {
+			next := before[profile] + delta
+			if next < 1 {
+				next = 1
+			}
+			if _, err := tx.Exec(
+				`UPDATE mmr SET mmr = ?, updated_at = ? WHERE queue_id = ? AND profile_id = ?`,
+				next, time.Now().Unix(), queueID, profile,
+			); err != nil {
+				logger.Printf("matchHistory: mmr update %d/%d: %s\n", m.MatchID, profile, err)
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// applyEloTx must be called with s.mu held and inside tx. It updates the
+// visible, season-scoped ladder: every rated match scores the season that is
+// active when the result is applied, so a new season starts from the default
+// rating. During the season's placement matches the rating is calibrated
+// towards the hidden MMR (already updated by applyMMRTx), so a returning
+// player is placed at their skill level instead of climbing from scratch.
+func (s *MatchHistoryStore) applyEloTx(tx *sql.Tx, leaderboard int32, m MatchResult, winner int32) (map[int32]*PlayerRating, bool) {
+	season := s.season()
+	seasonal := GameHasRankedSeasons(s.gameID)
+	teams, teamA, teamB, ok := twoTeams(m, winner)
+	if !ok {
 		return nil, false
 	}
 
 	ratingOf := func(profile int32) (int32, error) {
 		var rating int32
 		err := tx.QueryRow(
-			`SELECT rating FROM ratings WHERE leaderboard_id = ? AND profile_id = ?`,
-			leaderboard, profile,
+			`SELECT rating FROM ratings WHERE leaderboard_id = ? AND season = ? AND profile_id = ?`,
+			leaderboard, season, profile,
 		).Scan(&rating)
 		if errors.Is(err, sql.ErrNoRows) {
 			if _, err = tx.Exec(
-				`INSERT INTO ratings (leaderboard_id, profile_id, rating, highest_rating)
-				 VALUES (?, ?, ?, ?) ON CONFLICT(leaderboard_id, profile_id) DO NOTHING`,
-				leaderboard, profile, DefaultRating, DefaultRating,
+				`INSERT INTO ratings (leaderboard_id, season, profile_id, rating, highest_rating)
+				 VALUES (?, ?, ?, ?, ?) ON CONFLICT(leaderboard_id, season, profile_id) DO NOTHING`,
+				leaderboard, season, profile, DefaultRating, DefaultRating,
 			); err != nil {
 				return 0, err
 			}
@@ -639,7 +777,7 @@ func (s *MatchHistoryStore) applyEloTx(tx *sql.Tx, leaderboard int32, m MatchRes
 		}
 		return rating, err
 	}
-	average := func(team int32) (float64, error) {
+	averageRating := func(team int32) (float64, error) {
 		var total float64
 		for _, profile := range teams[team] {
 			rating, err := ratingOf(profile)
@@ -650,22 +788,30 @@ func (s *MatchHistoryStore) applyEloTx(tx *sql.Tx, leaderboard int32, m MatchRes
 		}
 		return total / float64(len(teams[team])), nil
 	}
-	ratingA, err := average(teamA)
+	ratingA, err := averageRating(teamA)
 	if err != nil {
 		return nil, false
 	}
-	ratingB, err := average(teamB)
+	ratingB, err := averageRating(teamB)
 	if err != nil {
 		return nil, false
 	}
-	expectedA := 1.0 / (1.0 + math.Pow(10, (ratingB-ratingA)/400.0))
-	expectedB := 1.0 - expectedA
-	scoreA, scoreB := 0.0, 1.0
-	if winner == teamA {
-		scoreA, scoreB = 1.0, 0.0
+	deltaA, deltaB := eloDeltas(ratingA, ratingB, winner == teamA)
+
+	// Placement target: the hidden MMR of the queue, already updated for this
+	// match. It is what the visible rating converges to while the season is
+	// still in placement.
+	placementTarget := map[int32]int32{}
+	if seasonal && m.QueueID > 0 {
+		for _, profile := range m.Players {
+			var mmr int32
+			if err := tx.QueryRow(
+				`SELECT mmr FROM mmr WHERE queue_id = ? AND profile_id = ?`, m.QueueID, profile,
+			).Scan(&mmr); err == nil && mmr > 0 {
+				placementTarget[profile] = mmr
+			}
+		}
 	}
-	deltaA := int32(math.Round(eloK * (scoreA - expectedA)))
-	deltaB := int32(math.Round(eloK * (scoreB - expectedB)))
 
 	updated := make(map[int32]*PlayerRating, len(m.Players))
 	apply := func(team int32, delta int32, won bool) error {
@@ -678,17 +824,28 @@ func (s *MatchHistoryStore) applyEloTx(tx *sql.Tx, leaderboard int32, m MatchRes
 			var lastMatch int64
 			if err := tx.QueryRow(
 				`SELECT rating, highest_rating, games, wins, losses, streak, stat_id, last_match
-				 FROM ratings WHERE leaderboard_id = ? AND profile_id = ?`,
-				leaderboard, profile,
+				 FROM ratings WHERE leaderboard_id = ? AND season = ? AND profile_id = ?`,
+				leaderboard, season, profile,
 			).Scan(&r.Rating, &r.HighestRating, &r.Games, &r.Wins, &r.Losses, &r.Streak, &r.StatID, &lastMatch); err != nil {
 				return err
 			}
 			r.LastMatch = time.Unix(lastMatch, 0)
 			before := r.Rating
-			r.Rating += delta
-			if r.Rating < 1 {
-				r.Rating = 1
+			after := before + delta
+			// Placement calibration: the first PlacementMatches games move the
+			// visible rating towards the hidden MMR, so the season's ladder is
+			// reset without throwing away the player's real skill.
+			if seasonal && r.Games < PlacementMatches {
+				if target, ok := placementTarget[profile]; ok {
+					if remaining := int32(PlacementMatches) - r.Games; remaining > 0 {
+						after = before + int32(math.Round(float64(target-before)/float64(remaining)))
+					}
+				}
 			}
+			if after < 1 {
+				after = 1
+			}
+			r.Rating = after
 			r.Games++
 			if won {
 				r.Wins++
@@ -712,9 +869,9 @@ func (s *MatchHistoryStore) applyEloTx(tx *sql.Tx, leaderboard int32, m MatchRes
 			r.LastMatch = time.Now()
 			if _, err := tx.Exec(
 				`UPDATE ratings SET rating = ?, highest_rating = ?, games = ?, wins = ?, losses = ?,
-				        streak = ?, last_match = ? WHERE leaderboard_id = ? AND profile_id = ?`,
+				        streak = ?, last_match = ? WHERE leaderboard_id = ? AND season = ? AND profile_id = ?`,
 				r.Rating, r.HighestRating, r.Games, r.Wins, r.Losses, r.Streak, r.LastMatch.Unix(),
-				leaderboard, profile,
+				leaderboard, season, profile,
 			); err != nil {
 				return err
 			}
@@ -839,7 +996,7 @@ func (s *MatchHistoryStore) getRatingsLocked(leaderboardID int32, profiles []int
 	}
 	rows, err := s.db.Query(
 		`SELECT profile_id, rating, highest_rating, games, wins, losses, streak, stat_id, last_match
-		 FROM ratings WHERE leaderboard_id = ?`, leaderboardID,
+		 FROM ratings WHERE leaderboard_id = ? AND season = ?`, leaderboardID, s.season(),
 	)
 	if err != nil {
 		return out
@@ -983,14 +1140,17 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 		return nil, 0
 	}
 	var total int64
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ratings WHERE leaderboard_id = ?`, leaderboardID).Scan(&total); err != nil {
+	season := s.season()
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM ratings WHERE leaderboard_id = ? AND season = ?`, leaderboardID, season,
+	).Scan(&total); err != nil {
 		return nil, 0
 	}
 	rows, err := s.db.Query(
 		`SELECT profile_id, rating, highest_rating, games, wins, losses, streak, stat_id, last_match
-		 FROM ratings WHERE leaderboard_id = ?
+		 FROM ratings WHERE leaderboard_id = ? AND season = ?
 		 ORDER BY rating DESC, profile_id ASC LIMIT ? OFFSET ?`,
-		leaderboardID, count, start,
+		leaderboardID, season, count, start,
 	)
 	if err != nil {
 		return nil, total
@@ -1012,20 +1172,63 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 	return list, total
 }
 
+// GetMMR returns the hidden matchmaking rating of the requested profiles for a
+// queue. It is never reset by a season boundary: the official service keeps it
+// so players keep being matched by skill after the visible ladder resets, and
+// Quick Match has one even though it shows no visible rating. Titles without
+// seasons use the visible ladder as their only skill estimate.
+func (s *MatchHistoryStore) GetMMR(queueID int32, leaderboardID int32, profiles []int32) map[int32]int32 {
+	out := make(map[int32]int32, len(profiles))
+	for _, profile := range profiles {
+		out[profile] = DefaultRating
+	}
+	if queueID <= 0 || len(profiles) == 0 {
+		return out
+	}
+	if !GameHasRankedSeasons(s.gameID) {
+		if leaderboardID <= 0 {
+			return out
+		}
+		for profile, rating := range s.GetRatingsForLeaderboard(leaderboardID, profiles) {
+			if rating != nil && rating.Rating > 0 {
+				out[profile] = rating.Rating
+			}
+		}
+		return out
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return out
+	}
+	for _, profile := range profiles {
+		var mmr int32
+		err := s.db.QueryRow(
+			`SELECT mmr FROM mmr WHERE queue_id = ? AND profile_id = ?`,
+			queueID, profile,
+		).Scan(&mmr)
+		if err == nil && mmr > 0 {
+			out[profile] = mmr
+		}
+	}
+	return out
+}
+
 func (s *MatchHistoryStore) GetDefaultRating() int32 { return DefaultRating }
 
 func (s *MatchHistoryStore) EnsureRating(profileID int32, statID int32) *PlayerRating {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	leaderboardID := s.defaultLeaderboard()
+	season := s.season()
 	if s.db == nil {
 		return &PlayerRating{ProfileID: profileID, LeaderboardID: s.defaultLeaderboard(), StatID: statID, Rating: DefaultRating, HighestRating: DefaultRating}
 	}
 	if _, err := s.db.Exec(
-		`INSERT INTO ratings (leaderboard_id, profile_id, stat_id, rating, highest_rating)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(leaderboard_id, profile_id) DO UPDATE SET stat_id = CASE WHEN excluded.stat_id <> 0 THEN excluded.stat_id ELSE ratings.stat_id END`,
-		leaderboardID, profileID, statID, DefaultRating, DefaultRating,
+		`INSERT INTO ratings (leaderboard_id, season, profile_id, stat_id, rating, highest_rating)
+		 VALUES (?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(leaderboard_id, season, profile_id) DO UPDATE SET stat_id = CASE WHEN excluded.stat_id <> 0 THEN excluded.stat_id ELSE ratings.stat_id END`,
+		leaderboardID, season, profileID, statID, DefaultRating, DefaultRating,
 	); err != nil {
 		logger.Printf("matchHistory: ensure rating %d: %s\n", profileID, err)
 	}
