@@ -14,7 +14,8 @@ tool (
 
 require (
 	github.com/deckarep/golang-set/v3 v3.0.0
-	github.com/goreleaser/goreleaser/v2 v2.19.0
+	github.com/goreleaser/goreleaser/v2 v2.20.0
+	github.com/luskaner/ageServer/common v0.0.0-20261102174108-aff2476387ac
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -81,7 +82,7 @@ require (
 	github.com/xo/terminfo v1.0.0 // indirect
 	gitlab.com/digitalxero/go-conventional-commit v1.0.7 // indirect
 	go.mozilla.org/pkcs7 v0.10.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/net v0.62.0 // indirect
