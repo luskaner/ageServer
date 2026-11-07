@@ -226,6 +226,13 @@ func sendMessage(sessionId string, message i.A) bool {
 
 func SendOrStoreMessage(session models.Session, action string, message any) {
 	finalMessage := i.A{0, action, session.GetUserId(), message}
+	// A client without a live socket can only get the message in its next
+	// readSession poll, so queue it right away: handing it to a goroutine just
+	// delays it and loses its ordering against the messages that follow it.
+	if _, online := connections.Load(session.Id()); !online {
+		session.AddMessage(finalMessage)
+		return
+	}
 	go func(session models.Session, finalMessage i.A) {
 		if ok := sendMessage(session.Id(), finalMessage); !ok {
 			session.AddMessage(finalMessage)
