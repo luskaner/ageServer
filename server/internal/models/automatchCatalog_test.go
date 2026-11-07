@@ -431,6 +431,97 @@ func TestUsesPartiesPerTitle(t *testing.T) {
 	}
 }
 
+func TestLoadQueueCatalogAge3FromBundledPool(t *testing.T) {
+	resources := bundledResources(t, "age3", "automatchMaps.json", "automatchQueues.json")
+	catalog, err := LoadQueueCatalog("age3", resources, bundledLeaderboards(t, "age3"))
+	if err != nil {
+		t.Fatalf("LoadQueueCatalog: %v", err)
+	}
+	if catalog.Len() != 8 {
+		t.Fatalf("queues = %d, want the eight ranked queues", catalog.Len())
+	}
+	// Supremacy is 1v1..4v4 (matchType == ladder id) and Empire Wars is
+	// 18..21, which is the ladder catalogue of the title.
+	for matchType, want := range map[int32]struct {
+		players int
+		ladder  int32
+	}{
+		1:  {2, 1},
+		2:  {4, 2},
+		3:  {6, 3},
+		4:  {8, 4},
+		18: {2, 18},
+		19: {4, 19},
+		20: {6, 20},
+		21: {8, 21},
+	} {
+		queue, ok := catalog.Queue(matchType)
+		if !ok {
+			t.Fatalf("matchType %d missing from the age3 pool", matchType)
+		}
+		if queue.MaxPlayers != want.players || queue.Teams != 2 || queue.TeamSize != want.players/2 {
+			t.Fatalf("matchType %d shape = %+v", matchType, queue)
+		}
+		if !queue.Rated || queue.LeaderboardID != want.ladder {
+			t.Fatalf("matchType %d rating = rated %t ladder %d", matchType, queue.Rated, queue.LeaderboardID)
+		}
+		if queue.Maps[0].Name != "RANDOM" {
+			t.Fatalf("matchType %d map = %q, want RANDOM", matchType, queue.Maps[0].Name)
+		}
+	}
+	// Several sizes at once (the screen lets the player pick more than one).
+	if queue, ok := catalog.QueueForMatchTypes([]int32{3, 4}); !ok || queue.ID != 3 {
+		t.Fatalf("3v3+4v4 = %+v, %t", queue, ok)
+	}
+}
+
+func TestAoE3MatchedResponseHasNoRelayPayload(t *testing.T) {
+	response := encodeMatchedResponse(automatchMatchedParams{
+		Title:      "age3",
+		MatchTypes: []int32{2},
+		RaceIDs:    []int32{0},
+		Counts:     []int{5},
+		MatchID:    66655664,
+	})
+	// AoE3 goes through the early branch in matchedResponseLocked; the encoder
+	// fallback for other titles keeps its 22-field shape.
+	if len(response) != 22 {
+		t.Fatalf("aoe3 matched response has %d fields, want 22", len(response))
+	}
+	if response[12] != int32(66655664) {
+		t.Fatalf("slot 12 = %#v, want the matchID", response[12])
+	}
+	if response[4] != -1 || response[5] != "" {
+		t.Fatalf("aoe3 matched response leaked host/map: %#v", response[4:6])
+	}
+}
+
+func TestAoE3GameMessageShape(t *testing.T) {
+	match := &automatchMatch{
+		ID:      66655664,
+		HostID:  18446739,
+		MapName: "RANDOM",
+		Queue:   &automatchQueue{Teams: 2, MaxPlayers: 4, TeamSize: 2, Rated: true},
+	}
+	recipient := &automatchQueueEntry{RaceInfoRaces: []int32{0}}
+	peers := []i.A{
+		{66655664, 18446739, 3632, 4093272, 0, 0, "/10.0.11.20"},
+		{66655664, 19375011, -1, 5011221, 0, 0, "/10.0.11.16"},
+		{66655664, 20215372, 4800, 6265019, 0, 1, "/10.0.11.15"},
+		{66655664, 20216918, 4468, 6264875, 0, 1, "/10.0.11.15"},
+	}
+	message := encodeAutomatchGameMessageLocked("age3", match, recipient, "20.58.118.59", []int{27012, 27112, 27212}, peers)
+	encoded, err := json.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// (teams, players per team): a 2v2 sends "2","2" with four players.
+	want := `[18446739,66655664,"RANDOM",0,"0","0","2","2","authtoken","20.58.118.59",27012,27112,27212,[[66655664,18446739,3632,4093272,0,0,"/10.0.11.20"],[66655664,19375011,-1,5011221,0,0,"/10.0.11.16"],[66655664,20215372,4800,6265019,0,1,"/10.0.11.15"],[66655664,20216918,4468,6264875,0,1,"/10.0.11.15"]],""]`
+	if string(encoded) != want {
+		t.Fatalf("aoe3 wss payload:\n got %s\nwant %s", encoded, want)
+	}
+}
+
 func TestIsAutomatchHostRequestPerTitle(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -452,8 +543,10 @@ func TestIsAutomatchHostRequestPerTitle(t *testing.T) {
 		{"aoe1 party lobby", "age1", AutomatchMatchDescription, 0, -1, false},
 		{"aoe1 match advertisement", "age1", AutomatchAutoMatchDescription, 5, -1, true},
 		{"aoe1 with poll id", "age1", AutomatchMatchDescription, 0, 9, true},
+		// AoE3 party/session lobby: SESSION_MATCH_KEY with matchtype 13.
+		{"aoe3 party lobby", "age3", AutomatchMatchDescription, 13, -1, false},
+		{"aoe3 match advertisement", "age3", AutomatchAutoMatchDescription, 2, -1, true},
 		// Titles without a captured queue endpoint never claim a host request.
-		{"age3", "age3", AutomatchMatchDescription, 19, -1, false},
 		{"aom", "athens", AutomatchMatchDescription, 19, -1, false},
 	}
 	for _, tc := range cases {

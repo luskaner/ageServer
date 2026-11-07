@@ -146,7 +146,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		ok = true
 	})
 	if createdAutomatch {
-		if gameTitle == game.AoE1 {
+		if models.AutomatchServerAddsPeers(gameTitle) {
 			// AoE1 has no /advertisement/join step: the match advertisement
 			// carries both players from the start.
 			g.Matchmaking().AttachMatchPeers(q.Id)

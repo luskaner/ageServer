@@ -462,7 +462,7 @@ func buildExpectedRoutes(gameId string) []routeCase {
 		add("POST", "/game/automatch2/stoppolling")
 		add("POST", "/game/automatch2/updateStatus")
 	}
-	if gameId == game.AoE2 || gameId == game.AoE1 {
+	if gameId == game.AoE2 || gameId == game.AoE1 || gameId == game.AoE3 {
 		add("POST", "/game/automatch2/polling")
 		add("GET", "/game/automatch2/polling")
 		add("POST", "/game/automatch2/stoppolling")

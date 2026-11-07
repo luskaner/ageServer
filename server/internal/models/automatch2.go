@@ -33,16 +33,22 @@ const (
 )
 
 // AutomatchGameTitles lists the titles that use the automatch2 flow. AoE2 and
-// AoE4 come from docs/matchmaking.md; AoE1 was captured on 2026-11-07.
-// AoE3/AoM stay out until F0 identifies their queue endpoint.
+// AoE4 come from docs/matchmaking.md; AoE1 (2026-11-07) and AoE3 (2026-11-07)
+// from their captures. AoM stays out until F0 identifies its queue endpoint.
 func AutomatchGameTitles() []string {
-	return []string{game.AoE1, game.AoE2, game.AoE4}
+	return []string{game.AoE1, game.AoE2, game.AoE3, game.AoE4}
 }
 
 // AutomatchSupported reports whether a title uses the automatch2 engine.
 func AutomatchSupported(title string) bool {
 	return slices.Contains(AutomatchGameTitles(), title)
 }
+
+// AoE3's ranked screen also offers an "Independence" mode, but no capture
+// identifies its matchTypes: the official getAvailableLeaderboards has no
+// Independence ladder and the community-event payload does not mention it. It
+// stays out of the pool until F0 captures it; the client currently hides the
+// mode on this server instead of showing it locked behind the DLC.
 
 // LeaderboardForQueue maps the legacy AoE2 pool ids to their ladder when the
 // catalog is not available (tests, migrations). New code resolves the ladder
@@ -999,8 +1005,8 @@ func (mm *MainMatchmaking) reservationLocked(match *automatchMatch, battleServer
 		reservation.MaxPlayers = match.Queue.AdvertisementMaxPlayers()
 		reservation.MatchType = match.Queue.AdvertisementMatchType(AutomatchAdvertisementMatchType)
 		// AoE1 and AoE4 use description=AUTOMATCH for the match
-		// advertisement; AoE2 keeps SESSION_MATCH_KEY.
-		if title := gameTitle(mm.game); title == game.AoE4 || title == game.AoE1 {
+		// advertisement; AoE2 keeps SESSION_MATCH_KEY. AoE3 uses AUTOMATCH too.
+		if title := gameTitle(mm.game); title == game.AoE4 || title == game.AoE1 || title == game.AoE3 {
 			reservation.Description = AutomatchAutoMatchDescription
 		}
 	}
@@ -1459,8 +1465,8 @@ func (mm *MainMatchmaking) expireMatch(matchID int32) {
 func (mm *MainMatchmaking) matchedResponseLocked(entry *automatchQueueEntry, match *automatchMatch, r *http.Request) (i.A, bool) {
 	counts := mm.queueCountsLocked(entry.MatchTypes)
 	title := gameTitle(mm.game)
-	if title == game.AoE1 {
-		// AoE1's matched polling body is its 20-field searching body with the
+	if !automatchMatchedPayloadHasRelay(title) {
+		// AoE1 (20 fields) and AoE3 (22) reuse their searching body with the
 		// match id in slot 12; host, map and relay details travel in the wss
 		// Automatch2GameMessage, so no BattleServer is needed here.
 		return automatchUnmatchedResponse(
@@ -1558,8 +1564,14 @@ func encodeRelayPorts(battleServer BattleServer) []int {
 // (E4: the real assignment travels in match.Teams and the advertisement
 // slots); the AoE1 capture carries the real team in the peer row, which is
 // what its client uses to place players.
+// usesRealTeams reports whether the peer rows carry the real team id instead
+// of -1. AoE1 and AoE3 place players with it; AoE2/AoE4 use match.Teams.
+func usesRealTeams(title string) bool {
+	return title == game.AoE1 || title == game.AoE3
+}
+
 func (mm *MainMatchmaking) matchPeersLocked(match *automatchMatch, ip string) []i.A {
-	realTeams := gameTitle(mm.game) == game.AoE1
+	realTeams := usesRealTeams(gameTitle(mm.game))
 	teams := make(map[int32]int32, len(match.Players))
 	if realTeams {
 		for index, player := range match.Players {
@@ -1948,7 +1960,9 @@ type automatchMatchedParams struct {
 // the only new value, and the host/map/relay details travel in the wss
 // Automatch2GameMessage instead.
 func encodeMatchedResponse(p automatchMatchedParams) i.A {
-	if p.Title == game.AoE1 {
+	if !automatchMatchedPayloadHasRelay(p.Title) {
+		// AoE1 and AoE3 only learn the match id here; host, map and relay
+		// details travel in the wss Automatch2GameMessage.
 		return automatchUnmatchedResponse(p.Title, p.EstimatedWaitMs, p.MatchTypes, p.RaceIDs, p.Counts, p.MatchID)
 	}
 	ports := p.Ports
@@ -2023,6 +2037,13 @@ func encodeAutomatchGameMessageLocked(title string, match *automatchMatch, recip
 			"",
 		}
 	}
+	// AoE3's capture shows the queue shape as (teams, players per team): a 2v2
+	// sends "2","2" with four players. AoE2/AoE4 keep the total they always
+	// sent.
+	players := match.Queue.MaxPlayers
+	if title == game.AoE3 {
+		players = match.Queue.TeamSize
+	}
 	return i.A{
 		match.HostID,
 		match.ID,
@@ -2031,7 +2052,7 @@ func encodeAutomatchGameMessageLocked(title string, match *automatchMatch, recip
 		"0",
 		"0",
 		strconv.Itoa(match.Queue.Teams),
-		strconv.Itoa(match.Queue.MaxPlayers),
+		strconv.Itoa(players),
 		"authtoken",
 		ip,
 		ports[0],
@@ -2088,9 +2109,9 @@ func IsAutomatchDescription(description string) bool {
 // The signal is per title because the same matchtype is reused:
 //   - AoE2: the matchmaking host uses matchtype 19 (the party/session lobby
 //     uses matchtype 1), or carries the automatch poll id.
-//   - AoE4/AoE1: the party/session lobby uses description=SESSION_MATCH_KEY
-//     (AoE1 even with matchtype 0), so only an explicit AUTOMATCH description
-//     or a poll id identifies the matchmaking host. The AoE4 and AoE1 match
+//   - AoE1/AoE3/AoE4: the party/session lobby uses description=SESSION_MATCH_KEY
+//     (AoE3 with matchtype 13, AoE1 with 0), so only an explicit AUTOMATCH
+//     description or a poll id identifies the matchmaking host. Their match
 //     advertisements use description=AUTOMATCH and the queue id as matchtype.
 func IsAutomatchHostRequest(gameTitle string, description string, matchType uint16, pollID int32) bool {
 	if pollID > 0 {
@@ -2099,9 +2120,24 @@ func IsAutomatchHostRequest(gameTitle string, description string, matchType uint
 	switch gameTitle {
 	case game.AoE2:
 		return matchType == AutomatchAdvertisementMatchType
-	case game.AoE1, game.AoE4:
+	case game.AoE1, game.AoE3, game.AoE4:
 		return description == AutomatchAutoMatchDescription
 	default:
 		return false
 	}
+}
+
+// AutomatchServerAddsPeers reports whether the server has to add every match
+// player to the reserved advertisement itself. AoE1 and AoE3 never call
+// /advertisement/join: the official service puts the whole roster in the match
+// advertisement, and MatchStartMessage iterates those peers.
+func AutomatchServerAddsPeers(title string) bool {
+	return title == game.AoE1 || title == game.AoE3
+}
+
+// automatchMatchedPayloadHasRelay reports whether the matched polling body
+// carries the host, map and relay details. AoE1 and AoE3 only get the matchID
+// there; the rest travels in the wss Automatch2GameMessage.
+func automatchMatchedPayloadHasRelay(title string) bool {
+	return title != game.AoE1 && title != game.AoE3
 }

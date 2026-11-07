@@ -314,7 +314,7 @@ func Host(w http.ResponseWriter, r *http.Request) {
 
 	i.JSON(&w, response)
 	if automatch {
-		if gameTitle == game.AoE1 {
+		if models.AutomatchServerAddsPeers(gameTitle) {
 			// AoE1 has no /advertisement/join step: the match advertisement
 			// carries both players from the start.
 			g.Matchmaking().AttachMatchPeers(storedAdv.GetId())
