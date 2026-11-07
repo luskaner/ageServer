@@ -1,6 +1,7 @@
 package models
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"slices"
@@ -36,7 +37,7 @@ const (
 // AoE4 come from docs/matchmaking.md; AoE1 (2026-11-07) and AoE3 (2026-11-07)
 // from their captures. AoM stays out until F0 identifies its queue endpoint.
 func AutomatchGameTitles() []string {
-	return []string{game.AoE1, game.AoE2, game.AoE3, game.AoE4}
+	return []string{game.AoE1, game.AoE2, game.AoE3, game.AoE4, game.AoM}
 }
 
 // AutomatchSupported reports whether a title uses the automatch2 engine.
@@ -400,9 +401,11 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 			if response, ok := mm.matchedResponseLocked(entry, match, r); ok {
 				return response, nil
 			}
-		} else {
-			return mm.unmatchedLocked(entry, matchTypes, match.ID), nil
 		}
+		// Both players learn the reserved matchID immediately, even before the
+		// host creates the advertisement. The host needs it to create the
+		// reserved advertisement; without it the reservation would never match.
+		return mm.unmatchedLocked(entry, matchTypes, match.ID), nil
 	}
 
 	return mm.unmatchedLocked(entry, matchTypes, 0), nil
@@ -474,11 +477,15 @@ func (mm *MainMatchmaking) tryCreateMatchLocked(entry *automatchQueueEntry, matc
 		if total != queue.MaxPlayers {
 			continue
 		}
-		// Place the oldest unit first so the host ends up on team 0: AoE1
-		// sends the real team ids in the peer rows, and the client expects the
-		// host there.
+		// Place the oldest unit first so the host ends up on team 0: AoE1,
+		// AoE3 and AoM send the real team ids in the peer rows, and the client
+		// expects the host there. Ties (two entries queued in the same clock
+		// tick) fall back to the profile id so the host never flips at random.
 		slices.SortFunc(selected, func(a, b *automatchPartyGroup) int {
-			return a.QueuedAt.Compare(b.QueuedAt)
+			if order := a.QueuedAt.Compare(b.QueuedAt); order != 0 {
+				return order
+			}
+			return cmp.Compare(a.Entries[0].UserID, b.Entries[0].UserID)
 		})
 		players, teamIDs, ok := assignTeams(selected, queue)
 		if !ok {
@@ -1564,10 +1571,24 @@ func encodeRelayPorts(battleServer BattleServer) []int {
 // (E4: the real assignment travels in match.Teams and the advertisement
 // slots); the AoE1 capture carries the real team in the peer row, which is
 // what its client uses to place players.
+// matchRecipientTeam returns the team the recipient was assigned to, which the
+// wss message echoes in slot 4 (AoE1, AoE3 and AoM captures agree on it).
+func matchRecipientTeam(match *automatchMatch, recipient *automatchQueueEntry) int32 {
+	if match == nil || recipient == nil {
+		return 0
+	}
+	for index, player := range match.Players {
+		if player.UserID == recipient.UserID && index < len(match.TeamIDs) {
+			return match.TeamIDs[index]
+		}
+	}
+	return 0
+}
+
 // usesRealTeams reports whether the peer rows carry the real team id instead
 // of -1. AoE1 and AoE3 place players with it; AoE2/AoE4 use match.Teams.
 func usesRealTeams(title string) bool {
-	return title == game.AoE1 || title == game.AoE3
+	return title == game.AoE1 || title == game.AoE3 || title == game.AoM
 }
 
 func (mm *MainMatchmaking) matchPeersLocked(match *automatchMatch, ip string) []i.A {
@@ -2041,7 +2062,7 @@ func encodeAutomatchGameMessageLocked(title string, match *automatchMatch, recip
 	// sends "2","2" with four players. AoE2/AoE4 keep the total they always
 	// sent.
 	players := match.Queue.MaxPlayers
-	if title == game.AoE3 {
+	if title == game.AoE3 || title == game.AoM {
 		players = match.Queue.TeamSize
 	}
 	return i.A{
@@ -2049,7 +2070,7 @@ func encodeAutomatchGameMessageLocked(title string, match *automatchMatch, recip
 		match.ID,
 		match.MapName,
 		raceID,
-		"0",
+		strconv.Itoa(int(matchRecipientTeam(match, recipient))),
 		"0",
 		strconv.Itoa(match.Queue.Teams),
 		strconv.Itoa(players),
@@ -2120,7 +2141,7 @@ func IsAutomatchHostRequest(gameTitle string, description string, matchType uint
 	switch gameTitle {
 	case game.AoE2:
 		return matchType == AutomatchAdvertisementMatchType
-	case game.AoE1, game.AoE3, game.AoE4:
+	case game.AoE1, game.AoE3, game.AoE4, game.AoM:
 		return description == AutomatchAutoMatchDescription
 	default:
 		return false
@@ -2132,7 +2153,7 @@ func IsAutomatchHostRequest(gameTitle string, description string, matchType uint
 // /advertisement/join: the official service puts the whole roster in the match
 // advertisement, and MatchStartMessage iterates those peers.
 func AutomatchServerAddsPeers(title string) bool {
-	return title == game.AoE1 || title == game.AoE3
+	return title == game.AoE1 || title == game.AoE3 || title == game.AoM
 }
 
 // automatchMatchedPayloadHasRelay reports whether the matched polling body

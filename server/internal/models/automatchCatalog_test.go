@@ -522,6 +522,72 @@ func TestAoE3GameMessageShape(t *testing.T) {
 	}
 }
 
+func TestLoadQueueCatalogAoMFromBundledPool(t *testing.T) {
+	resources := bundledResources(t, "athens", "automatchMaps.json", "automatchQueues.json")
+	catalog, err := LoadQueueCatalog("athens", resources, bundledLeaderboards(t, "athens"))
+	if err != nil {
+		t.Fatalf("LoadQueueCatalog: %v", err)
+	}
+	if catalog.Len() != 20 {
+		t.Fatalf("queues = %d, want the eight ranked and twelve quickmatch queues", catalog.Len())
+	}
+	for matchType, players := range map[int32]int{
+		1: 2, 2: 4, 3: 6, 4: 8, // Ranked Supremacy
+		5: 2, 6: 4, 7: 6, 8: 8, // Ranked Deathmatch
+		28: 2, 29: 4, 30: 6, 31: 8, // Quickmatch Supremacy
+		32: 2, 33: 4, 34: 6, 35: 8, // Quickmatch Deathmatch
+		36: 2, 37: 4, 38: 6, 39: 8, // Quickmatch Lightning
+	} {
+		queue, ok := catalog.Queue(matchType)
+		if !ok {
+			t.Fatalf("matchType %d missing from the athens pool", matchType)
+		}
+		if queue.MaxPlayers != players || queue.Teams != 2 || queue.TeamSize != players/2 {
+			t.Fatalf("matchType %d shape = %+v", matchType, queue)
+		}
+		if !queue.Rated || queue.LeaderboardID != matchType {
+			t.Fatalf("matchType %d ladder = %d rated %t", matchType, queue.LeaderboardID, queue.Rated)
+		}
+		if !queue.MatchTypeIsAdvertisement {
+			t.Fatalf("matchType %d must use the queue id as advertisement matchtype", matchType)
+		}
+		// The captured advertisements name the scenario as rm_<map file>.
+		if len(queue.Maps) == 0 || queue.Maps[0].Name[:3] != "rm_" {
+			t.Fatalf("matchType %d maps = %+v", matchType, queue.Maps)
+		}
+	}
+	// The client polls every quickmatch queue at once.
+	if queue, ok := catalog.QueueForMatchTypes([]int32{28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39}); !ok || queue.ID != 28 {
+		t.Fatalf("quickmatch any = %+v, %t", queue, ok)
+	}
+}
+
+func TestAoMGameMessageShape(t *testing.T) {
+	match := &automatchMatch{
+		ID:      45351237,
+		HostID:  1077703702,
+		MapName: "rm_yellow_river",
+		Queue:   &automatchQueue{Teams: 2, MaxPlayers: 2, TeamSize: 1, Rated: true},
+		Players: []*automatchQueueEntry{{UserID: 1077703702}, {UserID: 1076940694}},
+		TeamIDs: []int32{0, 1},
+	}
+	recipient := &automatchQueueEntry{UserID: 1076940694, RaceInfoRaces: []int32{1}}
+	peers := []i.A{
+		{45351237, 1077703702, -1, 3981859, 1, 0, "/10.0.11.12"},
+		{45351237, 1076940694, -1, 3215409, 1, 1, "/10.0.11.14"},
+	}
+	message := encodeAutomatchGameMessageLocked("athens", match, recipient, "172.213.140.76", []int{27013, 27113, 27213}, peers)
+	encoded, err := json.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Slot 4 is the recipient team (1), slot 7 the players per team.
+	want := `[1077703702,45351237,"rm_yellow_river",1,"1","0","2","1","authtoken","172.213.140.76",27013,27113,27213,[[45351237,1077703702,-1,3981859,1,0,"/10.0.11.12"],[45351237,1076940694,-1,3215409,1,1,"/10.0.11.14"]],""]`
+	if string(encoded) != want {
+		t.Fatalf("aom wss payload:\n got %s\nwant %s", encoded, want)
+	}
+}
+
 func TestIsAutomatchHostRequestPerTitle(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -546,8 +612,11 @@ func TestIsAutomatchHostRequestPerTitle(t *testing.T) {
 		// AoE3 party/session lobby: SESSION_MATCH_KEY with matchtype 13.
 		{"aoe3 party lobby", "age3", AutomatchMatchDescription, 13, -1, false},
 		{"aoe3 match advertisement", "age3", AutomatchAutoMatchDescription, 2, -1, true},
-		// Titles without a captured queue endpoint never claim a host request.
-		{"aom", "athens", AutomatchMatchDescription, 19, -1, false},
+		// AoM party/session lobby: SESSION_MATCH_KEY with matchtype 25 (ranked)
+		// or 27 (quickmatch).
+		{"aom party lobby", "athens", AutomatchMatchDescription, 27, -1, false},
+		{"aom ranked lobby", "athens", AutomatchMatchDescription, 25, -1, false},
+		{"aom match advertisement", "athens", AutomatchAutoMatchDescription, 28, -1, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
