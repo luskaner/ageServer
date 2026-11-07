@@ -437,11 +437,11 @@ func TestLoadQueueCatalogAge3FromBundledPool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadQueueCatalog: %v", err)
 	}
-	if catalog.Len() != 8 {
-		t.Fatalf("queues = %d, want the eight ranked queues", catalog.Len())
+	if catalog.Len() != 12 {
+		t.Fatalf("queues = %d, want the twelve ranked queues", catalog.Len())
 	}
-	// Supremacy is 1v1..4v4 (matchType == ladder id) and Empire Wars is
-	// 18..21, which is the ladder catalogue of the title.
+	// Supremacy is 1v1..4v4, Deathmatch 5..8 and Empire Wars 18..21, which is
+	// the ladder catalogue of the title (matchType == ladder id).
 	for matchType, want := range map[int32]struct {
 		players int
 		ladder  int32
@@ -450,6 +450,10 @@ func TestLoadQueueCatalogAge3FromBundledPool(t *testing.T) {
 		2:  {4, 2},
 		3:  {6, 3},
 		4:  {8, 4},
+		5:  {2, 5},
+		6:  {4, 6},
+		7:  {6, 7},
+		8:  {8, 8},
 		18: {2, 18},
 		19: {4, 19},
 		20: {6, 20},
