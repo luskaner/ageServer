@@ -748,8 +748,8 @@ func createTemporaryConfig(directory string, content []byte, permissions os.File
 	temporaryPath := temporary.Name()
 
 	if err := temporary.Chmod(permissions); err != nil {
-		temporary.Close()
-		os.Remove(temporaryPath)
+		_ = temporary.Close()
+		_ = os.Remove(temporaryPath)
 		return "", fmt.Errorf("set temporary configuration permissions: %w", err)
 	}
 	if _, err := temporary.Write(content); err != nil {

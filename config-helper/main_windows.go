@@ -20,7 +20,8 @@ var (
 
 func main() {
 	if err := run(os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		// Nothing useful can be done if stderr itself is gone.
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -65,6 +66,7 @@ func convertAndPrint(path string) error {
 	if err != nil {
 		return err
 	}
-	fmtPrintFn(convertedResult)
+	// A closed stdout is the caller's problem: the conversion itself succeeded.
+	_, _ = fmtPrintFn(convertedResult)
 	return nil
 }

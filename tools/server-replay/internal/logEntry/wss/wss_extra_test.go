@@ -13,10 +13,10 @@ func TestWebsocketUptimeAndString(t *testing.T) {
 	w := &Websocket[wss.Connection]{
 		base: wss.Read{
 			BaseRead: wss.BaseRead{
-				Uptime: serverCommunication.Uptime{Uptime: now},
-				Sender: serverCommunication.Sender{Sender: "sender1"},
+				Uptime:   serverCommunication.Uptime{Uptime: now},
+				Sender:   serverCommunication.Sender{Sender: "sender1"},
 				Receiver: "127.0.0.1:443",
-				Subtype: "Connection",
+				Subtype:  "Connection",
 			},
 		},
 	}
@@ -60,7 +60,7 @@ func TestWebsocketDataTypes(t *testing.T) {
 	w := &Websocket[wss.Data]{
 		base: wss.Read{
 			BaseRead: wss.BaseRead{
-				Uptime: serverCommunication.Uptime{Uptime: 10 * time.Millisecond},
+				Uptime:  serverCommunication.Uptime{Uptime: 10 * time.Millisecond},
 				Subtype: "Data",
 			},
 		},

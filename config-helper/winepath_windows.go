@@ -31,7 +31,11 @@ func cStringToGo(ptr uintptr) string {
 	if ptr == 0 {
 		return ""
 	}
-	// Convert to *byte and use syscall.BytePtrToString for safe conversion.
+	// The uintptr comes straight from wine_get_unix_file_name and points at
+	// Wine's own heap, not at Go-managed memory: no Go pointer is ever round
+	// tripped through an integer here and the block is released with heapFree
+	// right after it is read. Reading it through BytePtrToString is therefore
+	// safe even though go vet flags the conversion itself.
 	return windows.BytePtrToString((*byte)(unsafe.Pointer(ptr)))
 }
 
@@ -41,8 +45,8 @@ var (
 		ret, _, _ := procWineGetUnixFileName.Call(ptr)
 		return ret
 	}
-	heapFreeFn      = heapFree
-	cStringToGoFn   = cStringToGo
+	heapFreeFn           = heapFree
+	cStringToGoFn        = cStringToGo
 	utf16PtrFromStringFn = windows.UTF16PtrFromString
 )
 

@@ -979,14 +979,10 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	return
 }
 
-// configErr is the failure behind a nil configuration. It is kept beside the
-// configuration rather than returned with it because the loader is injected, and
-// its signature is what the tests have always injected.
-var configErr error
-
 func initConfig(fs *pflag.FlagSet) *launcher.Configuration {
-	configErr = nil
 	cfg, loaded, err := launcher.LoadConfig(fs, optionStorage(), reportOrDiscard())
+	// Loaded is a value, so naming the file it resolved is safe even when the
+	// load failed: it is simply empty then.
 	usedConfigFile = loaded.MainFile
 	filesToPrint = loaded.FilesToPrint
 	if err == nil {
@@ -995,7 +991,6 @@ func initConfig(fs *pflag.FlagSet) *launcher.Configuration {
 	// The loader reports the problem but not how this frontend says it, which is
 	// the same split as everywhere else: the shared code does not know whether
 	// this is a terminal or a window.
-	configErr = err
 	var ee *launcher.ExitError
 	if !errors.As(err, &ee) {
 		reportOrDiscard().Fail("%s", err.Error())

@@ -1001,7 +1001,7 @@ func (s *MatchHistoryStore) getRatingsLocked(leaderboardID int32, profiles []int
 	if err != nil {
 		return out
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		r := &PlayerRating{LeaderboardID: leaderboardID}
 		var lastMatch int64
@@ -1095,7 +1095,7 @@ func (s *MatchHistoryStore) loadPlayersLocked(m MatchResult) MatchResult {
 	if err != nil {
 		return m
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var p MatchPlayer
 		if err = rows.Scan(&p.ProfileID, &p.TeamID, &p.Result, &p.RaceID, &p.XPGained,
@@ -1155,7 +1155,7 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 	if err != nil {
 		return nil, total
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	// Preallocate a bounded capacity: appending grows it for larger pages, and
 	// the allocation never depends on the requested (user-provided) size.
 	list := make([]*PlayerRating, 0, initialLeaderboardPageCapacity)
@@ -1450,7 +1450,7 @@ func (s *MatchHistoryStore) GetProfiles(profileIDs []int32) map[int32]*StoredPro
 	if err != nil {
 		return out
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		p := &StoredProfile{}
 		var platformUserID, xp, level, region int64
