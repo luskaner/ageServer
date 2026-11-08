@@ -37,6 +37,7 @@ type deps struct {
 	nativeFileName     func(bin bool, name string) string
 	sleep              func(time.Duration)
 	getLoggerFolder    func() string
+	isAdmin            func() bool
 }
 
 func defaultDeps() deps {
@@ -52,6 +53,7 @@ func defaultDeps() deps {
 		dialIPC:            DialIPC,
 		nativeFileName:     executables.NativeFileName,
 		sleep:              time.Sleep,
+		isAdmin:            commonExecutor.IsAdmin,
 		getLoggerFolder: func() string {
 			if internal.Logger != nil {
 				return internal.Logger.Folder()
@@ -177,7 +179,7 @@ const (
 )
 
 func (a *Admin) postAgentStart() bool {
-	if commonExecutor.IsAdmin() {
+	if a.deps.isAdmin() {
 		// Already elevated, so there is nothing to wait for.
 		return true
 	}

@@ -2,6 +2,7 @@ package common
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -29,9 +30,10 @@ func TestInteractiveNeitherTerminal(t *testing.T) {
 
 func TestChdirToExeMock(t *testing.T) {
 	var chdirTo string
+	exeDir := filepath.Join("fake", "dir")
 	defer SetProcessInfo(&mockProcess{
 		executable: func() (string, error) {
-			return "C:\\fake\\app.exe", nil
+			return filepath.Join(exeDir, "app.exe"), nil
 		},
 		chdir: func(dir string) error {
 			chdirTo = dir
@@ -39,8 +41,8 @@ func TestChdirToExeMock(t *testing.T) {
 		},
 	})()
 	ChdirToExe()
-	if chdirTo != "C:\\fake" {
-		t.Fatalf("expected C:\\fake, got %q", chdirTo)
+	if chdirTo != exeDir {
+		t.Fatalf("expected %q, got %q", exeDir, chdirTo)
 	}
 }
 

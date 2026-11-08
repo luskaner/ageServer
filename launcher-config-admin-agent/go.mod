@@ -1,11 +1,11 @@
 module github.com/luskaner/ageServer/launcher-config-admin-agent
 
-go 1.27.0
+go 1.27.3
 
 require (
 	github.com/Microsoft/go-winio v0.6.4
 	github.com/deckarep/golang-set/v3 v3.0.0
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	golang.org/x/net v0.62.0
 )
 
@@ -13,4 +13,3 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
-

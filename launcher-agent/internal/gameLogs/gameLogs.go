@@ -84,7 +84,7 @@ func copyPathToDir(srcPath, dstDir string) (ok bool) {
 		}
 		return copyFileContent(srcPath, finalDstPath)
 	}
-	if err = os.MkdirAll(finalDstPath, info.Mode()); err != nil {
+	if err = os.MkdirAll(finalDstPath, info.Mode().Perm()); err != nil {
 		return
 	}
 	if err = filepath.WalkDir(srcPath, func(path string, d os.DirEntry, err error) error {
@@ -100,7 +100,14 @@ func copyPathToDir(srcPath, dstDir string) (ok bool) {
 		}
 		newDstPath := filepath.Join(finalDstPath, relPath)
 		if d.IsDir() {
-			return os.MkdirAll(newDstPath, d.Type().Perm())
+			// d.Type() only carries the type bits, so its Perm() is always 0.
+			// Read the full mode instead: a 0-permission directory is unusable
+			// on Unix, even though Windows ignores the mode.
+			dirInfo, infoErr := d.Info()
+			if infoErr != nil {
+				return infoErr
+			}
+			return os.MkdirAll(newDstPath, dirInfo.Mode().Perm())
 		} else if !copyFileContent(path, newDstPath) {
 			return fmt.Errorf("copyPathToDir: file %s already exists and is not a directory", path)
 		}

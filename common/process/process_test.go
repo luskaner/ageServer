@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -258,9 +259,11 @@ func TestWaitForProcessInvalidPid(t *testing.T) {
 	}
 	// Real WaitForProcess against a pid that doesn't exist: os.FindProcess
 	// succeeds on Windows but OpenProcess fails → covers the early-return branch.
+	// On Unix a pid that does not exist is simply already gone, which the wait
+	// reports as true, so only Windows expects false here.
 	if ghost, _ := os.FindProcess(999999); ghost != nil {
 		d3 := 10 * time.Millisecond
-		if WaitForProcess(ghost, &d3) {
+		if got := WaitForProcess(ghost, &d3); runtime.GOOS == "windows" && got {
 			t.Error("WaitForProcess should be false for non-existent pid")
 		}
 	}
