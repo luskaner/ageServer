@@ -280,7 +280,7 @@ func TestInitLambdasCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createFileFn failed: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 	if err := removeFileFn(tmpFile); err != nil {
 		t.Fatalf("removeFileFn failed: %v", err)
 	}
@@ -295,8 +295,8 @@ func TestDepsInitCoversMetadataBackupRestore(t *testing.T) {
 	p := commonUserData.NewPath(base, "age1")
 	// Need to create Users structure for BackupProfiles to find profiles
 	usersDir := filepath.Join(p.String(), "Users")
-	os.MkdirAll(usersDir, 0755)
-	os.MkdirAll(filepath.Join(usersDir, "user1"), 0755)
+	_ = os.MkdirAll(usersDir, 0755)
+	_ = os.MkdirAll(filepath.Join(usersDir, "user1"), 0755)
 	// Now call the init-assigned functions via the vars
 	saveCmdDeps(t)
 	// After save, vars are still original; call them

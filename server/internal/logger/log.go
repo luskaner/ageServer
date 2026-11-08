@@ -42,9 +42,10 @@ func Println(a ...any) {
 	fmt.Println(a...)
 }
 
-// The styled renderers live in launcher-common/cmdlog so that every program in the
-// workspace prints through the same code and the same rules. They are re-exported
-// here because the rest of this module already speaks to this package.
+// Ok, Fail, Warn, Info, Step, Detail and Fault re-export the styled renderers
+// that live in launcher-common/cmdlog, so every program in the workspace prints
+// through the same code and the same rules. They live there because the rest of
+// this module already speaks to this package.
 func Ok(format string, a ...any)     { cmdlog.Ok(format, a...) }
 func Fail(format string, a ...any)   { cmdlog.Fail(format, a...) }
 func Warn(format string, a ...any)   { cmdlog.Warn(format, a...) }

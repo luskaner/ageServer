@@ -139,7 +139,7 @@ func hasAlnum(s string) bool {
 // the rendered output can be compared against the wording as it stands today.
 func stripDecorators(rendered string) string {
 	var out []string
-	for _, line := range strings.Split(rendered, "\n") {
+	for line := range strings.SplitSeq(rendered, "\n") {
 		for _, token := range []string{":-)", ":-(", ":-/", ":-|", ":-?"} {
 			line = strings.ReplaceAll(line, token, "")
 		}
@@ -240,7 +240,7 @@ func TestTierASCIIOutputShape(t *testing.T) {
 				if got := strings.Count(got, "\n") + 1; got < want {
 					t.Errorf("columns %d: %d lines, want at least %d", columns, got, want)
 				}
-				for _, line := range strings.Split(got, "\n") {
+				for line := range strings.SplitSeq(got, "\n") {
 					if w := lineWidth(line); w > columns {
 						t.Errorf("columns %d: a %d cell line does not fit: %q", columns, w, line)
 					}

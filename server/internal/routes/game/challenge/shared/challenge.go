@@ -11,7 +11,7 @@ func GetChallengeProgressData(user models.User) i.A {
 	if user == nil || user.GetChallengeProgress() == nil {
 		return i.A{}
 	}
-	var result i.A = i.A{}
+	result := i.A{}
 	_ = user.GetChallengeProgress().WithReadOnly(func(data *[]models.ChallengeProgress) error {
 		for _, entry := range *data {
 			result = append(result, entry)

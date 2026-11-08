@@ -9,13 +9,11 @@ import (
 
 func TestValidate_IgnorePid(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          "127.0.0.1",
-			BsPort:        1,
-			WebSocketPort: 2,
-		},
-		PID: 0,
+		Region:        "us",
+		IPv4:          "127.0.0.1",
+		BsPort:        1,
+		WebSocketPort: 2,
+		PID:           0,
 	}
 	dial := func(network, address string, timeout time.Duration) (net.Conn, error) {
 		return nil, &net.OpError{Op: "dial", Net: "tcp4"}
@@ -27,12 +25,10 @@ func TestValidate_IgnorePid(t *testing.T) {
 
 func TestValidate_MissingRegion(t *testing.T) {
 	c := Config{
-		Base: Base{
-			IPv4:          "127.0.0.1",
-			BsPort:        1,
-			WebSocketPort: 2,
-		},
-		PID: 1,
+		IPv4:          "127.0.0.1",
+		BsPort:        1,
+		WebSocketPort: 2,
+		PID:           1,
 	}
 	if c.Validate(true) {
 		t.Error("Validate should fail with empty region")
@@ -41,12 +37,10 @@ func TestValidate_MissingRegion(t *testing.T) {
 
 func TestValidate_MissingIPv4(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			BsPort:        1,
-			WebSocketPort: 2,
-		},
-		PID: 1,
+		Region:        "us",
+		BsPort:        1,
+		WebSocketPort: 2,
+		PID:           1,
 	}
 	if c.Validate(true) {
 		t.Error("Validate should fail with empty IPv4")
@@ -55,13 +49,11 @@ func TestValidate_MissingIPv4(t *testing.T) {
 
 func TestValidate_ZeroBsPort(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          "127.0.0.1",
-			BsPort:        0,
-			WebSocketPort: 2,
-		},
-		PID: 1,
+		Region:        "us",
+		IPv4:          "127.0.0.1",
+		BsPort:        0,
+		WebSocketPort: 2,
+		PID:           1,
 	}
 	if c.Validate(true) {
 		t.Error("Validate should fail with zero BsPort")
@@ -70,13 +62,11 @@ func TestValidate_ZeroBsPort(t *testing.T) {
 
 func TestValidate_ZeroWebSocketPort(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          "127.0.0.1",
-			BsPort:        1,
-			WebSocketPort: 0,
-		},
-		PID: 1,
+		Region:        "us",
+		IPv4:          "127.0.0.1",
+		BsPort:        1,
+		WebSocketPort: 0,
+		PID:           1,
 	}
 	if c.Validate(true) {
 		t.Error("Validate should fail with zero WebSocketPort")
@@ -85,13 +75,11 @@ func TestValidate_ZeroWebSocketPort(t *testing.T) {
 
 func TestValidate_PidZeroWithoutIgnore(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          "127.0.0.1",
-			BsPort:        1,
-			WebSocketPort: 2,
-		},
-		PID: 0,
+		Region:        "us",
+		IPv4:          "127.0.0.1",
+		BsPort:        1,
+		WebSocketPort: 2,
+		PID:           0,
 	}
 	if c.Validate(false) {
 		t.Error("Validate(ignorePid=false) should fail with PID=0")
@@ -100,13 +88,11 @@ func TestValidate_PidZeroWithoutIgnore(t *testing.T) {
 
 func TestValidate_ProcessNotFound(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          "127.0.0.1",
-			BsPort:        1,
-			WebSocketPort: 2,
-		},
-		PID: 9999999,
+		Region:        "us",
+		IPv4:          "127.0.0.1",
+		BsPort:        1,
+		WebSocketPort: 2,
+		PID:           9999999,
 	}
 	if c.Validate(false) {
 		t.Error("Validate should fail when process not found")
@@ -115,13 +101,11 @@ func TestValidate_ProcessNotFound(t *testing.T) {
 
 func TestValidate_InjectableProcessFinder(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          "127.0.0.1",
-			BsPort:        1,
-			WebSocketPort: 2,
-		},
-		PID: 42,
+		Region:        "us",
+		IPv4:          "127.0.0.1",
+		BsPort:        1,
+		WebSocketPort: 2,
+		PID:           42,
 	}
 	called := false
 	finder := func(pid int) (*os.Process, error) {
@@ -145,16 +129,14 @@ func TestValidate_InjectableDialSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	addr := ln.Addr().(*net.TCPAddr)
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          addr.IP.String(),
-			BsPort:        addr.Port,
-			WebSocketPort: addr.Port,
-		},
-		PID: 42,
+		Region:        "us",
+		IPv4:          addr.IP.String(),
+		BsPort:        addr.Port,
+		WebSocketPort: addr.Port,
+		PID:           42,
 	}
 	finder := func(pid int) (*os.Process, error) {
 		return &os.Process{Pid: pid}, nil
@@ -166,13 +148,11 @@ func TestValidate_InjectableDialSuccess(t *testing.T) {
 
 func TestValidate_AutoIPv4(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          "auto",
-			BsPort:        1,
-			WebSocketPort: 2,
-		},
-		PID: 1,
+		Region:        "us",
+		IPv4:          "auto",
+		BsPort:        1,
+		WebSocketPort: 2,
+		PID:           1,
 	}
 	dial := func(network, address string, timeout time.Duration) (net.Conn, error) {
 		return nil, &net.OpError{Op: "dial", Net: "tcp4"}
@@ -184,14 +164,12 @@ func TestValidate_AutoIPv4(t *testing.T) {
 
 func TestValidate_WithOutOfBandPort(t *testing.T) {
 	c := Config{
-		Base: Base{
-			Region:        "us",
-			IPv4:          "127.0.0.1",
-			BsPort:        1,
-			WebSocketPort: 2,
-			OutOfBandPort: 3,
-		},
-		PID: 1,
+		Region:        "us",
+		IPv4:          "127.0.0.1",
+		BsPort:        1,
+		WebSocketPort: 2,
+		OutOfBandPort: 3,
+		PID:           1,
 	}
 	callCount := 0
 	dial := func(network, address string, timeout time.Duration) (net.Conn, error) {

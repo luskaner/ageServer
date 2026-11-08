@@ -120,7 +120,7 @@ func TestDecodeUnsupportedEncoding(t *testing.T) {
 
 type errTransformer struct{}
 
-func (errTransformer) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err error) {
+func (errTransformer) Transform(_, _ []byte, _ bool) (nDst, nSrc int, err error) {
 	return 0, 0, errors.New("mock decode error")
 }
 func (errTransformer) Reset() {}

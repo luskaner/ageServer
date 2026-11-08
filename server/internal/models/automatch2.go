@@ -341,7 +341,7 @@ func (mm *MainMatchmaking) Initialize(game Game) {
 		return
 	}
 	title := game.Title()
-	catalog, err := LoadQueueCatalog(title, game.Resources(), game.LeaderboardDefinitions())
+	catalog, err := loadQueueCatalog(title, game.Resources(), game.LeaderboardDefinitions())
 	if err != nil {
 		// A broken catalog disables QM for that title instead of pairing the
 		// wrong mode. The error is loud and the rest of the server keeps
@@ -712,12 +712,7 @@ func groupContainsEntry(group *automatchPartyGroup, entry *automatchQueueEntry) 
 	if group == nil || entry == nil {
 		return false
 	}
-	for _, member := range group.Entries {
-		if member == entry {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(group.Entries, entry)
 }
 
 func groupSupportsQueue(group *automatchPartyGroup, queueID int32) bool {

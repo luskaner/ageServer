@@ -138,7 +138,7 @@ func glyphWidth(name Name) int {
 	return ansi.StringWidth(G(name))
 }
 
-// GlyphName exposes the catalogue for tests without letting callers mutate it.
+// GlyphNames exposes the catalogue for tests without letting callers mutate it.
 func GlyphNames() []Name {
 	names := make([]Name, len(glyphOrder))
 	copy(names, glyphOrder)

@@ -44,7 +44,7 @@ type User interface {
 	GetAuth() *PersistentJsonData[*time.Time]
 	EncodeStats() i.A
 	EncodePresence(definitions PresenceDefinitions) i.A
-	// GetRating/SetRating expose the cached 1v1 random map rating that is
+	// GetRating and SetRating expose the cached 1v1 random map rating that is
 	// embedded in the extra profile info sent to the game client.
 	GetRating() int32
 	SetRating(rating int32)
@@ -519,7 +519,7 @@ func EncodeLeaderboardStatFor(statGroupID int32, fallbackRating int32, r *Player
 // expects. AoE1's older client library ends the row with ["{}","{}", lastMatch]
 // and has 16 fields; the newer titles use the 19-field row above.
 func EncodeLeaderboardStatForGame(gameID string, statGroupID int32, fallbackRating int32, r *PlayerRating) i.A {
-	leaderboardID := int32(SoloRMRanked)
+	leaderboardID := SoloRMRanked
 	rating := fallbackRating
 	if rating <= 0 {
 		rating = DefaultRating

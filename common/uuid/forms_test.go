@@ -51,7 +51,7 @@ func TestUnmarshalTextRejections(t *testing.T) {
 }
 
 func TestParseRoundTripRandom(t *testing.T) {
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		u := New()
 		parsed := MustParse(u.String())
 		if parsed != u {

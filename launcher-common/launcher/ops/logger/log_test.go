@@ -15,7 +15,7 @@ func TestConcurrentStateAccess(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			SetBasePath("/some/path")
 			SetMacOsExclusiveMappings(i%2 == 0)
 			SetCacert(nil)
@@ -26,7 +26,7 @@ func TestConcurrentStateAccess(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_ = GetBasePath()
 			state.mu.RLock()
 			_ = state.Cacert

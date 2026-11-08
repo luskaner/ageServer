@@ -47,9 +47,9 @@ func aoe4CommunityEvents(definitions i.A, now time.Time) i.A {
 	events := make(i.A, 0, len(seasons)*seasonHistoryDepth)
 	links := make(i.A, 0, len(seasons)*seasonHistoryDepth)
 	seasonLeaderboards := make(i.A, 0, len(seasons)*seasonHistoryDepth)
-	for depth := 0; depth < seasonHistoryDepth; depth++ {
+	for depth := range seasonHistoryDepth {
 		season := current
-		for step := 0; step < depth; step++ {
+		for range depth {
 			if season.Number <= 1 {
 				season = models.RankedSeason{}
 				break

@@ -680,13 +680,6 @@ func TestCdnAgeOfEmpires_httptest(t *testing.T) {
 	}
 }
 
-func testServerStatusViaHttptest(t *testing.T, rr *httptest.ResponseRecorder, req *http.Request, gid string) {
-	t.Helper()
-	_ = rr
-	_ = req
-	_ = gid
-}
-
 // useRealServerStatusHandler demonstrates httptest with the real serverStatus handler
 func useRealServerStatusHandler(t *testing.T, rr *httptest.ResponseRecorder, req *http.Request) {
 	t.Helper()

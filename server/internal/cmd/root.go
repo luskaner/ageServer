@@ -630,8 +630,8 @@ func parseByteSize(value string) (int64, error) {
 		{"B", 1},
 	}
 	for _, unit := range units {
-		if strings.HasSuffix(value, unit.suffix) {
-			number := strings.TrimSpace(strings.TrimSuffix(value, unit.suffix))
+		if before, ok := strings.CutSuffix(value, unit.suffix); ok {
+			number := strings.TrimSpace(before)
 			n, err := strconv.ParseInt(number, 10, 64)
 			if err != nil {
 				return 0, err

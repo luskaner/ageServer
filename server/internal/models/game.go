@@ -211,7 +211,7 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 	if game.matchHistory != nil {
 		userDataDir := ""
 		if game.resources != nil {
-			if rd, ok := interface{}(game.resources).(interface{ ResourcesFolder() string }); ok {
+			if rd, ok := any(game.resources).(interface{ ResourcesFolder() string }); ok {
 				if r := rd.ResourcesFolder(); r != "" {
 					userDataDir = r + "\\userData\\" + gameId
 				}

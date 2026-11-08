@@ -42,9 +42,9 @@ func bundledLeaderboards(t *testing.T, gameID string) *MainLeaderboardDefinition
 
 func TestLoadQueueCatalogAge2FromBundledPool(t *testing.T) {
 	resources := bundledResources(t, "age2", "automatchMaps.json", "automatchQueues.json")
-	catalog, err := LoadQueueCatalog("age2", resources, bundledLeaderboards(t, "age2"))
+	catalog, err := loadQueueCatalog("age2", resources, bundledLeaderboards(t, "age2"))
 	if err != nil {
-		t.Fatalf("LoadQueueCatalog: %v", err)
+		t.Fatalf("loadQueueCatalog: %v", err)
 	}
 	oneVsOne, ok := catalog.Queue(6)
 	if !ok {
@@ -88,9 +88,9 @@ func TestLoadQueueCatalogAge2FromBundledPool(t *testing.T) {
 
 func TestLoadQueueCatalogAge4Overlay(t *testing.T) {
 	resources := bundledResources(t, "age4", "automatchMaps.json", "automatchQueues.json")
-	catalog, err := LoadQueueCatalog("age4", resources, bundledLeaderboards(t, "age4"))
+	catalog, err := loadQueueCatalog("age4", resources, bundledLeaderboards(t, "age4"))
 	if err != nil {
-		t.Fatalf("LoadQueueCatalog: %v", err)
+		t.Fatalf("loadQueueCatalog: %v", err)
 	}
 	ranked, ok := catalog.Queue(1)
 	if !ok || !ranked.Rated || ranked.LeaderboardID != 1 {
@@ -120,7 +120,7 @@ func TestLoadQueueCatalogRejectsUnknownOverlayMatchType(t *testing.T) {
 	resources.arrayFiles["automatchQueues.json"] = i.A{0, i.A{
 		map[string]any{"matchTypes": []any{float64(999)}, "ladder": float64(3), "rated": true},
 	}}
-	if _, err := LoadQueueCatalog("age2", resources, nil); err == nil {
+	if _, err := loadQueueCatalog("age2", resources, nil); err == nil {
 		t.Fatal("expected an error for an overlay matchType missing from the pool")
 	}
 }
@@ -132,7 +132,7 @@ func TestLoadQueueCatalogRejectsHeterogeneousPool(t *testing.T) {
 		i.A{1, "Arabia.rms", 2, 2, 6, nil, nil, ""},
 		i.A{2, "Arena.rms", 2, 4, 6, nil, nil, ""},
 	}}
-	if _, err := LoadQueueCatalog("age2", resources, nil); err == nil {
+	if _, err := loadQueueCatalog("age2", resources, nil); err == nil {
 		t.Fatal("expected an error for a non-homogeneous pool")
 	}
 }
@@ -140,9 +140,9 @@ func TestLoadQueueCatalogRejectsHeterogeneousPool(t *testing.T) {
 func TestLoadQueueCatalogWithoutPoolHasNoQueues(t *testing.T) {
 	resources := &fakeResources{}
 	resources.Initialize("", nil)
-	catalog, err := LoadQueueCatalog("age1", resources, nil)
+	catalog, err := loadQueueCatalog("age1", resources, nil)
 	if err != nil {
-		t.Fatalf("LoadQueueCatalog: %v", err)
+		t.Fatalf("loadQueueCatalog: %v", err)
 	}
 	if catalog.Len() != 0 {
 		t.Fatalf("queues = %d, want 0", catalog.Len())
@@ -180,10 +180,6 @@ func TestEncodeUnmatchedStatusesEchoesRaceIDs(t *testing.T) {
 			t.Fatalf("status %d pair = %#v", index, mapRow[0])
 		}
 	}
-}
-
-func strconvID(id int32) string {
-	return strconv.Itoa(int(id))
 }
 
 func TestAutomatchUnmatchedResponseGolden(t *testing.T) {
@@ -291,9 +287,9 @@ func TestAssignTeamsKeepsPartiesTogether(t *testing.T) {
 
 func TestLoadQueueCatalogAge1FromBundledPool(t *testing.T) {
 	resources := bundledResources(t, "age1", "automatchMaps.json", "automatchQueues.json")
-	catalog, err := LoadQueueCatalog("age1", resources, nil)
+	catalog, err := loadQueueCatalog("age1", resources, nil)
 	if err != nil {
-		t.Fatalf("LoadQueueCatalog: %v", err)
+		t.Fatalf("loadQueueCatalog: %v", err)
 	}
 	if catalog.Len() != 8 {
 		t.Fatalf("queues = %d, want the eight captured Quick Match queues", catalog.Len())
@@ -433,9 +429,9 @@ func TestUsesPartiesPerTitle(t *testing.T) {
 
 func TestLoadQueueCatalogAge3FromBundledPool(t *testing.T) {
 	resources := bundledResources(t, "age3", "automatchMaps.json", "automatchQueues.json")
-	catalog, err := LoadQueueCatalog("age3", resources, bundledLeaderboards(t, "age3"))
+	catalog, err := loadQueueCatalog("age3", resources, bundledLeaderboards(t, "age3"))
 	if err != nil {
-		t.Fatalf("LoadQueueCatalog: %v", err)
+		t.Fatalf("loadQueueCatalog: %v", err)
 	}
 	if catalog.Len() != 12 {
 		t.Fatalf("queues = %d, want the twelve ranked queues", catalog.Len())
@@ -528,9 +524,9 @@ func TestAoE3GameMessageShape(t *testing.T) {
 
 func TestLoadQueueCatalogAoMFromBundledPool(t *testing.T) {
 	resources := bundledResources(t, "athens", "automatchMaps.json", "automatchQueues.json")
-	catalog, err := LoadQueueCatalog("athens", resources, bundledLeaderboards(t, "athens"))
+	catalog, err := loadQueueCatalog("athens", resources, bundledLeaderboards(t, "athens"))
 	if err != nil {
-		t.Fatalf("LoadQueueCatalog: %v", err)
+		t.Fatalf("loadQueueCatalog: %v", err)
 	}
 	if catalog.Len() != 20 {
 		t.Fatalf("queues = %d, want the eight ranked and twelve quickmatch queues", catalog.Len())

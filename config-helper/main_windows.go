@@ -15,7 +15,6 @@ var (
 	gameUserProfilePathFn = game.UserProfilePath
 	windowsToUnixPathFn   = WindowsToUnixPath
 	fmtPrintFn            = fmt.Print
-	fmtFprintlnFn         = func(a ...any) (n int, err error) { return fmt.Fprintln(os.Stderr, a...) }
 )
 
 func main() {

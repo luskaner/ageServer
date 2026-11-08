@@ -10,7 +10,7 @@ import (
 // singleton by reference; callers mutating the result (Pop) corrupted the
 // global set for the rest of the process.
 func TestParsedGameIdsDoesNotMutateGlobalSupportedGames(t *testing.T) {
-	empty := []string{}
+	var empty []string
 	before := game.SupportedGames.Cardinality()
 
 	games, err := ParsedGameIds(&empty)
@@ -21,7 +21,7 @@ func TestParsedGameIdsDoesNotMutateGlobalSupportedGames(t *testing.T) {
 		t.Fatalf("returned set cardinality = %d, want %d", games.Cardinality(), before)
 	}
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		games.Pop()
 	}
 

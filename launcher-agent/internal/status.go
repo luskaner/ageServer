@@ -59,15 +59,6 @@ func SetActivity(doing string, session string) {
 	}
 }
 
-// CurrentActivity returns what is being done as of right now. It is the value
-// before anything has been published, which is a blank one rather than an error:
-// nothing has gone wrong, the agent simply has not said yet.
-func CurrentActivity() Activity {
-	activity.Lock()
-	defer activity.Unlock()
-	return activity.current
-}
-
 // OnActivity installs a renderer for the activity and hands it the current value
 // right away, so a subscriber that arrives late shows the step in progress
 // instead of waiting for the next one.

@@ -74,14 +74,12 @@ func liveValidateConfig(t *testing.T) (battleServer.Config, func()) {
 		t.Skip("cannot bind ephemeral listeners")
 	}
 	cfg := battleServer.Config{
-		Base: battleServer.Base{
-			Region:        "Mi-Región",
-			Name:          "My Server",
-			IPv4:          "127.0.0.1",
-			BsPort:        ln1.Addr().(*net.TCPAddr).Port,
-			WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
-		},
-		PID: uint32(os.Getpid()),
+		Region:        "Mi-Región",
+		Name:          "My Server",
+		IPv4:          "127.0.0.1",
+		BsPort:        ln1.Addr().(*net.TCPAddr).Port,
+		WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
+		PID:           uint32(os.Getpid()),
 	}
 	return cfg, func() {
 		_ = ln1.Close()
@@ -121,8 +119,8 @@ func TestRemoveKillsNothingAndDeletesFile(t *testing.T) {
 	// Dead PID: Kill must treat it as already-dead and return true without
 	// signalling anything (a live self-PID here would kill the test binary).
 	cfg := battleServer.Config{
-		Base: battleServer.Base{Region: "r", Name: "n", IPv4: "1.2.3.4", BsPort: 1, WebSocketPort: 2},
-		PID:  4_000_000_000,
+		Region: "r", Name: "n", IPv4: "1.2.3.4", BsPort: 1, WebSocketPort: 2,
+		PID: 4_000_000_000,
 	}
 
 	gameId := "unit-remover"
@@ -154,16 +152,16 @@ func TestWriteConfigCreatesDirectory(t *testing.T) {
 	if err != nil {
 		t.Skip("cannot bind ephemeral listener")
 	}
-	defer ln1.Close()
+	defer func() { _ = ln1.Close() }()
 	ln2, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
 	if err != nil {
 		t.Skip("cannot bind ephemeral listener")
 	}
-	defer ln2.Close()
+	defer func() { _ = ln2.Close() }()
 
 	cfg := battleServer.Config{
-		Base: battleServer.Base{Region: "new-region", Name: "New Server", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port},
-		PID:  uint32(os.Getpid()),
+		Region: "new-region", Name: "New Server", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
+		PID: uint32(os.Getpid()),
 	}
 	gameId := "unit-newdir"
 	dir := battleServer.Folder(gameId)
@@ -183,17 +181,17 @@ func TestWriteConfigIncrementsFileName(t *testing.T) {
 	if err != nil {
 		t.Skip("cannot bind ephemeral listener")
 	}
-	defer ln1.Close()
+	defer func() { _ = ln1.Close() }()
 	ln2, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
 	if err != nil {
 		t.Skip("cannot bind ephemeral listener")
 	}
-	defer ln2.Close()
+	defer func() { _ = ln2.Close() }()
 	ln3, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
 	if err != nil {
 		t.Skip("cannot bind ephemeral listener")
 	}
-	defer ln3.Close()
+	defer func() { _ = ln3.Close() }()
 
 	gameId := "unit-increment"
 	dir := battleServer.Folder(gameId)
@@ -204,15 +202,15 @@ func TestWriteConfigIncrementsFileName(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	cfg1 := battleServer.Config{
-		Base: battleServer.Base{Region: "r1", Name: "S1", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port},
-		PID:  uint32(os.Getpid()),
+		Region: "r1", Name: "S1", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
+		PID: uint32(os.Getpid()),
 	}
 	if err := WriteConfig(gameId, cfg1); err != nil {
 		t.Fatal(err)
 	}
 	cfg2 := battleServer.Config{
-		Base: battleServer.Base{Region: "r2", Name: "S2", IPv4: "127.0.0.1", BsPort: ln3.Addr().(*net.TCPAddr).Port, WebSocketPort: 0},
-		PID:  uint32(os.Getpid()),
+		Region: "r2", Name: "S2", IPv4: "127.0.0.1", BsPort: ln3.Addr().(*net.TCPAddr).Port, WebSocketPort: 0,
+		PID: uint32(os.Getpid()),
 	}
 	if err := WriteConfig(gameId, cfg2); err != nil {
 		t.Fatal(err)
@@ -264,16 +262,16 @@ func TestRemoveOnlyInvalidSkipsValid(t *testing.T) {
 	if err != nil {
 		t.Skip("cannot bind ephemeral listener")
 	}
-	defer ln1.Close()
+	defer func() { _ = ln1.Close() }()
 	ln2, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
 	if err != nil {
 		t.Skip("cannot bind ephemeral listener")
 	}
-	defer ln2.Close()
+	defer func() { _ = ln2.Close() }()
 
 	cfg := battleServer.Config{
-		Base: battleServer.Base{Region: "valid-region", Name: "Valid", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port},
-		PID:  uint32(os.Getpid()),
+		Region: "valid-region", Name: "Valid", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
+		PID: uint32(os.Getpid()),
 	}
 
 	gameId := "unit-onlyinvalid"
@@ -303,7 +301,7 @@ func TestRemoveOnlyInvalidSkipsValid(t *testing.T) {
 }
 
 func TestRemoveWithMissingFolder(t *testing.T) {
-	if Remove("nonexistent-game-id-abc", []battleServer.Config{{Base: battleServer.Base{Region: "r"}}}, false) {
+	if Remove("nonexistent-game-id-abc", []battleServer.Config{{Region: "r"}}, false) {
 		t.Error("Remove with missing folder should return false")
 	}
 }

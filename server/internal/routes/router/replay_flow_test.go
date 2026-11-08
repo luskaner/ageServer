@@ -12,15 +12,6 @@ import (
 	i "github.com/luskaner/ageServer/server/internal"
 )
 
-func decodeArray(t *testing.T, rr interface{ Body() []byte }) i.A {
-	t.Helper()
-	var arr i.A
-	if err := json.Unmarshal(rr.Body(), &arr); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	return arr
-}
-
 func TestReportMatchExposesReplayDescriptors(t *testing.T) {
 	cases := []struct {
 		gameID       string

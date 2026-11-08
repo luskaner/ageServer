@@ -1267,7 +1267,7 @@ func TestConfigurationDocumentKeepsEveryTemplateComment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("configurationDocument returned an error: %v", err)
 	}
-	for _, line := range strings.Split(string(content), "\n") {
+	for line := range strings.SplitSeq(string(content), "\n") {
 		comment := strings.TrimSpace(line)
 		if !strings.HasPrefix(comment, "#") {
 			continue

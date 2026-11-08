@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1115,8 +1116,8 @@ func parseByteSize(value string) (int64, error) {
 		{"B", 1},
 	}
 	for _, unit := range units {
-		if strings.HasSuffix(value, unit.suffix) {
-			number := strings.TrimSpace(strings.TrimSuffix(value, unit.suffix))
+		if before, ok := strings.CutSuffix(value, unit.suffix); ok {
+			number := strings.TrimSpace(before)
 			n, err := strconv.ParseInt(number, 10, 64)
 			if err != nil {
 				return 0, err
@@ -1559,13 +1560,13 @@ func rewriteBattleServers(content []byte, gameID string, servers []BattleServerC
 		blocks = blocks[:len(servers)]
 	}
 	// Rewrite the surviving blocks from the bottom up, for the same reason.
-	for index := len(blocks) - 1; index >= 0; index-- {
-		block := updated[blocks[index].start:blocks[index].end]
+	for index, table := range slices.Backward(blocks) {
+		block := updated[table.start:table.end]
 		rewritten, err := writeTableKeys(block, path, battleServerEntries(gameID, servers[index]))
 		if err != nil {
 			return nil, err
 		}
-		updated = splice(updated, blocks[index].start, blocks[index].end, rewritten)
+		updated = splice(updated, table.start, table.end, rewritten)
 	}
 	if len(servers) == 0 {
 		return updated, nil
@@ -1695,8 +1696,8 @@ func blockCutEnd(content []byte, block tableBlock) int {
 // removeTableBlocks removes blocks from a document, bottom first, keeping the
 // comments that close them when those belong to what follows.
 func removeTableBlocks(content []byte, blocks []tableBlock) []byte {
-	for index := len(blocks) - 1; index >= 0; index-- {
-		content = splice(content, blocks[index].start, blockCutEnd(content, blocks[index]), nil)
+	for _, block := range slices.Backward(blocks) {
+		content = splice(content, block.start, blockCutEnd(content, block), nil)
 	}
 	return content
 }

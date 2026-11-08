@@ -201,7 +201,6 @@ var config = &ops.Config{}
 // report is how the shared logic talks to this frontend.
 
 var (
-	Version      string
 	cfgFile      string
 	gameCfgFile  string
 	gameId       string
@@ -234,13 +233,10 @@ var (
 	makeExecFn                      = gameExecutor.MakeExec
 	commonParsePathFn               = common.ParsePath
 	commonEnhancedViperFn           = common.EnhancedViperStringToStringSlice
-	executablesFindPathFn           = executables.FindPath
 	commonProcessProcessFn          = commonProcess.Process
 	commonProcessWaitForProcessFn   = commonProcess.WaitForProcessContext
 	gameRunningFn                   = func() bool { return ops.GameRunning(reportOrDiscard()) }
 	configKillAgentFn               = config.KillAgent
-	launcherCommonConfigRevertFn    = launcherCommon.ConfigRevert
-	executorRunRevertFn             = executor.RunRevert
 	commonLoggerFileLoggerBufferFn  = func(name string, fn func(io.Writer)) error {
 		if commonLogger.FileLogger == nil {
 			return nil
@@ -566,9 +562,8 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		reportOrDiscard().Fail("Isolating profiles and metadata is a must when using an official launcher.")
 		atomicExitCode.Store(int32(launcher.ErrRequiredIsolation))
 		return
-	} else {
-		reportOrDiscard().Warn("Make sure you disable the cloud saves in the launcher settings to avoid issues.")
 	}
+	reportOrDiscard().Warn("Make sure you disable the cloud saves in the launcher settings to avoid issues.")
 
 	if isAdmin {
 		reportOrDiscard().Warn("Running as administrator, this is not recommended for security reasons. It will request isolated admin privileges if/when needed.")

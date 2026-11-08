@@ -51,16 +51,12 @@ func writePEM(t *testing.T, path string, ders ...[]byte) {
 	if err != nil {
 		t.Fatalf("create %s: %v", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	for _, der := range ders {
 		if err := common.WriteAsPem(der, f); err != nil {
 			t.Fatalf("WriteAsPem: %v", err)
 		}
 	}
-}
-
-func pemEncode(der []byte) []byte {
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
 func TestCACertBackup_MissingOriginal(t *testing.T) {
