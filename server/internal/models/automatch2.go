@@ -2195,19 +2195,13 @@ func sameParty(a, b *automatchQueueEntry) bool {
 	return a.PartySessionID > 0 && a.PartySessionID == b.PartySessionID
 }
 
+// numberToInt is the int-typed view of i.NumberToInt64, kept for the readers in
+// this package that index catalogues with an int. The conversion itself lives in
+// the internal package so the public API readers share it instead of repeating
+// the type switch.
 func numberToInt(value any) (int, bool) {
-	switch typed := value.(type) {
-	case float64:
-		return int(typed), true
-	case int:
-		return typed, true
-	case int32:
-		return int(typed), true
-	case int64:
-		return int(typed), true
-	default:
-		return 0, false
-	}
+	number, ok := i.NumberToInt64(value)
+	return int(number), ok
 }
 
 // IsAutomatchDescription reports whether a host request belongs to the
