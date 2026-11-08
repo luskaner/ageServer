@@ -24,6 +24,9 @@ func newTestAdmin(t *testing.T) *Admin {
 	internal.Logger = nil
 	d := defaultDeps()
 	d.sleep = func(time.Duration) {}
+	// The CI runner may be elevated; the polling behaviour under test only
+	// applies when the caller is not.
+	d.isAdmin = func() bool { return false }
 	return newAdmin(d)
 }
 

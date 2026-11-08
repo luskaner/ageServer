@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/luskaner/ageServer/common"
@@ -128,9 +130,10 @@ func TestGetExecutablePathLocal(t *testing.T) {
 }
 
 func TestGetExecutablePathAbsolute(t *testing.T) {
-	result := getExecutablePath("C:\\Windows\\System32\\cmd.exe")
-	if result != "C:\\Windows\\System32\\cmd.exe" {
-		t.Errorf("getExecutablePath absolute = %q, want %q", result, "C:\\Windows\\System32\\cmd.exe")
+	absolute := filepath.Join(t.TempDir(), "cmd.exe")
+	result := getExecutablePath(absolute)
+	if result != absolute {
+		t.Errorf("getExecutablePath absolute = %q, want %q", result, absolute)
 	}
 }
 
@@ -176,6 +179,9 @@ func configureCmdHelper(wait, show, gui, _ bool) *exec.Cmd {
 }
 
 func TestConfigureCmdNonGuiNonShowWait(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows sets CREATE_NO_WINDOW even when waiting")
+	}
 	cmd := configureCmdHelper(true, false, false, false)
 	if cmd.SysProcAttr == nil {
 		t.Fatal("SysProcAttr should not be nil")
@@ -222,9 +228,10 @@ func TestMakeCommand(t *testing.T) {
 }
 
 func TestMakeCommandWithWorkingPath(t *testing.T) {
-	cmd := makeCommand("C:\\path\\test.exe", true, nil, nil)
-	if cmd.Dir == "" {
-		t.Error("Dir should be set when executableWorkingPath is true")
+	executable := filepath.Join(t.TempDir(), "test.exe")
+	cmd := makeCommand(executable, true, nil, nil)
+	if cmd.Dir != filepath.Dir(executable) {
+		t.Errorf("Dir = %q, want %q", cmd.Dir, filepath.Dir(executable))
 	}
 }
 
@@ -244,12 +251,22 @@ func TestMakeCommandStderr(t *testing.T) {
 	}
 }
 
+// shellCommand returns an executable and arguments that run a shell command on
+// the current platform.
+func shellCommand(command string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		return "cmd.exe", []string{"/c", command}
+	}
+	return "sh", []string{"-c", command}
+}
+
 func TestStandardExecWithRealCommand(t *testing.T) {
+	file, args := shellCommand("echo hello")
 	o := Options{
-		File:           "cmd.exe",
+		File:           file,
 		Wait:           true,
 		ExitCode:       true,
-		Args:           []string{"/c", "echo", "hello"},
+		Args:           args,
 		UseWorkingPath: false,
 	}
 	r := o.standardExec()
@@ -262,11 +279,12 @@ func TestStandardExecWithRealCommand(t *testing.T) {
 }
 
 func TestStandardExecWithPid(t *testing.T) {
+	file, args := shellCommand("echo hello")
 	o := Options{
-		File: "cmd.exe",
+		File: file,
 		Pid:  true,
 		Wait: true,
-		Args: []string{"/c", "echo", "hello"},
+		Args: args,
 	}
 	r := o.standardExec()
 	if r.Err != nil {
@@ -289,10 +307,11 @@ func TestStandardExecNonexistentFile(t *testing.T) {
 }
 
 func TestStandardExecStartAndWait(t *testing.T) {
+	file, args := shellCommand("echo test")
 	o := Options{
-		File: "cmd.exe",
+		File: file,
 		Wait: true,
-		Args: []string{"/c", "echo", "test"},
+		Args: args,
 	}
 	r := o.standardExec()
 	if r.Err != nil {
@@ -301,11 +320,17 @@ func TestStandardExecStartAndWait(t *testing.T) {
 }
 
 func TestExecNonAdminNonShell(t *testing.T) {
+	file, args := shellCommand("echo hello")
+	// Exec resolves a local name against the test binary's directory, so use
+	// the absolute path the shell resolves to.
+	if absolute, err := exec.LookPath(file); err == nil {
+		file = absolute
+	}
 	o := Options{
-		File:     `C:\Windows\System32\cmd.exe`,
+		File:     file,
 		Wait:     true,
 		ExitCode: true,
-		Args:     []string{"/c", "echo", "hello"},
+		Args:     args,
 	}
 	r := o.Exec()
 	if r.Err != nil {
@@ -318,12 +343,13 @@ func TestExecNonAdminNonShell(t *testing.T) {
 
 func TestExecSpecialFile(t *testing.T) {
 	// SpecialFile skips getExecutablePath
+	file, args := shellCommand("echo hello")
 	o := Options{
-		File:        `C:\Windows\System32\cmd.exe`,
+		File:        file,
 		SpecialFile: true,
 		Wait:        true,
 		ExitCode:    true,
-		Args:        []string{"/c", "echo", "hello"},
+		Args:        args,
 	}
 	r := o.Exec()
 	if r.Err != nil {
@@ -406,6 +432,9 @@ func TestGetExecutablePathEmptyExecutable(t *testing.T) {
 }
 
 func TestExecShellWithStdoutError(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("the shell/stdout incompatibility is Windows-specific")
+	}
 	// Shell + !ShowWindow + !GUI + Stdout should hit the "shell not compatible with stdout" error in exec()
 	var buf bytes.Buffer
 	o := Options{
@@ -420,6 +449,15 @@ func TestExecShellWithStdoutError(t *testing.T) {
 }
 
 func TestExecAdminWithStderrError(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("the admin/stderr incompatibility is Windows-specific")
+	}
+	// The CI runner may already be elevated, which would clear AsAdmin before
+	// the check below. Force the non-elevated path so the test is deterministic.
+	original := isAdminFn
+	isAdminFn = func() bool { return false }
+	defer func() { isAdminFn = original }()
+
 	var buf bytes.Buffer
 	o := Options{
 		File:    `C:\Windows\System32\cmd.exe`,
@@ -451,11 +489,12 @@ func TestExecShellWithExitCodeAndWait(t *testing.T) {
 
 func TestStandardExecExitError(t *testing.T) {
 	// Running a command that exits with non-zero but is still a valid process
+	file, args := shellCommand("exit 1")
 	o := Options{
-		File:     `C:\Windows\System32\cmd.exe`,
+		File:     file,
 		Wait:     true,
 		ExitCode: true,
-		Args:     []string{"/c", "exit", "1"},
+		Args:     args,
 	}
 	r := o.standardExec()
 	if r.Err != nil {
@@ -505,7 +544,8 @@ func TestStandardExecCustomExecError(t *testing.T) {
 
 func TestExecCustomExecutableStart(t *testing.T) {
 	// wait=false → cmd.Start() path
-	err, cmd := execCustomExecutable(`C:\Windows\System32\cmd.exe`, false, false, false, false, nil, nil, "/c", "echo", "hello")
+	file, args := shellCommand("echo hello")
+	err, cmd := execCustomExecutable(file, false, false, false, false, nil, nil, args...)
 	if err != nil {
 		t.Errorf("execCustomExecutable start failed: %v", err)
 	}

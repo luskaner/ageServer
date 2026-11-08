@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -315,6 +316,9 @@ func TestRunRevertInvalidDataPath(t *testing.T) {
 }
 
 func TestRunRevertRemoveUserCertFailure(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("the user certificate store is not used on Linux")
+	}
 	resetCmdState(t)
 	saveCmdDeps(t)
 	supportedGamesContainsFn = func(string) bool { return true }
@@ -639,6 +643,9 @@ func TestRunSetUpMissingLocalCertData(t *testing.T) {
 }
 
 func TestRunSetUpUserCertParseFailure(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("the user certificate store is not used on Linux")
+	}
 	resetCmdState(t)
 	saveCmdDeps(t)
 	supportedGamesContainsFn = func(string) bool { return true }
@@ -654,6 +661,9 @@ func TestRunSetUpUserCertParseFailure(t *testing.T) {
 }
 
 func TestRunSetUpUserCertAddFailure(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("the user certificate store is not used on Linux")
+	}
 	resetCmdState(t)
 	saveCmdDeps(t)
 	supportedGamesContainsFn = func(string) bool { return true }

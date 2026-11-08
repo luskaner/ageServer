@@ -73,7 +73,21 @@ func win7UTF8() probe {
 // it every assertion below would pass for the wrong reason: NoTTY is what a pipe
 // reports no matter what the rest of the probe says.
 func ttyEnv(env ...string) []string {
-	return append([]string{"TTY_FORCE=1"}, env...)
+	base := []string{"TTY_FORCE=1"}
+	hasTerm := false
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "TERM=") {
+			hasTerm = true
+			break
+		}
+	}
+	if !hasTerm {
+		// On Unix colorprofile treats an unset TERM as no terminal, which would
+		// hide the tier rules behind the colour fallback. Windows ignores TERM,
+		// so supplying it keeps the Windows cases host-independent.
+		base = append(base, "TERM=xterm-256color")
+	}
+	return append(base, env...)
 }
 
 // TestDetectTierTable pins the tier of every terminal shape the design calls
