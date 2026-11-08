@@ -23,7 +23,7 @@ func GetFileURL(w http.ResponseWriter, r *http.Request) {
 	}
 	g := models.G(r)
 	cloudFiles := g.Resources().CloudFiles()
-	if cloudFiles.Value == nil {
+	if cloudFiles == nil || !cloudFiles.Enabled() {
 		i.JSON(&w, i.A{2, slices.Repeat(i.A{nil}, len(req.Names.Data))})
 		return
 	}
@@ -31,7 +31,7 @@ func GetFileURL(w http.ResponseWriter, r *http.Request) {
 	gameTitle := g.Title()
 	var errorCode int
 	for j, name := range req.Names.Data {
-		fileData, ok := cloudFiles.Value[name]
+		fileData, ok := cloudFiles.Get(models.CloudBuiltinPrefix + name)
 		if !ok {
 			descriptions[j] = i.A{nil}
 			errorCode = 2

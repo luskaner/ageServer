@@ -44,7 +44,7 @@ func TestGameSpecificRoutes_httptest(t *testing.T) {
 		{name: "AoE3_getChatChannels", gameId: game.AoE3, method: "POST", path: "/game/chat/getChatChannels", wantFirst: 0},
 
 		// --- AoE4 ---
-		{name: "AoE4_polling", gameId: game.AoE4, method: "POST", path: "/game/automatch2/polling", wantFirst: 2},
+		{name: "AoE4_polling", gameId: game.AoE4, method: "POST", path: "/game/automatch2/polling", wantFirst: 0},
 		{name: "AoE4_stoppolling", gameId: game.AoE4, method: "POST", path: "/game/automatch2/stoppolling", wantFirst: -1},
 		{name: "AoE4_getAutomatchMap", gameId: game.AoE4, method: "GET", path: "/game/automatch/getAutomatchMap", wantFirst: -1},
 		{name: "AoE4_getRecentMatchSinglePlayerHistory", gameId: game.AoE4, method: "GET", path: "/game/Leaderboard/getRecentMatchSinglePlayerHistory", wantFirst: -1},
@@ -59,7 +59,7 @@ func TestGameSpecificRoutes_httptest(t *testing.T) {
 		{name: "AoM_getEventStats", gameId: game.AoM, method: "GET", path: "/game/CommunityEvent/getEventStats", wantFirst: -1},
 		{name: "AoM_getEventLeaderboard", gameId: game.AoM, method: "GET", path: "/game/CommunityEvent/getEventLeaderboard", wantFirst: -1},
 		{name: "AoM_updateProgressBatched", gameId: game.AoM, method: "POST", path: "/game/challenge/updateProgressBatched", body: "updates=[]", wantFirst: -1},
-		{name: "AoM_createOrReportSinglePlayer", gameId: game.AoM, method: "POST", path: "/game/party/createOrReportSinglePlayer", wantFirst: -1},
+		{name: "AoM_createOrReportSinglePlayer", gameId: game.AoM, method: "POST", path: "/game/party/createOrReportSinglePlayer", body: "createMatchKey=1&matchTypeID=1&mapname=x", wantFirst: 0},
 		{name: "AoM_reportUser", gameId: game.AoM, method: "POST", path: "/game/playerreport/reportUser", body: "profileID=1&reason=1", wantFirst: -1},
 		{name: "AoM_getProfileProperty", gameId: game.AoM, method: "GET", path: "/game/account/getProfileProperty?profile_id=1&property_id=x", wantFirst: 0},
 	}

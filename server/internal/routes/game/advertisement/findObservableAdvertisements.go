@@ -24,6 +24,12 @@ func FindObservableAdvertisements(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	findAdvertisements(w, r, q.Length, q.Offset, true, nil, func(advertisement models.Advertisement) bool {
-		return advertisement.UnsafeGetObserversEnabled()
+		// The official service only lists matches that have already started:
+		// every advertisement captured from findObservableAdvertisements (2523 in
+		// AoE4, 1602 in AoM, 76 in AoE3) had state=1 and a startTime, while
+		// findAdvertisements only ever returned state=0 rows. Listing a lobby
+		// that has not started yet also means reporting a null start time, which
+		// is the timer the client draws for the match in issue #403.
+		return advertisement.UnsafeGetObserversEnabled() && advertisement.UnsafeGetState() == 1
 	}, true)
 }

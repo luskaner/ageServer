@@ -27,6 +27,11 @@ var SignConfigRuntime struct {
 var CanUseInternet bool
 var Authentication string
 
+// AutomatchAssumeQueue is the opt-in fallback for unknown matchTypes. Empty
+// keeps the strict "unknown pool does not match" rule; "rm-solo" enables the
+// unrated 1v1 Random Map fallback described in docs/matchmaking.md §4.1.
+var AutomatchAssumeQueue string
+
 // CustomFiles holds the resolved /api/MatchContent/ configuration. Set once at
 // startup, before any game is created, so both the model and the HTTP handlers
 // see the same values without dragging the whole config around.
@@ -36,12 +41,11 @@ var CustomFilesMaxFileSize int64
 var CustomFilesMaxTotalSize int64
 var CustomFilesExpiry time.Duration
 
-// BattleServerReplays holds the resolved battle server replay recording configuration.
+// Replays holds the resolved replay upload configuration.
 // Set once at startup.
-var BattleServerReplaysEnabled bool
-var BattleServerReplaysFolder string
-var BattleServerReplaysMaxFileSize int64
-var BattleServerReplaysMaxTotalSize int64
-var BattleServerReplaysExpiry time.Duration
+var ReplaysEnabled bool
+var ReplaysMaxFileSize int64
+var ReplaysMaxTotalSize int64
+var ReplaysExpiry time.Duration
 
 type AnnounceMessageDataLatest = common.AnnounceMessageData002

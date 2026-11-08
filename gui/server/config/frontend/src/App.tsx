@@ -59,12 +59,11 @@ function toEditorConfig(config: Configuration): AppConfig {
             MaxFileSize: toEditorSize(config.CustomFiles.MaxFileSize),
             MaxTotalSize: toEditorSize(config.CustomFiles.MaxTotalSize),
         },
-        BattleServerReplays: config.BattleServerReplays ?? {
-            Enabled: false,
-            Folder: 'auto',
+        Replays: config.Replays ?? {
+            Enabled: true,
             MaxFileSize: '32MB',
-            MaxTotalSize: '256MB',
-            Expiry: '12h',
+            MaxTotalSize: '1GB',
+            Expiry: '-1s',
         },
     };
 }

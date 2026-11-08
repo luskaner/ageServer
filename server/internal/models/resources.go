@@ -35,15 +35,15 @@ type signature struct {
 // newsEntry is one [id] table of a game's news.toml. The table key is the id
 // sent to the client; the remaining fields are forwarded as received.
 type newsEntry struct {
-	Category    string `toml:"category"`
-	Title       string `toml:"title"`
-	Subtitle    string `toml:"subtitle"`
-	Text        string `toml:"text"`
-	ImageURL    string `toml:"image_url"`
-	Body        string `toml:"body"`
-	Metadata    string `toml:"metadata"`
-	DateVisible any    `toml:"date_visible"`
-	DateExpiry  any    `toml:"date_expiry"`
+	Category    string  `toml:"category"`
+	Title       string  `toml:"title"`
+	Subtitle    *string `toml:"subtitle"`
+	Text        string  `toml:"text"`
+	ImageURL    string  `toml:"image_url"`
+	Body        string  `toml:"body"`
+	Metadata    string  `toml:"metadata"`
+	DateVisible any     `toml:"date_visible"`
+	DateExpiry  any     `toml:"date_expiry"`
 }
 
 type Resources interface {
@@ -54,7 +54,7 @@ type Resources interface {
 	News() []i.A
 	ArrayFiles() map[string]i.A
 	SignedAssets() map[string][]byte
-	CloudFiles() CloudFiles
+	CloudFiles() *CloudFiles
 }
 
 type MainResources struct {
@@ -67,7 +67,7 @@ type MainResources struct {
 	keyedFilesCaptured      map[string][]byte // The captured (unsigned) version
 	nameToSignature         map[string]string // Signature for the currently active version
 	nameToSignatureCaptured map[string]string // Signature for the captured version
-	cloudFiles              CloudFiles
+	cloudFiles              *CloudFiles
 }
 
 func (r *MainResources) Initialize(gameId string, opts *ResourcesOpts) {
@@ -111,7 +111,7 @@ func (r *MainResources) SignedAssets() map[string][]byte {
 	return r.keyedFiles
 }
 
-func (r *MainResources) CloudFiles() CloudFiles {
+func (r *MainResources) CloudFiles() *CloudFiles {
 	return r.cloudFiles
 }
 
@@ -276,10 +276,16 @@ func (r *MainResources) initializeResponses(gameId string) {
 }
 
 func (r *MainResources) initializeCloud(gameId string) {
-	cloudfiles := BuildCloudfilesIndex(filepath.Join(paths.ConfigsPath, gameId), filepath.Join(CloudFolder, gameId))
-	if cloudfiles != nil {
-		r.cloudFiles = *cloudfiles
-	}
+	r.cloudFiles = BuildCloudfilesIndex(
+		filepath.Join(paths.ConfigsPath, gameId),
+		filepath.Join(CloudFolder, gameId),
+	)
+	r.cloudFiles.SetReplayOpts(CloudFilesReplayOpts{
+		Enabled:      i.ReplaysEnabled,
+		MaxFileSize:  i.ReplaysMaxFileSize,
+		MaxTotalSize: i.ReplaysMaxTotalSize,
+		Expiry:       i.ReplaysExpiry,
+	})
 }
 
 // ReturnSignedAsset serves a response whose dataSignature the client verifies.

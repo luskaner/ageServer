@@ -8,6 +8,7 @@ import (
 	"github.com/luskaner/ageServer/common/game"
 	i "github.com/luskaner/ageServer/server/internal"
 	"github.com/luskaner/ageServer/server/internal/models"
+	"github.com/luskaner/ageServer/server/internal/routes/game/chat"
 	"github.com/luskaner/ageServer/server/internal/routes/game/relationship"
 	"github.com/luskaner/ageServer/server/internal/routes/wss"
 )
@@ -50,6 +51,22 @@ func Platformlogin(w http.ResponseWriter, r *http.Request) {
 	users := g.Users()
 	sessions := g.Sessions()
 	u := r.Context().Value("user").(models.User)
+	// A previous session of this player may still be a member of the chat
+	// channels (the game was closed without logging out, crashed or expired).
+	// Those memberships would keep counting a player that is no longer inside
+	// and would make this login fail to join ("already a member"), so drop them
+	// and tell the remaining members, like a logout does. A login always starts
+	// without channel memberships: the client joins them after logging in.
+	for channelId, channel := range g.ChatChannels().Iter() {
+		if existed, members := channel.RemoveUser(u); existed {
+			chat.NotifyLeaveChannel(sessions, members, u, channelId)
+			// AoE3 only takes into account the first notify in a readSession
+			// (legacy) return, so delay each message by 100ms so they go in
+			// different responses, otherwise it would appear as it left the
+			// first channel only.
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 	sess, ok := sessions.GetByUserId(u.GetId())
 	if ok {
 		sessions.Delete(sess.Id())

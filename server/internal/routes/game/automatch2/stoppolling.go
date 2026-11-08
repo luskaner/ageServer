@@ -8,11 +8,6 @@ import (
 	"github.com/luskaner/ageServer/server/internal/models"
 )
 
-func Stoppolling(w http.ResponseWriter, _ *http.Request) {
-	// TODO: Implement for matchmaking
-	i.JSON(&w, i.A{0})
-}
-
 func StopPolling(w http.ResponseWriter, r *http.Request) {
 	g := models.G(r)
 	var req models.AutomatchStopPollingRequest

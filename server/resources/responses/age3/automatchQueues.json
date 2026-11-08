@@ -1,0 +1,14 @@
+[0,[
+  {"matchTypes":[1],"ladder":1,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Supremacy 1v1"},
+  {"matchTypes":[2],"ladder":2,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Supremacy 2v2"},
+  {"matchTypes":[3],"ladder":3,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Supremacy 3v3"},
+  {"matchTypes":[4],"ladder":4,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Supremacy 4v4"},
+  {"matchTypes":[5],"ladder":5,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Deathmatch 1v1"},
+  {"matchTypes":[6],"ladder":6,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Deathmatch 2v2"},
+  {"matchTypes":[7],"ladder":7,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Deathmatch 3v3"},
+  {"matchTypes":[8],"ladder":8,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Deathmatch 4v4"},
+  {"matchTypes":[18],"ladder":18,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Empire Wars 1v1"},
+  {"matchTypes":[19],"ladder":19,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Empire Wars 2v2"},
+  {"matchTypes":[20],"ladder":20,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Empire Wars 3v3"},
+  {"matchTypes":[21],"ladder":21,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Empire Wars 4v4"}
+]]

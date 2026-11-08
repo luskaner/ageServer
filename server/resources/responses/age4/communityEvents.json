@@ -1,0 +1,1119 @@
+[
+  0,
+  [
+    {
+      "kind": "solo-crossplay",
+      "name": "Ranked Solo - Crossplay",
+      "leaderboardLink": "Slot1_1v1Ranked",
+      "description": "ranked solo season",
+      "leaderboard": {
+        "decay": {
+          "reqRating": 1400,
+          "minDays": 15,
+          "amountPerDay": 5,
+          "maxAmount": 200,
+          "rankExpireHours": 0
+        },
+        "rankLevels": {
+          "customRanks": [
+            {
+              "name": "Conqueror III",
+              "locID": "11202624",
+              "icon": "\\Images\\multiplayer\\conquerer_3.png",
+              "icon2": "ffab3c",
+              "level": 18,
+              "tier": 6,
+              "minRating": 1600,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2111
+            },
+            {
+              "name": "Conqueror II",
+              "locID": "11202625",
+              "icon": "\\Images\\multiplayer\\conquerer_2.png",
+              "icon2": "ffab3c",
+              "level": 17,
+              "tier": 6,
+              "minRating": 1500,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2111
+            },
+            {
+              "name": "Conqueror I",
+              "locID": "11202626",
+              "icon": "\\Images\\multiplayer\\conquerer_1.png",
+              "icon2": "ffab3c",
+              "level": 16,
+              "tier": 6,
+              "minRating": 1400,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2111
+            },
+            {
+              "name": "Diamond III",
+              "locID": "11202621",
+              "icon": "\\Images\\multiplayer\\diamond_3.png",
+              "icon2": "699dfd",
+              "level": 15,
+              "tier": 5,
+              "minRating": 1350,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2112
+            },
+            {
+              "name": "Diamond II",
+              "locID": "11202622",
+              "icon": "\\Images\\multiplayer\\diamond_2.png",
+              "icon2": "699dfd",
+              "level": 14,
+              "tier": 5,
+              "minRating": 1300,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2112
+            },
+            {
+              "name": "Diamond I",
+              "locID": "11202623",
+              "icon": "\\Images\\multiplayer\\diamond_1.png",
+              "icon2": "699dfd",
+              "level": 13,
+              "tier": 5,
+              "minRating": 1200,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2112
+            },
+            {
+              "name": "Platinum III",
+              "locID": "11202618",
+              "icon": "\\Images\\multiplayer\\platinum_3.png",
+              "icon2": "65a1c4",
+              "level": 12,
+              "tier": 4,
+              "minRating": 1150,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2114
+            },
+            {
+              "name": "Platinum II",
+              "locID": "11202619",
+              "icon": "\\Images\\multiplayer\\platinum_2.png",
+              "icon2": "65a1c4",
+              "level": 11,
+              "tier": 4,
+              "minRating": 1100,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2114
+            },
+            {
+              "name": "Platinum I",
+              "locID": "11202620",
+              "icon": "\\Images\\multiplayer\\platinum_1.png",
+              "icon2": "65a1c4",
+              "level": 10,
+              "tier": 4,
+              "minRating": 1000,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2114
+            },
+            {
+              "name": "Gold III",
+              "locID": "11202615",
+              "icon": "\\Images\\multiplayer\\gold_3.png",
+              "icon2": "ffd469",
+              "level": 9,
+              "tier": 3,
+              "minRating": 900,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2113
+            },
+            {
+              "name": "Gold II",
+              "locID": "11202616",
+              "icon": "\\Images\\multiplayer\\gold_2.png",
+              "icon2": "ffd469",
+              "level": 8,
+              "tier": 3,
+              "minRating": 800,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2113
+            },
+            {
+              "name": "Gold I",
+              "locID": "11202617",
+              "icon": "\\Images\\multiplayer\\gold_1.png",
+              "icon2": "ffd469",
+              "level": 7,
+              "tier": 3,
+              "minRating": 700,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2113
+            },
+            {
+              "name": "Silver III",
+              "locID": "11202612",
+              "icon": "\\Images\\multiplayer\\silver_3.png",
+              "icon2": "a7aebb",
+              "level": 6,
+              "tier": 2,
+              "minRating": 650,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2115
+            },
+            {
+              "name": "Silver II",
+              "locID": "11202613",
+              "icon": "\\Images\\multiplayer\\silver_2.png",
+              "icon2": "a7aebb",
+              "level": 5,
+              "tier": 2,
+              "minRating": 600,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2115
+            },
+            {
+              "name": "Silver I",
+              "locID": "11202614",
+              "icon": "\\Images\\multiplayer\\silver_1.png",
+              "icon2": "a7aebb",
+              "level": 4,
+              "tier": 2,
+              "minRating": 500,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2115
+            },
+            {
+              "name": "Bronze III",
+              "locID": "11202608",
+              "icon": "\\Images\\multiplayer\\bronze_3.png",
+              "icon2": "9d6242",
+              "level": 3,
+              "tier": 1,
+              "minRating": 450,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2110
+            },
+            {
+              "name": "Bronze II",
+              "locID": "11202609",
+              "icon": "\\Images\\multiplayer\\bronze_2.png",
+              "icon2": "9d6242",
+              "level": 2,
+              "tier": 1,
+              "minRating": 400,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2110
+            },
+            {
+              "name": "Bronze I",
+              "locID": "11202610",
+              "icon": "\\Images\\multiplayer\\bronze_1.png",
+              "icon2": "9d6242",
+              "level": 1,
+              "tier": 1,
+              "minRating": 0,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2110
+            }
+          ]
+        },
+        "pointUpdate": {
+          "winPtsDefault": 0,
+          "losePtsDefault": 0,
+          "maxWinPts": 45,
+          "minWinPts": 2,
+          "maxLosePts": 45,
+          "minLosePts": 4,
+          "bonusPtsPerDay": 5,
+          "maxPtsAllowBonus": 2400,
+          "maxWinPtsWithBonus": 10,
+          "maxBonusPtsDefault": 5,
+          "placementMatch": 5,
+          "adjustmentOnWinPlacementAbs": "0.175",
+          "adjustmentOnLosePlacementAbs": "0.1",
+          "adjustmentOnWinPlacementRel": "0.02",
+          "adjustmentOnLosePlacementRel": "0.02",
+          "adjustmentOnWinDefault": "0.05",
+          "adjustmentOnLoseDefault": "0.05",
+          "winDifferenceToApply": 100,
+          "loseDifferenceToApply": 100
+        },
+        "leaderboards": [
+          {
+            "name": "Ranked Solo - Crossplay",
+            "copyFromBase": 1,
+            "scoringType": 2
+          }
+        ]
+      },
+      "baseLeaderboards": [
+        1
+      ]
+    },
+    {
+      "kind": "solo-controller",
+      "name": "Ranked Solo - Controller",
+      "leaderboardLink": "Slot1_1v1Ranked_console",
+      "description": "ranked solo season",
+      "leaderboard": {
+        "decay": {
+          "reqRating": 1400,
+          "minDays": 15,
+          "amountPerDay": 5,
+          "maxAmount": 200,
+          "rankExpireHours": 0
+        },
+        "rankLevels": {
+          "customRanks": [
+            {
+              "name": "Conqueror III",
+              "locID": "11202624",
+              "icon": "\\Images\\multiplayer\\conquerer_3.png",
+              "icon2": "ffab3c",
+              "level": 18,
+              "tier": 6,
+              "minRating": 1600,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2111
+            },
+            {
+              "name": "Conqueror II",
+              "locID": "11202625",
+              "icon": "\\Images\\multiplayer\\conquerer_2.png",
+              "icon2": "ffab3c",
+              "level": 17,
+              "tier": 6,
+              "minRating": 1500,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2111
+            },
+            {
+              "name": "Conqueror I",
+              "locID": "11202626",
+              "icon": "\\Images\\multiplayer\\conquerer_1.png",
+              "icon2": "ffab3c",
+              "level": 16,
+              "tier": 6,
+              "minRating": 1400,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2111
+            },
+            {
+              "name": "Diamond III",
+              "locID": "11202621",
+              "icon": "\\Images\\multiplayer\\diamond_3.png",
+              "icon2": "699dfd",
+              "level": 15,
+              "tier": 5,
+              "minRating": 1350,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2112
+            },
+            {
+              "name": "Diamond II",
+              "locID": "11202622",
+              "icon": "\\Images\\multiplayer\\diamond_2.png",
+              "icon2": "699dfd",
+              "level": 14,
+              "tier": 5,
+              "minRating": 1300,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2112
+            },
+            {
+              "name": "Diamond I",
+              "locID": "11202623",
+              "icon": "\\Images\\multiplayer\\diamond_1.png",
+              "icon2": "699dfd",
+              "level": 13,
+              "tier": 5,
+              "minRating": 1200,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2112
+            },
+            {
+              "name": "Platinum III",
+              "locID": "11202618",
+              "icon": "\\Images\\multiplayer\\platinum_3.png",
+              "icon2": "65a1c4",
+              "level": 12,
+              "tier": 4,
+              "minRating": 1150,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2114
+            },
+            {
+              "name": "Platinum II",
+              "locID": "11202619",
+              "icon": "\\Images\\multiplayer\\platinum_2.png",
+              "icon2": "65a1c4",
+              "level": 11,
+              "tier": 4,
+              "minRating": 1100,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2114
+            },
+            {
+              "name": "Platinum I",
+              "locID": "11202620",
+              "icon": "\\Images\\multiplayer\\platinum_1.png",
+              "icon2": "65a1c4",
+              "level": 10,
+              "tier": 4,
+              "minRating": 1000,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2114
+            },
+            {
+              "name": "Gold III",
+              "locID": "11202615",
+              "icon": "\\Images\\multiplayer\\gold_3.png",
+              "icon2": "ffd469",
+              "level": 9,
+              "tier": 3,
+              "minRating": 900,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2113
+            },
+            {
+              "name": "Gold II",
+              "locID": "11202616",
+              "icon": "\\Images\\multiplayer\\gold_2.png",
+              "icon2": "ffd469",
+              "level": 8,
+              "tier": 3,
+              "minRating": 800,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2113
+            },
+            {
+              "name": "Gold I",
+              "locID": "11202617",
+              "icon": "\\Images\\multiplayer\\gold_1.png",
+              "icon2": "ffd469",
+              "level": 7,
+              "tier": 3,
+              "minRating": 700,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2113
+            },
+            {
+              "name": "Silver III",
+              "locID": "11202612",
+              "icon": "\\Images\\multiplayer\\silver_3.png",
+              "icon2": "a7aebb",
+              "level": 6,
+              "tier": 2,
+              "minRating": 650,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2115
+            },
+            {
+              "name": "Silver II",
+              "locID": "11202613",
+              "icon": "\\Images\\multiplayer\\silver_2.png",
+              "icon2": "a7aebb",
+              "level": 5,
+              "tier": 2,
+              "minRating": 600,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2115
+            },
+            {
+              "name": "Silver I",
+              "locID": "11202614",
+              "icon": "\\Images\\multiplayer\\silver_1.png",
+              "icon2": "a7aebb",
+              "level": 4,
+              "tier": 2,
+              "minRating": 500,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2115
+            },
+            {
+              "name": "Bronze III",
+              "locID": "11202608",
+              "icon": "\\Images\\multiplayer\\bronze_3.png",
+              "icon2": "9d6242",
+              "level": 3,
+              "tier": 1,
+              "minRating": 450,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2110
+            },
+            {
+              "name": "Bronze II",
+              "locID": "11202609",
+              "icon": "\\Images\\multiplayer\\bronze_2.png",
+              "icon2": "9d6242",
+              "level": 2,
+              "tier": 1,
+              "minRating": 400,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2110
+            },
+            {
+              "name": "Bronze I",
+              "locID": "11202610",
+              "icon": "\\Images\\multiplayer\\bronze_1.png",
+              "icon2": "9d6242",
+              "level": 1,
+              "tier": 1,
+              "minRating": 0,
+              "maxRanking": 100,
+              "maxBonusPts": 100,
+              "rankingType": 1,
+              "itemBundleID": 2110
+            }
+          ]
+        },
+        "pointUpdate": {
+          "winPtsDefault": 0,
+          "losePtsDefault": 0,
+          "maxWinPts": 45,
+          "minWinPts": 2,
+          "maxLosePts": 45,
+          "minLosePts": 4,
+          "bonusPtsPerDay": 5,
+          "maxPtsAllowBonus": 2400,
+          "maxWinPtsWithBonus": 10,
+          "maxBonusPtsDefault": 5,
+          "placementMatch": 5,
+          "adjustmentOnWinPlacementAbs": "0.175",
+          "adjustmentOnLosePlacementAbs": "0.1",
+          "adjustmentOnWinPlacementRel": "0.02",
+          "adjustmentOnLosePlacementRel": "0.02",
+          "adjustmentOnWinDefault": "0.05",
+          "adjustmentOnLoseDefault": "0.05",
+          "winDifferenceToApply": 100,
+          "loseDifferenceToApply": 100
+        },
+        "leaderboards": [
+          {
+            "name": "Ranked Solo - Controller",
+            "copyFromBase": 206,
+            "scoringType": 2
+          }
+        ]
+      },
+      "baseLeaderboards": [
+        214
+      ]
+    },
+    {
+      "kind": "teams-crossplay",
+      "name": "Ranked Teams - Crossplay",
+      "leaderboardLink": "Ranked Team - Crossplay",
+      "description": "ranked team season",
+      "leaderboard": {
+        "decay": {
+          "reqRating": 1400,
+          "minDays": 15,
+          "amountPerDay": 5,
+          "maxAmount": 200,
+          "rankExpireHours": 0
+        },
+        "rankLevels": {
+          "customRanks": [
+            {
+              "name": "Conqueror III",
+              "locID": "11202624",
+              "icon": "\\Images\\multiplayer\\team_conquerer_3.png",
+              "icon2": "ffab3c",
+              "level": 18,
+              "tier": 6,
+              "minRating": 1600,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2117
+            },
+            {
+              "name": "Conqueror II",
+              "locID": "11202625",
+              "icon": "\\Images\\multiplayer\\team_conquerer_2.png",
+              "icon2": "ffab3c",
+              "level": 17,
+              "tier": 6,
+              "minRating": 1500,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2117
+            },
+            {
+              "name": "Conqueror I",
+              "locID": "11202626",
+              "icon": "\\Images\\multiplayer\\team_conquerer_1.png",
+              "icon2": "ffab3c",
+              "level": 16,
+              "tier": 6,
+              "minRating": 1400,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2117
+            },
+            {
+              "name": "Diamond III",
+              "locID": "11202621",
+              "icon": "\\Images\\multiplayer\\team_diamond_3.png",
+              "icon2": "699dfd",
+              "level": 15,
+              "tier": 5,
+              "minRating": 1350,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2118
+            },
+            {
+              "name": "Diamond II",
+              "locID": "11202622",
+              "icon": "\\Images\\multiplayer\\team_diamond_2.png",
+              "icon2": "699dfd",
+              "level": 14,
+              "tier": 5,
+              "minRating": 1300,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2118
+            },
+            {
+              "name": "Diamond I",
+              "locID": "11202623",
+              "icon": "\\Images\\multiplayer\\team_diamond_1.png",
+              "icon2": "699dfd",
+              "level": 13,
+              "tier": 5,
+              "minRating": 1200,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2118
+            },
+            {
+              "name": "Platinum III",
+              "locID": "11202618",
+              "icon": "\\Images\\multiplayer\\team_platinum_3.png",
+              "icon2": "65a1c4",
+              "level": 12,
+              "tier": 4,
+              "minRating": 1150,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2120
+            },
+            {
+              "name": "Platinum II",
+              "locID": "11202619",
+              "icon": "\\Images\\multiplayer\\team_platinum_2.png",
+              "icon2": "65a1c4",
+              "level": 11,
+              "tier": 4,
+              "minRating": 1100,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2120
+            },
+            {
+              "name": "Platinum I",
+              "locID": "11202620",
+              "icon": "\\Images\\multiplayer\\team_platinum_1.png",
+              "icon2": "65a1c4",
+              "level": 10,
+              "tier": 4,
+              "minRating": 1000,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2120
+            },
+            {
+              "name": "Gold III",
+              "locID": "11202615",
+              "icon": "\\Images\\multiplayer\\team_gold_3.png",
+              "icon2": "ffd469",
+              "level": 9,
+              "tier": 3,
+              "minRating": 900,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2119
+            },
+            {
+              "name": "Gold II",
+              "locID": "11202616",
+              "icon": "\\Images\\multiplayer\\team_gold_2.png",
+              "icon2": "ffd469",
+              "level": 8,
+              "tier": 3,
+              "minRating": 800,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2119
+            },
+            {
+              "name": "Gold I",
+              "locID": "11202617",
+              "icon": "\\Images\\multiplayer\\team_gold_1.png",
+              "icon2": "ffd469",
+              "level": 7,
+              "tier": 3,
+              "minRating": 700,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2119
+            },
+            {
+              "name": "Silver III",
+              "locID": "11202612",
+              "icon": "\\Images\\multiplayer\\team_silver_3.png",
+              "icon2": "a7aebb",
+              "level": 6,
+              "tier": 2,
+              "minRating": 650,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2121
+            },
+            {
+              "name": "Silver II",
+              "locID": "11202613",
+              "icon": "\\Images\\multiplayer\\team_silver_2.png",
+              "icon2": "a7aebb",
+              "level": 5,
+              "tier": 2,
+              "minRating": 600,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2121
+            },
+            {
+              "name": "Silver I",
+              "locID": "11202614",
+              "icon": "\\Images\\multiplayer\\team_silver_1.png",
+              "icon2": "a7aebb",
+              "level": 4,
+              "tier": 2,
+              "minRating": 500,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2121
+            },
+            {
+              "name": "Bronze III",
+              "locID": "11202608",
+              "icon": "\\Images\\multiplayer\\team_bronze_3.png",
+              "icon2": "9d6242",
+              "level": 3,
+              "tier": 1,
+              "minRating": 450,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2116
+            },
+            {
+              "name": "Bronze II",
+              "locID": "11202609",
+              "icon": "\\Images\\multiplayer\\team_bronze_2.png",
+              "icon2": "9d6242",
+              "level": 2,
+              "tier": 1,
+              "minRating": 400,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2116
+            },
+            {
+              "name": "Bronze I",
+              "locID": "11202610",
+              "icon": "\\Images\\multiplayer\\team_bronze_1.png",
+              "icon2": "9d6242",
+              "level": 1,
+              "tier": 1,
+              "minRating": 0,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2116
+            }
+          ]
+        },
+        "pointUpdate": {
+          "winPtsDefault": 0,
+          "losePtsDefault": 0,
+          "maxWinPts": 45,
+          "minWinPts": 2,
+          "maxLosePts": 45,
+          "minLosePts": 4,
+          "bonusPtsPerDay": 5,
+          "maxPtsAllowBonus": 2400,
+          "maxWinPtsWithBonus": 10,
+          "maxBonusPtsDefault": 5,
+          "placementMatch": 5,
+          "adjustmentOnWinPlacementAbs": "0.175",
+          "adjustmentOnLosePlacementAbs": "0.1",
+          "adjustmentOnWinPlacementRel": "0.02",
+          "adjustmentOnLosePlacementRel": "0.02",
+          "adjustmentOnWinDefault": "0.05",
+          "adjustmentOnLoseDefault": "0.05",
+          "winDifferenceToApply": 100,
+          "loseDifferenceToApply": 100
+        },
+        "leaderboards": [
+          {
+            "name": "Ranked Team - Crossplay",
+            "scoringType": 2,
+            "visibleToPublic": true,
+            "mapEntries": [
+              {
+                "matchType": 2,
+                "race": -1,
+                "statGroupType": 1
+              },
+              {
+                "matchType": 3,
+                "race": -1,
+                "statGroupType": 1
+              },
+              {
+                "matchType": 4,
+                "race": -1,
+                "statGroupType": 1
+              }
+            ]
+          }
+        ]
+      },
+      "baseLeaderboards": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "kind": "teams-controller",
+      "name": "Ranked Teams - Controller",
+      "leaderboardLink": "Ranked Teams - Controller",
+      "description": "ranked team season",
+      "leaderboard": {
+        "decay": {
+          "reqRating": 1400,
+          "minDays": 15,
+          "amountPerDay": 5,
+          "maxAmount": 200,
+          "rankExpireHours": 0
+        },
+        "rankLevels": {
+          "customRanks": [
+            {
+              "name": "Conqueror III",
+              "locID": "11202624",
+              "icon": "\\Images\\multiplayer\\team_conquerer_3.png",
+              "icon2": "ffab3c",
+              "level": 18,
+              "tier": 6,
+              "minRating": 1600,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2117
+            },
+            {
+              "name": "Conqueror II",
+              "locID": "11202625",
+              "icon": "\\Images\\multiplayer\\team_conquerer_2.png",
+              "icon2": "ffab3c",
+              "level": 17,
+              "tier": 6,
+              "minRating": 1500,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2117
+            },
+            {
+              "name": "Conqueror I",
+              "locID": "11202626",
+              "icon": "\\Images\\multiplayer\\team_conquerer_1.png",
+              "icon2": "ffab3c",
+              "level": 16,
+              "tier": 6,
+              "minRating": 1400,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2117
+            },
+            {
+              "name": "Diamond III",
+              "locID": "11202621",
+              "icon": "\\Images\\multiplayer\\team_diamond_3.png",
+              "icon2": "699dfd",
+              "level": 15,
+              "tier": 5,
+              "minRating": 1350,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2118
+            },
+            {
+              "name": "Diamond II",
+              "locID": "11202622",
+              "icon": "\\Images\\multiplayer\\team_diamond_2.png",
+              "icon2": "699dfd",
+              "level": 14,
+              "tier": 5,
+              "minRating": 1300,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2118
+            },
+            {
+              "name": "Diamond I",
+              "locID": "11202623",
+              "icon": "\\Images\\multiplayer\\team_diamond_1.png",
+              "icon2": "699dfd",
+              "level": 13,
+              "tier": 5,
+              "minRating": 1200,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2118
+            },
+            {
+              "name": "Platinum III",
+              "locID": "11202618",
+              "icon": "\\Images\\multiplayer\\team_platinum_3.png",
+              "icon2": "65a1c4",
+              "level": 12,
+              "tier": 4,
+              "minRating": 1150,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2120
+            },
+            {
+              "name": "Platinum II",
+              "locID": "11202619",
+              "icon": "\\Images\\multiplayer\\team_platinum_2.png",
+              "icon2": "65a1c4",
+              "level": 11,
+              "tier": 4,
+              "minRating": 1100,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2120
+            },
+            {
+              "name": "Platinum I",
+              "locID": "11202620",
+              "icon": "\\Images\\multiplayer\\team_platinum_1.png",
+              "icon2": "65a1c4",
+              "level": 10,
+              "tier": 4,
+              "minRating": 1000,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2120
+            },
+            {
+              "name": "Gold III",
+              "locID": "11202615",
+              "icon": "\\Images\\multiplayer\\team_gold_3.png",
+              "icon2": "ffd469",
+              "level": 9,
+              "tier": 3,
+              "minRating": 900,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2119
+            },
+            {
+              "name": "Gold II",
+              "locID": "11202616",
+              "icon": "\\Images\\multiplayer\\team_gold_2.png",
+              "icon2": "ffd469",
+              "level": 8,
+              "tier": 3,
+              "minRating": 800,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2119
+            },
+            {
+              "name": "Gold I",
+              "locID": "11202617",
+              "icon": "\\Images\\multiplayer\\team_gold_1.png",
+              "icon2": "ffd469",
+              "level": 7,
+              "tier": 3,
+              "minRating": 700,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2119
+            },
+            {
+              "name": "Silver III",
+              "locID": "11202612",
+              "icon": "\\Images\\multiplayer\\team_silver_3.png",
+              "icon2": "a7aebb",
+              "level": 6,
+              "tier": 2,
+              "minRating": 650,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2121
+            },
+            {
+              "name": "Silver II",
+              "locID": "11202613",
+              "icon": "\\Images\\multiplayer\\team_silver_2.png",
+              "icon2": "a7aebb",
+              "level": 5,
+              "tier": 2,
+              "minRating": 600,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2121
+            },
+            {
+              "name": "Silver I",
+              "locID": "11202614",
+              "icon": "\\Images\\multiplayer\\team_silver_1.png",
+              "icon2": "a7aebb",
+              "level": 4,
+              "tier": 2,
+              "minRating": 500,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2121
+            },
+            {
+              "name": "Bronze III",
+              "locID": "11202608",
+              "icon": "\\Images\\multiplayer\\team_bronze_3.png",
+              "icon2": "9d6242",
+              "level": 3,
+              "tier": 1,
+              "minRating": 450,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2116
+            },
+            {
+              "name": "Bronze II",
+              "locID": "11202609",
+              "icon": "\\Images\\multiplayer\\team_bronze_2.png",
+              "icon2": "9d6242",
+              "level": 2,
+              "tier": 1,
+              "minRating": 400,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2116
+            },
+            {
+              "name": "Bronze I",
+              "locID": "11202610",
+              "icon": "\\Images\\multiplayer\\team_bronze_1.png",
+              "icon2": "9d6242",
+              "level": 1,
+              "tier": 1,
+              "minRating": 0,
+              "maxRanking": 100,
+              "rankingType": 1,
+              "itemBundleID": 2116
+            }
+          ]
+        },
+        "pointUpdate": {
+          "winPtsDefault": 0,
+          "losePtsDefault": 0,
+          "maxWinPts": 45,
+          "minWinPts": 2,
+          "maxLosePts": 45,
+          "minLosePts": 4,
+          "bonusPtsPerDay": 5,
+          "maxPtsAllowBonus": 2400,
+          "maxWinPtsWithBonus": 10,
+          "maxBonusPtsDefault": 5,
+          "placementMatch": 5,
+          "adjustmentOnWinPlacementAbs": "0.175",
+          "adjustmentOnLosePlacementAbs": "0.1",
+          "adjustmentOnWinPlacementRel": "0.02",
+          "adjustmentOnLosePlacementRel": "0.02",
+          "adjustmentOnWinDefault": "0.05",
+          "adjustmentOnLoseDefault": "0.05",
+          "winDifferenceToApply": 100,
+          "loseDifferenceToApply": 100
+        },
+        "leaderboards": [
+          {
+            "name": "Ranked Teams - Controller",
+            "scoringType": 2,
+            "visibleToPublic": true,
+            "mapEntries": [
+              {
+                "matchType": 220,
+                "race": -1,
+                "statGroupType": 1
+              },
+              {
+                "matchType": 226,
+                "race": -1,
+                "statGroupType": 1
+              },
+              {
+                "matchType": 232,
+                "race": -1,
+                "statGroupType": 1
+              }
+            ]
+          }
+        ]
+      },
+      "baseLeaderboards": [
+        220,
+        226,
+        232
+      ]
+    }
+  ]
+]

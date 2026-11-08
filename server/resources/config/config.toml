@@ -81,7 +81,7 @@ MulticastGroup = '239.31.97.8'
 
 # CONFIGURING CUSTOM FILES
 # Serves the /api/MatchContent/ endpoints used by the game to upload and
-# download multiplayer savegames and replays. Without it, restoring a saved
+# download multiplayer savegames. Without it, restoring a saved
 # multiplayer game fails with "Failed to upload/download custom files".
 [CustomFiles]
 
@@ -131,25 +131,21 @@ Expiry = '12h'
 # its own default (25 ms for AoE: DE, 50 for AoE III: DE and AoM: RT, 125 for
 # AoE II: DE and AoE IV: AE).
 
-# CONFIGURING BATTLE SERVER REPLAYS
-# When enabled, the embedded battle server writes the recorded game data to
-# self-describing .replay files. This is separate from the cloud replay upload.
-[BattleServerReplays]
-# Whether to enable replay recording. When disabled, no files are written.
-Enabled = false
-
-# Folder where the replay files are stored. If 'auto', uses the userData folder:
-# <resources>/userData/<game>/replays (e.g., resources/userData/age2/replays).
-Folder = 'auto'
+# CONFIGURING REPLAYS
+# Replays uploaded by the game are stored in
+# <resources>/responses/cloud/<game>/replays. The folder is not configurable.
+[Replays]
+# Whether to accept replay uploads.
+Enabled = true
 
 # Maximum size of a single replay file. Accepts B/KB/MB/GB suffixes.
 MaxFileSize = '32MB'
 
-# Maximum accumulated size per game. When exceeded, the oldest files are
-# evicted first.
-MaxTotalSize = '256MB'
+# Maximum accumulated size per game. When exceeded, the oldest replays are
+# evicted first. Files under builtin/ are never evicted.
+MaxTotalSize = '1GB'
 
-# How long a replay file is kept since its last write. Accepts Go durations
+# How long a replay is kept since its last write. Accepts Go durations
 # (e.g. 12h, 30m, 1h30m). Files are also purged at startup if older than this.
-# Set to 0 or a negative value (e.g. -1) to keep replay files forever.
-Expiry = '12h'
+# Set to 0 or a negative value (e.g. -1) to keep replays forever.
+Expiry = '-1s'

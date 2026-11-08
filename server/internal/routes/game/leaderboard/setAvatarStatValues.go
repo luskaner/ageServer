@@ -28,6 +28,7 @@ func SetAvatarStatValues(w http.ResponseWriter, r *http.Request) {
 	var req setAvatarStatValuesRequest
 	if err := i.Bind(r, &req); err != nil || len(req.Values.Data) < 1 || len(req.AvatarStatIds.Data) != len(req.Values.Data) || len(req.UpdateTypes.Data) != len(req.Values.Data) {
 		i.JSON(&w, i.A{2})
+		return
 	}
 	g := models.G(r)
 	users := g.Users()
@@ -39,10 +40,21 @@ func SetAvatarStatValues(w http.ResponseWriter, r *http.Request) {
 	}
 	var encodedAvatarStats i.A
 	var currentGameFixedAvatarNames mapset.Set[string]
-	avatarStatDefinitions := g.LeaderboardDefinitions().AvatarStatDefinitions()
+	var avatarStatDefinitions models.AvatarStatDefinitions
+	if definitions := g.LeaderboardDefinitions(); definitions != nil {
+		avatarStatDefinitions = definitions.AvatarStatDefinitions()
+	}
+	// age1 has no leaderboards.json, so the definitions can be nil. The
+	// handler must not panic: it simply stores unknown avatar stats without
+	// validating them against the catalog (D19).
 	data := u.GetAvatarStats()
+	if data == nil {
+		logger.Printf("leaderboard.setAvatarStatValues: user=%d has no avatar stats store (no leaderboards.json)\n", u.GetId())
+		i.JSON(&w, i.A{0})
+		return
+	}
 	fixedAvatarIds := mapset.NewThreadUnsafeSet[int32]()
-	if currentGameFixedAvatarNames, ok = fixedAvatarNames[g.Title()]; ok {
+	if currentGameFixedAvatarNames, ok = fixedAvatarNames[g.Title()]; ok && avatarStatDefinitions != nil {
 		for name := range currentGameFixedAvatarNames.Iter() {
 			if id, ok := avatarStatDefinitions.GetIdByName(name); ok {
 				fixedAvatarIds.Add(id)

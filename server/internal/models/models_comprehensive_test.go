@@ -80,19 +80,38 @@ func TestChatChannel(t *testing.T) {
 		t.Fatal("channel should not have user yet")
 	}
 
-	exists, _ := channel.AddUser(u, 200)
+	exists, roster, members := channel.AddUser(u, 200)
 	if exists {
 		t.Fatal("AddUser should not report existing on first add")
+	}
+	if len(roster) != 0 || len(members) != 0 {
+		t.Fatalf("first member should get an empty roster and no one to notify, got %v/%v", roster, members)
 	}
 	if !channel.HasUser(u) {
 		t.Fatal("channel should have user after add")
 	}
 
-	if !channel.RemoveUser(u) {
+	u2 := &testUser{id: 6, profile: i.A{0, i.A{6}}}
+	exists, roster, members = channel.AddUser(u2, 200)
+	if exists {
+		t.Fatal("AddUser should not report existing for a new user")
+	}
+	if len(roster) != 1 || len(members) != 1 || members[0].GetId() != u.GetId() {
+		t.Fatalf("second member should get the first one in the roster and notify it, got %v/%v", roster, members)
+	}
+
+	existed, members := channel.RemoveUser(u2)
+	if !existed {
 		t.Fatal("RemoveUser should return true")
 	}
-	if channel.HasUser(u) {
+	if len(members) != 1 || members[0].GetId() != u.GetId() {
+		t.Fatalf("only the remaining member should be notified, got %v", members)
+	}
+	if channel.HasUser(u2) {
 		t.Fatal("channel should not have user after remove")
+	}
+	if existed, _ := channel.RemoveUser(u2); existed {
+		t.Fatal("RemoveUser should return false for a non member")
 	}
 }
 
@@ -350,6 +369,7 @@ type fakeResources struct {
 	signedAssets map[string][]byte
 	chatChannels map[string]*MainChatChannel
 	loginData    []i.A
+	cloudFiles   *CloudFiles
 }
 
 func (f *fakeResources) Initialize(string, *ResourcesOpts) {
@@ -363,6 +383,7 @@ func (f *fakeResources) Initialize(string, *ResourcesOpts) {
 	}
 	f.chatChannels = map[string]*MainChatChannel{"1": NewChatChannel(1, "lobby")}
 	f.loginData = []i.A{}
+	f.cloudFiles = &CloudFiles{Credentials: NewCredentials(), Value: map[string]CloudfilesIndex{}}
 }
 
 func (f *fakeResources) ReturnSignedAsset(string, *http.ResponseWriter, *http.Request, bool) {}
@@ -371,8 +392,11 @@ func (f *fakeResources) ChatChannels() map[string]*MainChatChannel              
 func (f *fakeResources) News() []i.A                                                         { return nil }
 func (f *fakeResources) ArrayFiles() map[string]i.A                                          { return f.arrayFiles }
 func (f *fakeResources) SignedAssets() map[string][]byte                                     { return f.signedAssets }
-func (f *fakeResources) CloudFiles() CloudFiles {
-	return CloudFiles{Credentials: NewCredentials(), Value: map[string]CloudfilesIndex{}}
+func (f *fakeResources) CloudFiles() *CloudFiles {
+	if f.cloudFiles == nil {
+		f.cloudFiles = &CloudFiles{Credentials: NewCredentials(), Value: map[string]CloudfilesIndex{}}
+	}
+	return f.cloudFiles
 }
 
 func TestCreateMainGame(t *testing.T) {

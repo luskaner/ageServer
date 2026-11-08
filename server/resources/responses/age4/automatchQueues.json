@@ -1,0 +1,11 @@
+[0,[
+  {"matchTypes":[1],"ladder":1,"rated":true,"matchCompletionValue":1,"updateStatusAck":30,"note":"1v1 Ranked"},
+  {"matchTypes":[2],"ladder":2,"rated":true,"matchCompletionValue":1,"updateStatusAck":30,"note":"2v2 Ranked"},
+  {"matchTypes":[3],"ladder":3,"rated":true,"matchCompletionValue":1,"updateStatusAck":30,"note":"3v3 Ranked"},
+  {"matchTypes":[4],"ladder":4,"rated":true,"matchCompletionValue":1,"updateStatusAck":30,"note":"4v4 Ranked"},
+  {"matchTypes":[20],"ladder":0,"rated":false,"matchCompletionValue":1,"updateStatusAck":30,"note":"1v1 Quick Match unranked"},
+  {"matchTypes":[21],"ladder":0,"rated":false,"matchCompletionValue":1,"updateStatusAck":30,"note":"2v2 Quick Match unranked"},
+  {"matchTypes":[22],"ladder":0,"rated":false,"matchCompletionValue":1,"updateStatusAck":30,"note":"3v3 Quick Match unranked"},
+  {"matchTypes":[23],"ladder":0,"rated":false,"matchCompletionValue":1,"updateStatusAck":30,"note":"4v4 Quick Match unranked"},
+  {"matchTypes":[860,861,863,864,865,866,867,868],"ladder":0,"rated":false,"matchCompletionValue":1,"updateStatusAck":30,"matchTypeIsAdvertisement":true,"maxPlayersOverride":16,"note":"co-op Rogue (unranked)"}
+]]

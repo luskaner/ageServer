@@ -1,0 +1,22 @@
+[0,[
+  {"matchTypes":[1],"ladder":1,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Supremacy 1v1"},
+  {"matchTypes":[2],"ladder":2,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Supremacy 2v2"},
+  {"matchTypes":[3],"ladder":3,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Supremacy 3v3"},
+  {"matchTypes":[4],"ladder":4,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Supremacy 4v4"},
+  {"matchTypes":[5],"ladder":5,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Deathmatch 1v1"},
+  {"matchTypes":[6],"ladder":6,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Deathmatch 2v2"},
+  {"matchTypes":[7],"ladder":7,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Deathmatch 3v3"},
+  {"matchTypes":[8],"ladder":8,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Ranked Deathmatch 4v4"},
+  {"matchTypes":[28],"ladder":28,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Supremacy 1v1"},
+  {"matchTypes":[29],"ladder":29,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Supremacy 2v2"},
+  {"matchTypes":[30],"ladder":30,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Supremacy 3v3"},
+  {"matchTypes":[31],"ladder":31,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Supremacy 4v4"},
+  {"matchTypes":[32],"ladder":32,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Deathmatch 1v1"},
+  {"matchTypes":[33],"ladder":33,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Deathmatch 2v2"},
+  {"matchTypes":[34],"ladder":34,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Deathmatch 3v3"},
+  {"matchTypes":[35],"ladder":35,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Deathmatch 4v4"},
+  {"matchTypes":[36],"ladder":36,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Lightning 1v1"},
+  {"matchTypes":[37],"ladder":37,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Lightning 2v2"},
+  {"matchTypes":[38],"ladder":38,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Lightning 3v3"},
+  {"matchTypes":[39],"ladder":39,"rated":true,"matchTypeIsAdvertisement":true,"updateStatusAck":0,"note":"Quickmatch Lightning 4v4"}
+]]

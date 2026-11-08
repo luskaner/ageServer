@@ -256,11 +256,10 @@ func configurationDocument(content []byte, configuration Configuration) ([]byte,
 		{"CustomFiles", "MaxFileSize", tomlString(configuration.CustomFiles.MaxFileSize)},
 		{"CustomFiles", "MaxTotalSize", tomlString(configuration.CustomFiles.MaxTotalSize)},
 		{"CustomFiles", "Expiry", tomlString(configuration.CustomFiles.Expiry)},
-		{"BattleServerReplays", "Enabled", strconv.FormatBool(configuration.BattleServerReplays.Enabled)},
-		{"BattleServerReplays", "Folder", tomlString(configuration.BattleServerReplays.Folder)},
-		{"BattleServerReplays", "MaxFileSize", tomlString(configuration.BattleServerReplays.MaxFileSize)},
-		{"BattleServerReplays", "MaxTotalSize", tomlString(configuration.BattleServerReplays.MaxTotalSize)},
-		{"BattleServerReplays", "Expiry", tomlString(configuration.BattleServerReplays.Expiry)},
+		{"Replays", "Enabled", strconv.FormatBool(configuration.Replays.Enabled)},
+		{"Replays", "MaxFileSize", tomlString(configuration.Replays.MaxFileSize)},
+		{"Replays", "MaxTotalSize", tomlString(configuration.Replays.MaxTotalSize)},
+		{"Replays", "Expiry", tomlString(configuration.Replays.Expiry)},
 	}
 	// The server reads Authentication at the root level. The shipped template
 	// used to keep it under [Internet], so an existing copy there is kept in
@@ -397,6 +396,12 @@ func isConfigurationField(section string, key string) bool {
 			return true
 		}
 	}
+	if section == "Replays" {
+		switch key {
+		case "Enabled", "MaxFileSize", "MaxTotalSize", "Expiry":
+			return true
+		}
+	}
 	if strings.HasPrefix(section, "Games.") {
 		if key == "Hosts" {
 			return true
@@ -451,12 +456,11 @@ func serverDefaults() Configuration {
 			MaxTotalSize: "256MB",
 			Expiry:       "12h",
 		},
-		BattleServerReplays: BattleServerReplaysConfiguration{
-			Enabled:      false,
-			Folder:       "auto",
+		Replays: ReplaysConfiguration{
+			Enabled:      true,
 			MaxFileSize:  "32MB",
-			MaxTotalSize: "256MB",
-			Expiry:       "12h",
+			MaxTotalSize: "1GB",
+			Expiry:       "-1s",
 		},
 	}
 }
@@ -884,7 +888,7 @@ func validateConfiguration(config *Configuration) []ValidationError {
 		}
 	}
 	validationErrors = append(validationErrors, validateCustomFiles(config)...)
-	validationErrors = append(validationErrors, validateBattleServerReplays(config)...)
+	validationErrors = append(validationErrors, validateReplays(config)...)
 	validationErrors = append(validationErrors, validateEmbeddedBattleServers(config)...)
 
 	for index := range validationErrors {
@@ -978,60 +982,53 @@ func validateCustomFiles(config *Configuration) []ValidationError {
 	return validationErrors
 }
 
-// validateBattleServerReplays checks the storage limits only while the feature
-// is enabled: when disabled the server never uses those values.
-func validateBattleServerReplays(config *Configuration) []ValidationError {
-	if !config.BattleServerReplays.Enabled {
+// validateReplays checks the storage limits only while the feature is enabled:
+// when disabled the server never uses those values.
+func validateReplays(config *Configuration) []ValidationError {
+	if !config.Replays.Enabled {
 		return nil
 	}
 	var validationErrors []ValidationError
-	if strings.TrimSpace(config.BattleServerReplays.Folder) == "" {
-		validationErrors = append(validationErrors, ValidationError{
-			Field:   "BattleServerReplays.Folder",
-			Message: "Must not be empty",
-		})
-	}
-
-	maxFileSize, fileSizeErr := parseByteSize(config.BattleServerReplays.MaxFileSize)
-	maxTotalSize, totalSizeErr := parseByteSize(config.BattleServerReplays.MaxTotalSize)
+	maxFileSize, fileSizeErr := parseByteSize(config.Replays.MaxFileSize)
+	maxTotalSize, totalSizeErr := parseByteSize(config.Replays.MaxTotalSize)
 	fileSizeValid := true
 	totalSizeValid := true
 	if fileSizeErr != nil {
 		fileSizeValid = false
 		validationErrors = append(validationErrors, ValidationError{
-			Field:   "BattleServerReplays.MaxFileSize",
+			Field:   "Replays.MaxFileSize",
 			Message: "Must be a size such as 32MB",
 		})
 	} else if maxFileSize <= 0 {
 		fileSizeValid = false
 		validationErrors = append(validationErrors, ValidationError{
-			Field:   "BattleServerReplays.MaxFileSize",
+			Field:   "Replays.MaxFileSize",
 			Message: "Must be greater than zero",
 		})
 	}
 	if totalSizeErr != nil {
 		totalSizeValid = false
 		validationErrors = append(validationErrors, ValidationError{
-			Field:   "BattleServerReplays.MaxTotalSize",
+			Field:   "Replays.MaxTotalSize",
 			Message: "Must be a size such as 256MB",
 		})
 	} else if maxTotalSize <= 0 {
 		totalSizeValid = false
 		validationErrors = append(validationErrors, ValidationError{
-			Field:   "BattleServerReplays.MaxTotalSize",
+			Field:   "Replays.MaxTotalSize",
 			Message: "Must be greater than zero",
 		})
 	}
 	if fileSizeValid && totalSizeValid && maxFileSize > maxTotalSize {
 		validationErrors = append(validationErrors, ValidationError{
-			Field:   "BattleServerReplays.MaxFileSize",
+			Field:   "Replays.MaxFileSize",
 			Message: "Must not exceed the total size limit",
 		})
 	}
 
-	if _, err := time.ParseDuration(strings.TrimSpace(config.BattleServerReplays.Expiry)); err != nil {
+	if _, err := time.ParseDuration(strings.TrimSpace(config.Replays.Expiry)); err != nil {
 		validationErrors = append(validationErrors, ValidationError{
-			Field:   "BattleServerReplays.Expiry",
+			Field:   "Replays.Expiry",
 			Message: "Must be a duration such as 12h or 30m, or 0/negative to keep forever",
 		})
 	}
@@ -1427,10 +1424,10 @@ func (s *ConfigService) EmbeddedBattleServerDefaults() map[string]EmbeddedBattle
 			Name:           "Server",
 			IPv4:           "auto",
 			// 0 in the document: the battle server picks a free port.
-			BsPort:         0,
-			WebSocketPort:  0,
-			OutOfBandPort:  0,
-			LogLevel:       embeddedLogLevelDefault,
+			BsPort:        0,
+			WebSocketPort: 0,
+			OutOfBandPort: 0,
+			LogLevel:      embeddedLogLevelDefault,
 		}
 	}
 	return defaults

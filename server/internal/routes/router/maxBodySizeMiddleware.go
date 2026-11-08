@@ -9,7 +9,13 @@ import (
 // raisedBodySizePrefixes are paths that get their own (larger) body limit from
 // the handler. The global 1 MiB cap is skipped for them so the inner
 // MaxBytesReader can raise - not lower - the effective limit.
-var raisedBodySizePrefixes = []string{"/api/MatchContent/"}
+//
+// /cloudfiles/ carries replay uploads, which the store bounds with
+// [Replays] MaxFileSize. Leaving the global cap in front of it truncated every
+// replay over 1 MiB: the logging middleware buffers the body with io.ReadAll
+// and discards the MaxBytesError, so the handler saw a clean EOF and published
+// a half-written file.
+var raisedBodySizePrefixes = []string{"/api/MatchContent/", "/cloudfiles/"}
 
 // raisedBodySizePath matches against the cleaned path, because this runs before
 // ServeMux normalises it: a raw "/api/MatchContent/../game/..." would otherwise

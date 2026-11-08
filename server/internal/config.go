@@ -69,12 +69,12 @@ type CustomFiles struct {
 	Expiry       string
 }
 
-// BattleServerReplays configures the optional recording of the data the
-// embedded battle server receives for a match. It mirrors CustomFiles: sizes and
-// the TTL are kept as strings and validated once at startup.
-type BattleServerReplays struct {
+// Replays configures the replays the game uploads after a match. They are
+// always stored under <resources>/responses/cloud/<game>/replays, so there is
+// no folder setting. It mirrors CustomFiles: sizes and the TTL are kept as
+// strings and validated once at startup.
+type Replays struct {
 	Enabled      bool
-	Folder       string
 	MaxFileSize  string
 	MaxTotalSize string
 	Expiry       string
@@ -100,8 +100,18 @@ type Configuration struct {
 	Announcement           Announcement
 	Games                  Games
 	CustomFiles            CustomFiles
-	BattleServerReplays    BattleServerReplays
+	Replays                Replays
 	Sign                   SignConfig
+	Automatch              Automatch
+}
+
+// Automatch configures the Quick Match engine.
+type Automatch struct {
+	// AssumeQueue is the opt-in fallback used when a client asks for a pool
+	// that the bundled automatchMaps.json does not know. Empty (the default)
+	// rejects unknown matchTypes. "rm-solo" pairs them as 1v1 Random Map and
+	// forces the resulting match to be unrated. See docs/matchmaking.md §4.1.
+	AssumeQueue string
 }
 
 func (cfg *Configuration) GetGameHosts(gameId string) []string {

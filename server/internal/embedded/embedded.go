@@ -1,5 +1,4 @@
-// Package embedded runs ageBattleServer inside the age server process and
-// optionally stores the replay data it records.
+// Package embedded runs ageBattleServer inside the age server process.
 package embedded
 
 import (
@@ -32,7 +31,6 @@ type Options struct {
 
 type Instance struct {
 	server    *battleserver.Server
-	replay    *ReplayStore
 	Opts      Options
 	bsPort    int
 	wsPort    int
@@ -83,7 +81,7 @@ func (opts *Options) Validate() error {
 // Start launches the battle server and registers it in the battle server list.
 // ctx is a startup context: it is checked before anything is bound, and it is
 // not the server's lifetime, which lasts until Stop.
-func (m *Instance) Start(ctx context.Context, certificatePairFolder string, replayOpts ReplayOptions) error {
+func (m *Instance) Start(ctx context.Context, certificatePairFolder string) error {
 	m.startedMu.Lock()
 	defer m.startedMu.Unlock()
 	if m.started {
@@ -126,22 +124,6 @@ func (m *Instance) Start(ctx context.Context, certificatePairFolder string, repl
 		return fmt.Errorf("build battle server config: %w", err)
 	}
 
-	var replayStore *ReplayStore
-	if replayOpts.Enabled {
-		replayStore, err = NewReplayStore(m.Opts.GameID, replayOpts, ReplayMeta{
-			GameID:   m.Opts.GameID,
-			Region:   m.Opts.Region,
-			Name:     m.Opts.Name,
-			ServerID: m.Opts.Region,
-		})
-		if err != nil {
-			return fmt.Errorf("create replay store: %w", err)
-		}
-		cfg.ReplayDataHandler = func(rd battleserver.ReplayData) {
-			replayStore.Append(rd.SessionID, rd.Data)
-		}
-	}
-
 	// The battle server treats its context as its lifetime: when it is done,
 	// the listeners close and the dispatch loop returns. The ctx received here
 	// is the caller's startup context, and the server module cancels it as soon
@@ -155,18 +137,12 @@ func (m *Instance) Start(ctx context.Context, certificatePairFolder string, repl
 	if err != nil {
 		cancel()
 		m.cancel = nil
-		if replayStore != nil {
-			replayStore.Close()
-		}
 		return fmt.Errorf("create battle server: %w", err)
 	}
 
 	if err := srv.Start(lifecycleCtx); err != nil {
 		cancel()
 		m.cancel = nil
-		if replayStore != nil {
-			replayStore.Close()
-		}
 		return fmt.Errorf("start battle server: %w", err)
 	}
 
@@ -178,7 +154,6 @@ func (m *Instance) Start(ctx context.Context, certificatePairFolder string, repl
 	oobPort := int(cfg.OutOfBandPort)
 
 	m.server = srv
-	m.replay = replayStore
 	m.bsPort = bsPort
 	m.wsPort = wsPort
 	m.oobPort = oobPort
@@ -227,9 +202,6 @@ func (m *Instance) Stop() {
 		if m.cancel != nil {
 			m.cancel()
 			m.cancel = nil
-		}
-		if m.replay != nil {
-			m.replay.Close()
 		}
 		m.started = false
 		logger.Info("Embedded battle server stopped: region=%s", m.Opts.Region)

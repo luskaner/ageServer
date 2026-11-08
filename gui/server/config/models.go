@@ -19,15 +19,15 @@ type SignConfig struct {
 }
 
 type Configuration struct {
-	Log                    bool                             `toml:"Log" json:"Log"`
-	GeneratePlatformUserID bool                             `toml:"GeneratePlatformUserId" json:"GeneratePlatformUserId"`
-	Sign                   SignConfig                       `toml:"Sign" json:"Sign"`
-	Authentication         string                           `toml:"Authentication" json:"Authentication"`
-	Internet               InternetConfiguration            `toml:"Internet" json:"Internet"`
-	Games                  GamesConfiguration               `toml:"Games" json:"Games"`
-	Announcement           AnnouncementConfig               `toml:"Announcement" json:"Announcement"`
-	CustomFiles            CustomFilesConfiguration         `toml:"CustomFiles" json:"CustomFiles"`
-	BattleServerReplays    BattleServerReplaysConfiguration `toml:"BattleServerReplays" json:"BattleServerReplays"`
+	Log                    bool                     `toml:"Log" json:"Log"`
+	GeneratePlatformUserID bool                     `toml:"GeneratePlatformUserId" json:"GeneratePlatformUserId"`
+	Sign                   SignConfig               `toml:"Sign" json:"Sign"`
+	Authentication         string                   `toml:"Authentication" json:"Authentication"`
+	Internet               InternetConfiguration    `toml:"Internet" json:"Internet"`
+	Games                  GamesConfiguration       `toml:"Games" json:"Games"`
+	Announcement           AnnouncementConfig       `toml:"Announcement" json:"Announcement"`
+	CustomFiles            CustomFilesConfiguration `toml:"CustomFiles" json:"CustomFiles"`
+	Replays                ReplaysConfiguration     `toml:"Replays" json:"Replays"`
 }
 
 type GamesConfiguration struct {
@@ -46,14 +46,14 @@ type GameConfig struct {
 }
 
 type EmbeddedBattleServerConfig struct {
-	StartIfMissing   string `toml:"StartIfMissing" json:"StartIfMissing"`
-	Region           string `toml:"Region" json:"Region"`
-	Name             string `toml:"Name" json:"Name"`
-	IPv4             string `toml:"IPv4" json:"IPv4"`
-	BsPort           int    `toml:"BsPort" json:"BsPort"`
-	WebSocketPort    int    `toml:"WebSocketPort" json:"WebSocketPort"`
-	OutOfBandPort    int    `toml:"OutOfBandPort" json:"OutOfBandPort"`
-	LogLevel         string `toml:"LogLevel" json:"LogLevel"`
+	StartIfMissing string `toml:"StartIfMissing" json:"StartIfMissing"`
+	Region         string `toml:"Region" json:"Region"`
+	Name           string `toml:"Name" json:"Name"`
+	IPv4           string `toml:"IPv4" json:"IPv4"`
+	BsPort         int    `toml:"BsPort" json:"BsPort"`
+	WebSocketPort  int    `toml:"WebSocketPort" json:"WebSocketPort"`
+	OutOfBandPort  int    `toml:"OutOfBandPort" json:"OutOfBandPort"`
+	LogLevel       string `toml:"LogLevel" json:"LogLevel"`
 }
 
 type BattleServerConfig struct {
@@ -83,12 +83,12 @@ type CustomFilesConfiguration struct {
 	Expiry       string `toml:"Expiry" json:"Expiry"`
 }
 
-// BattleServerReplaysConfiguration configures the optional recording of the
-// data the embedded battle server receives for a match. It mirrors CustomFiles:
-// sizes and the TTL are kept as strings and validated once at startup.
-type BattleServerReplaysConfiguration struct {
+// ReplaysConfiguration configures the replays the game uploads after a match.
+// They are always stored under <resources>/responses/cloud/<game>/replays, so
+// there is no folder setting. Sizes and the TTL are kept as strings and
+// validated once at startup.
+type ReplaysConfiguration struct {
 	Enabled      bool   `toml:"Enabled" json:"Enabled"`
-	Folder       string `toml:"Folder" json:"Folder"`
 	MaxFileSize  string `toml:"MaxFileSize" json:"MaxFileSize"`
 	MaxTotalSize string `toml:"MaxTotalSize" json:"MaxTotalSize"`
 	Expiry       string `toml:"Expiry" json:"Expiry"`
