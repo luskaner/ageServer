@@ -137,7 +137,9 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 	if gameId == game.AoE4 {
 		LeaderboardGroup.HandleFunc("GET", "/getRecentMatchSinglePlayerHistory", leaderboard.GetRecentMatchSinglePlayerHistory)
 	}
-	// Implement getPersonalStat ?
+	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
+		LeaderboardGroup.HandleFunc("GET", "/getPersonalStat", leaderboard.GetPersonalStat)
+	}
 	leaderboardGroup := gameGroup.Subgroup("/leaderboard")
 	leaderboardGroup.HandleFunc("POST", "/applyOfflineUpdates", leaderboard.ApplyOfflineUpdates)
 	leaderboardGroup.HandleFunc("POST", "/setAvatarStatValues", leaderboard.SetAvatarStatValues)
@@ -151,8 +153,9 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 	automatch2Group.HandleFunc("GET", "/getAutomatchMap", Automatch2.GetAutomatchMap)
 	if gameId == game.AoE4 {
 		automatch2Group.HandleFunc("POST", "/polling", Automatch2.Polling)
-		automatch2Group.HandleFunc("POST", "/stoppolling", Automatch2.Stoppolling)
-	} else if gameId == game.AoE2 {
+		automatch2Group.HandleFunc("POST", "/stoppolling", Automatch2.StopPolling)
+		automatch2Group.HandleFunc("POST", "/updateStatus", Automatch2.UpdateStatus)
+	} else if gameId == game.AoE2 || gameId == game.AoE1 || gameId == game.AoE3 || gameId == game.AoM {
 		automatch2Group.HandleFunc("POST", "/polling", Automatch2.PollingAoE2)
 		automatch2Group.HandleFunc("GET", "/polling", Automatch2.PollingAoE2)
 		automatch2Group.HandleFunc("POST", "/stoppolling", Automatch2.StopPolling)
@@ -302,9 +305,13 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 	g.group.HandleFunc("GET", "/wss/", wss.Handle)
 
 	// Artificial path needed for cloudGroup
-	// TODO: Enable to AoM if/when it gets cloud support
-	if gameId == game.AoE2 || gameId == game.AoE3 {
+	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
 		g.group.HandleFunc("GET", "/cloudfiles/", cloudfiles.Cloudfiles)
+	}
+	// Uploads only where the client has a replay upload flow.
+	if gameId == game.AoE2 || gameId == game.AoE4 || gameId == game.AoM {
+		g.group.HandleFunc("PUT", "/cloudfiles/", cloudfiles.Cloudfiles)
+		g.group.HandleFunc("POST", "/cloudfiles/", cloudfiles.Cloudfiles)
 	}
 
 	// Custom files (savegames/replays). Registered here and in

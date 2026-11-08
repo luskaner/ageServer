@@ -23,7 +23,9 @@ func LoginUserMiddleware(next http.HandlerFunc) http.Handler {
 		title := g.Title()
 		var avatarStatDefinitions models.AvatarStatDefinitions = nil
 		if title != game.AoE1 {
-			avatarStatDefinitions = g.LeaderboardDefinitions().AvatarStatDefinitions()
+			if definitions := g.LeaderboardDefinitions(); definitions != nil {
+				avatarStatDefinitions = definitions.AvatarStatDefinitions()
+			}
 		}
 		u := g.Users().GetOrCreateUser(
 			title,

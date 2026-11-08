@@ -279,22 +279,42 @@ func (m *SafeOrderedMap[K, V]) Store(key K, value V, replace func(stored V) bool
 }
 
 func (m *SafeOrderedMap[K, V]) Delete(key K) bool {
-	var exists bool
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	if _, exists = m.data.internal[key]; exists {
-		index := m.data.keyMap[key]
-		delete(m.data.keyMap, key)
-		m.data.keys = slices.Delete(m.data.keys, index, index+1)
-		delete(m.data.internal, key)
-		for k, idx := range m.data.keyMap {
-			if idx > index {
-				m.data.keyMap[k] = idx - 1
-			}
+	return m.delete(key)
+}
+
+// DeleteAndValues removes key and returns whether it existed together with the
+// values that are left. Removal and snapshot happen under the same lock, so a
+// caller can advertise the removal to exactly the entries that remain.
+func (m *SafeOrderedMap[K, V]) DeleteAndValues(key K) (existed bool, values []V) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	existed = m.delete(key)
+	if existed {
+		values = make([]V, len(m.data.keys))
+		for i, k := range m.data.keys {
+			values[i] = m.data.internal[k]
 		}
-		m.updateReadOnly()
 	}
-	return exists
+	return
+}
+
+func (m *SafeOrderedMap[K, V]) delete(key K) bool {
+	if _, exists := m.data.internal[key]; !exists {
+		return false
+	}
+	index := m.data.keyMap[key]
+	delete(m.data.keyMap, key)
+	m.data.keys = slices.Delete(m.data.keys, index, index+1)
+	delete(m.data.internal, key)
+	for k, idx := range m.data.keyMap {
+		if idx > index {
+			m.data.keyMap[k] = idx - 1
+		}
+	}
+	m.updateReadOnly()
+	return true
 }
 
 func (m *SafeOrderedMap[K, V]) IterAndStore(key K, value V, replace func(stored V) bool, fn func(int, iter.Seq2[K, V])) (stored bool, storedValue V) {

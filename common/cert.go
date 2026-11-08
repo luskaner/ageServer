@@ -99,7 +99,7 @@ func CertificatePairFolder(executablePath string) string {
 	if folder == "" {
 		return ""
 	}
-	if _, err := os.Stat(folder); os.IsNotExist(err) {
+	if _, err := os.Stat(folder); err != nil {
 		if os.MkdirAll(folder, 0755) != nil {
 			return ""
 		}

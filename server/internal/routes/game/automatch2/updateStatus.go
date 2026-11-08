@@ -13,7 +13,7 @@ func UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	var req models.AutomatchUpdateStatusRequest
 	if err := i.Bind(r, &req); err != nil {
 		logger.Printf("automatch2: could not bind update status request: %v\n", err)
-		i.JSON(&w, i.A{0, 0})
+		i.JSON(&w, i.A{0, g.Matchmaking().UpdateStatusAck(0)})
 		return
 	}
 	i.JSON(&w, g.Matchmaking().UpdateStatus(models.SessionOrPanic(r), &req))

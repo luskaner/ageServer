@@ -264,9 +264,6 @@ func (b *ConfigBuilder) BuildConfig() (*battleserver.Config, error) {
 	cfg.PublicPort = uint(ports.BsPort)
 	cfg.SSLCert = b.CertFile
 	cfg.SSLKey = b.KeyFile
-	cfg.UploadVia = ""
-	cfg.ReplayHost = ""
-	cfg.ReplayPort = 0
 	cfg.Region = b.Region
 	cfg.SimulationPeriod = simPeriod
 	cfg.LogLevel = b.LogLevel

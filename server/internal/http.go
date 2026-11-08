@@ -6,9 +6,42 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/schema"
 )
+
+const (
+	// minUploadRate is the slowest sustained upload rate a client is given
+	// credit for; anything slower has its deadline recomputed upwards.
+	minUploadRate = 64 << 10
+	// minUploadDeadline covers a small file on a slow link without depending on
+	// the size cap, and maxUploadDeadline keeps a stalled client bounded even
+	// when the cap is set to hundreds of megabytes.
+	minUploadDeadline = 30 * time.Second
+	maxUploadDeadline = 5 * time.Minute
+)
+
+// ExtendReadDeadline lifts the read deadline for a streaming upload. The
+// server-wide ReadTimeout is sized for the small form posts the game normally
+// makes, and a replay or savegame would be cut off well before it finished
+// arriving. The deadline is still bounded by maxFileSize instead of being
+// cleared outright, so a client that opens the connection and then stalls
+// cannot hold it forever.
+func ExtendReadDeadline(w http.ResponseWriter, maxFileSize int64) {
+	deadline := minUploadDeadline
+	if maxFileSize > 0 {
+		if needed := time.Duration(maxFileSize/minUploadRate) * time.Second; needed > deadline {
+			deadline = needed
+		}
+	}
+	if deadline > maxUploadDeadline {
+		deadline = maxUploadDeadline
+	}
+	// A recorder has no connection to set a deadline on; the error is expected
+	// in tests and irrelevant in production.
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(deadline))
+}
 
 type Json[T any] struct {
 	Data T

@@ -40,13 +40,13 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		var adv models.Advertisement
 		adv, ok = advertisements.GetAdvertisement(q.Id)
 		if !ok {
-			if gameTitle != game.AoE2 {
+			if !models.AutomatchSupported(gameTitle) {
 				return
 			}
-			// The AoE2:DE matchmaking host never calls /advertisement/host.
-			// After the matched polling response it updates the reserved
-			// advertisement ID directly. Create that server-managed
-			// advertisement from the update request.
+			// The AoE2:DE/AoE4 matchmaking host never calls
+			// /advertisement/host. After the matched polling response it
+			// updates the reserved advertisement ID directly. Create that
+			// server-managed advertisement from the update request.
 			hostID := q.HostId
 			if hostID == 0 {
 				hostID = sess.GetUserId()
@@ -74,7 +74,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 					Party:             -1,
 					VersionFlags:      q.VersionFlags,
 				},
-				Description:      models.AutomatchMatchDescription,
+				Description:      reservation.Description,
 				AutomatchPollId:  q.AutomatchPollId,
 				RelayRegion:      reservation.BattleServer.Region(),
 				MapName:          reservation.MapName,
@@ -88,7 +88,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 				ModDllChecksum:   q.ModDllChecksum,
 				Visible:          q.Visible,
 				Joinable:         true,
-				MatchType:        models.AutomatchAdvertisementMatchType,
+				MatchType:        reservation.MatchType,
 				MaxPlayers:       reservation.MaxPlayers,
 				Options:          q.Options,
 				SlotInfo:         q.SlotInfo,
@@ -120,7 +120,7 @@ func Update(w http.ResponseWriter, r *http.Request) {
 				hostID,
 				reservation.MapName,
 				reservation.MaxPlayers,
-				models.AutomatchAdvertisementMatchType,
+				reservation.MatchType,
 				reservation.BattleServer.Region(),
 			)
 		}
@@ -146,6 +146,11 @@ func Update(w http.ResponseWriter, r *http.Request) {
 		ok = true
 	})
 	if createdAutomatch {
+		if models.AutomatchServerAddsPeers(gameTitle) {
+			// AoE1 has no /advertisement/join step: the match advertisement
+			// carries both players from the start.
+			g.Matchmaking().AttachMatchPeers(q.Id)
+		}
 		notifications = g.Matchmaking().HostCreated(0, q.Id, sess.GetUserId())
 	}
 	if !ok {

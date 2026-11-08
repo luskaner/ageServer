@@ -36,19 +36,25 @@ The file is loaded when the server starts, so restart the server after adding or
 
 ### Fields
 
-| Field          | Type   | Description                                                                 |
-|----------------|--------|-----------------------------------------------------------------------------|
-| `category`     | string | News category.                                                              |
-| `title`        | string | News title.                                                                 |
-| `subtitle`     | string | News subtitle.                                                              |
-| `text`         | string | Short news text.                                                            |
-| `image_url`    | string | URL of the news image.                                                      |
-| `body`         | string | Full news body.                                                             |
-| `metadata`     | string | JSON document, escaped as a TOML string, with the client's news metadata.   |
-| `date_visible` | string | Unix timestamp (seconds) from which the news is visible.                    |
-| `date_expiry`  | string | Unix timestamp (seconds) at which the news expires.                         |
+| Field          | Type              | Optional | Description                                                                 |
+|----------------|-------------------|----------|-----------------------------------------------------------------------------|
+| `category`     | string            | no       | News category.                                                              |
+| `title`        | string            | no       | News title.                                                                 |
+| `subtitle`     | string            | no       | News subtitle.                                                              |
+| `text`         | string            | no       | Short news text.                                                            |
+| `image_url`    | string            | no       | URL of the news image.                                                      |
+| `body`         | string            | no       | Full news body.                                                             |
+| `metadata`     | string            | no       | JSON document, escaped as a TOML string, with the client's news metadata.   |
+| `date_visible` | string or integer | yes      | Unix timestamp (seconds) from which the news is visible.                    |
+| `date_expiry`  | string or integer | yes      | Unix timestamp (seconds) at which the news expires.                        |
 
-Every field is sent as received: dates and metadata stay strings.
+`date_visible` and `date_expiry` are optional: a news item without them is sent with an empty date (`""`), which the
+client accepts. When written as TOML integers they are sent as decimal strings; integral floats such as `1793294400.0`
+are accepted too, because TOML does not reliably distinguish them from integers. Fractional values such as `1.5` and
+any other type (boolean, array, ...) are configuration errors and stop the server at startup with a message naming the
+offending field.
+
+Every other field is sent as received: dates and metadata stay strings.
 
 ## Response
 

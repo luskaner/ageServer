@@ -3,6 +3,7 @@ package models
 import (
 	"net/http"
 
+	commonGame "github.com/luskaner/ageServer/common/game"
 	"github.com/luskaner/ageServer/server/internal"
 )
 
@@ -28,6 +29,10 @@ type MatchHistory interface {
 	HasMatch(matchID int64) bool
 	GetRatings(profileIDs []int32) map[int32]*PlayerRating
 	GetRatingsForLeaderboard(leaderboardID int32, profileIDs []int32) map[int32]*PlayerRating
+	// GetMMR returns the hidden matchmaking rating of the profiles for a
+	// queue. Unlike the visible rating it survives season boundaries, and
+	// Quick Match has one even without a visible ladder.
+	GetMMR(queueID int32, leaderboardID int32, profileIDs []int32) map[int32]int32
 	GetRecentForProfile(profileID int32, limit int) []MatchResult
 	GetRecentForProfiles(profileIDs []int32, limit int) []MatchResult
 	GetLeaderboard(limit int) []*PlayerRating
@@ -43,9 +48,18 @@ type MatchHistory interface {
 	// match is created, so the result can still be attributed after the
 	// matchmaking entry has been removed.
 	RecordPendingMatch(m MatchResult)
+	// GetMatch returns the stored metadata of a match (no player rows). The
+	// report route uses it to recover the queue type and ladder that the
+	// client does not send back.
+	GetMatch(matchID int64) (MatchResult, bool)
 	// ApplyResult stores a reported result and returns the updated ratings and
 	// whether this call moved them.
 	ApplyResult(m MatchResult) (map[int32]*PlayerRating, bool)
+	// CreateSinglePlayerMatch maps the opaque matchKey of a single-player match
+	// to the match id the server generated.
+	CreateSinglePlayerMatch(matchKey string, matchID int64) error
+	// ResolveSinglePlayerMatch resolves the match id of a matchKey.
+	ResolveSinglePlayerMatch(matchKey string) (int64, bool)
 }
 
 func G(r *http.Request) Game {
@@ -181,6 +195,15 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 					return nil
 				})
 			}
+			if gameId == commonGame.AoE2 {
+				// Deliberate product decision: the 1.16.0 client expects to
+				// appear in the 1v1 RM ladder as soon as it logs in, so every
+				// AoE2 profile gets a default-rating row (0 games) on login.
+				// See server/README.md ("Ranked ladder").
+				if rating := history.EnsureRating(u.GetId(), u.GetStatGroupID()); rating != nil {
+					u.SetRating(rating.Rating)
+				}
+			}
 			history.UpsertProfile(profile)
 		})
 	}
@@ -198,7 +221,6 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 			store.BackfillProfiles(userDataDir)
 		}
 	}
-	game.matchmaking.Initialize(game)
 	if itemLocations, ok := game.resources.ArrayFiles()["itemLocations.json"]; ok {
 		if opts.Instances.Items == nil {
 			opts.Instances.Items = &MainItems{}
@@ -212,8 +234,11 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 			opts.Instances.LeaderboardDefinitions = &MainLeaderboardDefinitions{}
 		}
 		game.leaderboardDefinitions = opts.Instances.LeaderboardDefinitions
-		game.leaderboardDefinitions.Initialize(leaderboards)
+		game.leaderboardDefinitions.Initialize(gameId, leaderboards)
 	}
+	// The matchmaking catalog validates its ladders against
+	// LeaderboardDefinitions, so it must be loaded after that resource.
+	game.matchmaking.Initialize(game)
 	if opts.Instances.PresenceDefinitions == nil {
 		opts.Instances.PresenceDefinitions = &MainPresenceDefinitions{}
 	}

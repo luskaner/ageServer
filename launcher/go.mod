@@ -1,12 +1,12 @@
 module github.com/luskaner/ageServer/launcher
 
-go 1.27.0
+go 1.27.3
 
 require (
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/ncruces/zenity v0.10.15
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 )
 
 require (
@@ -26,9 +26,9 @@ require (
 	github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
-	github.com/xo/terminfo v1.2.0 // indirect
+	github.com/xo/terminfo v1.3.1 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 )
-

@@ -16,6 +16,7 @@ import (
 var (
 	osExecutableFn         = os.Executable
 	execCustomExecutableFn = execCustomExecutable
+	isAdminFn              = executor.IsAdmin
 )
 
 type Options struct {
@@ -69,7 +70,7 @@ func (options Options) Exec() (result *Result) {
 		result.Err = errors.New("no file specified")
 		return
 	}
-	options.AsAdmin = options.AsAdmin && !executor.IsAdmin()
+	options.AsAdmin = options.AsAdmin && !isAdminFn()
 	if !options.SpecialFile {
 		options.File = getExecutablePath(options.File)
 	}

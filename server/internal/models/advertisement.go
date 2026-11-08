@@ -40,6 +40,10 @@ type Advertisement interface {
 	UnsafeGetStartTime() int64
 	UnsafeGetState() int8
 	UnsafeGetDescription() string
+	UnsafeGetOptions() string
+	UnsafeGetSlotInfo() string
+	UnsafeGetMaxPlayers() uint8
+	UnsafeGetMapName() string
 	GetRelayRegion() string
 	GetParty() int32
 	UnsafeGetVisible() bool
@@ -48,7 +52,7 @@ type Advertisement interface {
 	UnsafeSetAutomatch(automatch bool)
 	UnsafeGetAppBinaryChecksum() int32
 	UnsafeGetDataChecksum() int32
-	UnsafeGetMatchType() uint8
+	UnsafeGetMatchType() uint16
 	UnsafeGetModName() string
 	UnsafeGetModVersion() string
 	UnsafeGetVersionFlags() uint32
@@ -96,7 +100,7 @@ type MainAdvertisement struct {
 	versionFlags      uint32
 	joinable          bool
 	automatch         bool
-	matchType         uint8
+	matchType         uint16
 	maxPlayers        uint8
 	options           string
 	slotInfo          string
@@ -185,6 +189,30 @@ func (adv *MainAdvertisement) UnsafeGetDescription() string {
 	return adv.description
 }
 
+// UnsafeGetOptions requires advertisement read lock. It returns the opaque
+// zlib+base64 options blob the client sent when hosting the lobby, which is the
+// same value the official service echoes as encodedOptions in the match history.
+func (adv *MainAdvertisement) UnsafeGetOptions() string {
+	return adv.options
+}
+
+// UnsafeGetSlotInfo requires advertisement read lock. It returns the opaque
+// zlib+base64 slot blob the client sent when hosting the lobby, which is the
+// same value the official service echoes as encodedSlots in the match history.
+func (adv *MainAdvertisement) UnsafeGetSlotInfo() string {
+	return adv.slotInfo
+}
+
+// UnsafeGetMaxPlayers requires advertisement read lock
+func (adv *MainAdvertisement) UnsafeGetMaxPlayers() uint8 {
+	return adv.maxPlayers
+}
+
+// UnsafeGetMapName requires advertisement read lock
+func (adv *MainAdvertisement) UnsafeGetMapName() string {
+	return adv.mapName
+}
+
 func (adv *MainAdvertisement) GetRelayRegion() string {
 	return adv.relayRegion
 }
@@ -232,7 +260,7 @@ func (adv *MainAdvertisement) UnsafeGetDataChecksum() int32 {
 }
 
 // UnsafeGetMatchType requires advertisement read lock
-func (adv *MainAdvertisement) UnsafeGetMatchType() uint8 {
+func (adv *MainAdvertisement) UnsafeGetMatchType() uint16 {
 	return adv.matchType
 }
 
@@ -433,7 +461,23 @@ func (adv *MainAdvertisement) UnsafeUpdate(advFrom *shared.AdvertisementUpdateRe
 	adv.maxPlayers = advFrom.MaxPlayers
 	adv.options = advFrom.Options
 	adv.slotInfo = advFrom.SlotInfo
-	adv.UnsafeUpdateState(advFrom.State)
+	adv.applyStateFromUpdate(advFrom.State)
+}
+
+// applyStateFromUpdate folds the state a host sends in /game/advertisement/update
+// into the advertisement.
+//
+// That request keeps reporting the value captured when the lobby was created
+// (state=0 in every captured update, including the ones the client sends right
+// after announcing the start), so it must not be able to move the advertisement
+// out of the started state: the official service ignores it and keeps reporting
+// state=1 with the original startTime. A state=1 here is honoured because older
+// clients set the start without calling /game/advertisement/updateState.
+func (adv *MainAdvertisement) applyStateFromUpdate(state int8) {
+	if adv.state == 1 && state != 1 {
+		return
+	}
+	adv.UnsafeUpdateState(state)
 }
 
 func (advs *MainAdvertisements) GetAdvertisement(id int32) (Advertisement, bool) {
@@ -474,11 +518,21 @@ func (advs *MainAdvertisements) UnsafeDelete(adv Advertisement) {
 }
 
 // UnsafeUpdateState is only safe if advertisement has not been added yet
+//
+// The match state and the reported start time are owned by
+// /game/advertisement/updateState alone. The official service sets the state to
+// 1 the first time the client announces the match start and never moves it back
+// (the state=0 the client keeps sending in /advertisement/update is ignored) and
+// never rewrites startTime afterwards: across the captured traffic no
+// advertisement ever changed its start time. Keep both rules here so a later
+// state=1 cannot silently re-stamp the timer.
 func (adv *MainAdvertisement) UnsafeUpdateState(state int8) {
 	previousState := adv.state
 	adv.state = state
 	if adv.state == 1 && previousState != 1 {
-		adv.startTime = time.Now().UTC().Unix()
+		if adv.startTime == 0 {
+			adv.startTime = time.Now().UTC().Unix()
+		}
 		adv.visible = false
 		adv.joinable = false
 		adv.observers.userIds = i.NewSafeSet[int32]()

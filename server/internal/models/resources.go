@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,15 +35,15 @@ type signature struct {
 // newsEntry is one [id] table of a game's news.toml. The table key is the id
 // sent to the client; the remaining fields are forwarded as received.
 type newsEntry struct {
-	Category    string `toml:"category"`
-	Title       string `toml:"title"`
-	Subtitle    string `toml:"subtitle"`
-	Text        string `toml:"text"`
-	ImageURL    string `toml:"image_url"`
-	Body        string `toml:"body"`
-	Metadata    string `toml:"metadata"`
-	DateVisible string `toml:"date_visible"`
-	DateExpiry  string `toml:"date_expiry"`
+	Category    string  `toml:"category"`
+	Title       string  `toml:"title"`
+	Subtitle    *string `toml:"subtitle"`
+	Text        string  `toml:"text"`
+	ImageURL    string  `toml:"image_url"`
+	Body        string  `toml:"body"`
+	Metadata    string  `toml:"metadata"`
+	DateVisible any     `toml:"date_visible"`
+	DateExpiry  any     `toml:"date_expiry"`
 }
 
 type Resources interface {
@@ -53,7 +54,7 @@ type Resources interface {
 	News() []i.A
 	ArrayFiles() map[string]i.A
 	SignedAssets() map[string][]byte
-	CloudFiles() CloudFiles
+	CloudFiles() *CloudFiles
 }
 
 type MainResources struct {
@@ -66,7 +67,7 @@ type MainResources struct {
 	keyedFilesCaptured      map[string][]byte // The captured (unsigned) version
 	nameToSignature         map[string]string // Signature for the currently active version
 	nameToSignatureCaptured map[string]string // Signature for the captured version
-	cloudFiles              CloudFiles
+	cloudFiles              *CloudFiles
 }
 
 func (r *MainResources) Initialize(gameId string, opts *ResourcesOpts) {
@@ -110,7 +111,7 @@ func (r *MainResources) SignedAssets() map[string][]byte {
 	return r.keyedFiles
 }
 
-func (r *MainResources) CloudFiles() CloudFiles {
+func (r *MainResources) CloudFiles() *CloudFiles {
 	return r.cloudFiles
 }
 
@@ -149,6 +150,14 @@ func (r *MainResources) initializeNews(gameId string) {
 	r.news = make([]i.A, 0, len(entries))
 	for _, id := range ids {
 		entry := entries[id]
+		dateVisible, err := newsTimestampString("date_visible", entry.DateVisible)
+		if err != nil {
+			panic(fmt.Errorf("invalid date_visible in news item %s for game %s: %w", id, gameId, err))
+		}
+		dateExpiry, err := newsTimestampString("date_expiry", entry.DateExpiry)
+		if err != nil {
+			panic(fmt.Errorf("invalid date_expiry in news item %s for game %s: %w", id, gameId, err))
+		}
 		newsID := any(id)
 		if numericID, err := strconv.Atoi(id); err == nil {
 			newsID = numericID
@@ -162,9 +171,34 @@ func (r *MainResources) initializeNews(gameId string) {
 			entry.ImageURL,
 			entry.Body,
 			entry.Metadata,
-			entry.DateVisible,
-			entry.DateExpiry,
+			dateVisible,
+			dateExpiry,
 		})
+	}
+}
+
+// newsTimestampString converts a news timestamp to the decimal string the
+// client expects. A missing key (nil) means "no date" and is not an error:
+// only genuinely invalid values abort startup.
+func newsTimestampString(key string, value any) (string, error) {
+	switch v := value.(type) {
+	case nil:
+		return "", nil
+	case string:
+		return strings.TrimSpace(v), nil
+	case int64:
+		return strconv.FormatInt(v, 10), nil
+	case int:
+		return strconv.Itoa(v), nil
+	case float64:
+		// TOML does not reliably distinguish 1 from 1.0, so integral floats are
+		// accepted while fractional ones are a configuration error.
+		if v == math.Trunc(v) && !math.IsInf(v, 0) && !math.IsNaN(v) {
+			return strconv.FormatInt(int64(v), 10), nil
+		}
+		return "", fmt.Errorf("%s: expected an integer timestamp, got %v", key, v)
+	default:
+		return "", fmt.Errorf("%s: expected a string or integer timestamp, got %T", key, value)
 	}
 }
 
@@ -242,10 +276,16 @@ func (r *MainResources) initializeResponses(gameId string) {
 }
 
 func (r *MainResources) initializeCloud(gameId string) {
-	cloudfiles := BuildCloudfilesIndex(filepath.Join(paths.ConfigsPath, gameId), filepath.Join(CloudFolder, gameId))
-	if cloudfiles != nil {
-		r.cloudFiles = *cloudfiles
-	}
+	r.cloudFiles = BuildCloudfilesIndex(
+		filepath.Join(paths.ConfigsPath, gameId),
+		filepath.Join(CloudFolder, gameId),
+	)
+	r.cloudFiles.SetReplayOpts(CloudFilesReplayOpts{
+		Enabled:      i.ReplaysEnabled,
+		MaxFileSize:  i.ReplaysMaxFileSize,
+		MaxTotalSize: i.ReplaysMaxTotalSize,
+		Expiry:       i.ReplaysExpiry,
+	})
 }
 
 // ReturnSignedAsset serves a response whose dataSignature the client verifies.

@@ -25,8 +25,8 @@ func addItem(name string, catalogItems map[string]playfab.CatalogItem, inventory
 			Type: "catalogItem",
 			AlternateIds: []playfab.CatalogItemAlternativeId{
 				{
-					"FriendlyId",
-					name,
+					Type:  "FriendlyId",
+					Value: name,
 				},
 			},
 			FriendlyId:       name,

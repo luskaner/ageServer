@@ -50,47 +50,49 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		reportResults := make(i.A, 0, len(match.PlayerStats))
 		memberStats := make(i.A, 0, len(match.PlayerStats))
 		for _, player := range match.PlayerStats {
-			reportResults = append(reportResults, i.A{
-				match.MatchID,    // matchHistoryID
-				player.ProfileID, // profileID
-				player.Result,    // resultType (1 = win)
-				player.TeamID,    // teamID
-				player.RaceID,    // raceID
-				player.XPGained,  // xpGained
-				"{}",             // counters
-				`{"itemUpdates":[],"challengeUpdates":[],"clientUpdates":{}}`, // customUpdates
-				match.StartedAt.Unix(), // matchStartDate
-			})
+			reportResults = append(reportResults, matchHistoryReportResult(match, player))
 
-			statGroupID := int32(0)
+			var userStatGroupID, storedStatGroupID int32
 			var wins, losses, streak int32
 			if user, ok := users.GetUserById(player.ProfileID); ok {
-				statGroupID = user.GetStatGroupID()
-			} else if stored, ok := storedProfiles[player.ProfileID]; ok {
-				statGroupID = stored.StatGroupID
+				userStatGroupID = user.GetStatGroupID()
 			}
+			if stored, ok := storedProfiles[player.ProfileID]; ok && stored != nil {
+				storedStatGroupID = stored.StatGroupID
+			}
+			var ratingStatGroupID int32
 			if rating, ok := ratings[player.ProfileID]; ok && rating != nil {
-				if rating.StatID != 0 && statGroupID == 0 {
-					statGroupID = rating.StatID
-				}
+				ratingStatGroupID = rating.StatID
 				wins = rating.Wins
 				losses = rating.Losses
 				streak = rating.Streak
 			}
+			statGroupID := models.ResolveStatGroupID(userStatGroupID, storedStatGroupID, ratingStatGroupID)
+			// The official service never reports a zero rating or a zero
+			// arbitration: an unrated match still carries the default rating and
+			// arbitration 1, which is the value it uses for every single-player
+			// match in the logs.
+			oldRating, newRating := player.RatingBefore, player.RatingAfter
+			if oldRating <= 0 {
+				oldRating = models.DefaultRating
+			}
+			if newRating <= 0 {
+				newRating = oldRating
+			}
 			memberStats = append(memberStats, i.A{
-				match.MatchID,       // matchHistoryID
-				player.ProfileID,    // profileID
-				player.RaceID,       // raceID
-				statGroupID,         // statGroupID
-				player.TeamID,       // teamID
-				wins,                // wins
-				losses,              // losses
-				streak,              // streak
-				0,                   // arbitration
-				player.Result,       // outcome
-				player.RatingBefore, // oldRating
-				player.RatingAfter,  // newRating
-				0,                   // reportType
+				match.MatchID,    // matchHistoryID
+				player.ProfileID, // profileID
+				player.RaceID,    // raceID
+				statGroupID,      // statGroupID
+				player.TeamID,    // teamID
+				wins,             // wins
+				losses,           // losses
+				streak,           // streak
+				1,                // arbitration
+				player.Result,    // outcome
+				oldRating,        // oldRating
+				newRating,        // newRating
+				1,                // reportType
 			})
 		}
 
@@ -98,28 +100,38 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		if len(match.PlayerStats) > 0 {
 			creator = match.PlayerStats[0].ProfileID
 		}
-		matchTypeID := 0
-		description := match.MapName
-		if match.QueueType != "" || match.Rated {
-			// 26 is the 1v1 ranked automatch type used by the official service.
-			matchTypeID = 26
-			description = "AUTOMATCH"
+		mapName, maxPlayers, description, matchTypeID := matchHistoryMetadata(match)
+		// matchUrls is one entry per uploaded artifact: age4 has kind 0 and 1,
+		// age2 and athens (multiplayer) only kind 0. The URL carries no SAS; the
+		// client asks getTempCredentials for it.
+		matchURLs := i.A{}
+		if store := game.Resources().CloudFiles(); store != nil && store.ReplaysEnabled() {
+			scheme := "http"
+			if r.TLS != nil {
+				scheme = "https"
+			}
+			for _, kind := range []int{0, 1} {
+				if key, entry, ok := store.FindReplay(match.MatchID, kind); ok {
+					url := scheme + "://" + r.Host + "/cloudfiles/" + key
+					matchURLs = append(matchURLs, i.A{creator, url, entry.Length, kind})
+				}
+			}
 		}
 		history = append(history, i.A{
 			match.MatchID,           // matchHistoryID
 			creator,                 // creatorProfileID
-			match.MapName,           // mapName
-			len(match.PlayerStats),  // maxPlayers
+			mapName,                 // mapName
+			maxPlayers,              // maxPlayers
 			matchTypeID,             // matchTypeID
-			"",                      // encodedOptions
-			"",                      // encodedSlots
+			match.EncodedOptions,    // encodedOptions
+			match.EncodedSlots,      // encodedSlots
 			description,             // description
 			match.StartedAt.Unix(),  // startGameTime
 			match.FinishedAt.Unix(), // completionTime
 			0,                       // observerTotal
 			reportResults,           // matchHistoryReportResults
 			i.A{},                   // matchHistoryItems
-			i.A{},                   // matchUrls
+			matchURLs,               // matchUrls
 			i.A{"INVALID", "INVALID", "INVALID", 0, 0, 0, 0}, // matchVersionInfo
 			memberStats, // matchHistoryMemberStats
 		})
@@ -131,6 +143,62 @@ func GetRecentMatchHistory(w http.ResponseWriter, r *http.Request) {
 		len(history),
 	)
 	i.JSON(&w, i.A{0, history})
+}
+
+// matchHistoryMetadata resolves the lobby metadata the client sent when hosting
+// the advertisement. The official service echoes it back verbatim, so the client
+// can rebuild the slot layout of the post-game screen.
+func matchHistoryMetadata(match models.MatchResult) (mapName string, maxPlayers int32, description string, matchTypeID int32) {
+	mapName = match.MapName
+	description = match.Description
+	// maxPlayers is the lobby capacity, not the number of players that showed
+	// up: the official service reports 16 for every AoE IV match, 8 for AoE II
+	// and 12 for AoM.
+	maxPlayers = match.MaxPlayers
+	if maxPlayers == 0 {
+		maxPlayers = int32(len(match.PlayerStats))
+	}
+	if match.QueueType != "" || match.Rated {
+		// Report the real automatch pool id instead of a fixed 26 (D13). Older
+		// rows that predate the queue type keep 26 as a conservative value.
+		matchTypeID = match.MatchType
+		if queueID, ok := models.QueueIDFromQueueType(match.QueueType); ok {
+			matchTypeID = queueID
+		}
+		if matchTypeID == 0 {
+			matchTypeID = 26
+		}
+		description = "AUTOMATCH"
+	}
+	return mapName, maxPlayers, description, matchTypeID
+}
+
+func matchHistoryReportResult(match models.MatchResult, player models.MatchPlayer) i.A {
+	return i.A{
+		match.MatchID,    // matchHistoryID
+		player.ProfileID, // profileID
+		player.Result,    // resultType (1 = win)
+		player.TeamID,    // teamID
+		player.RaceID,    // raceID
+		player.XPGained,  // xpGained
+		matchPlayerCounters(player),
+		matchPlayerCustomUpdates(player),
+		match.StartedAt.Unix(), // matchStartDate
+	}
+}
+
+func matchPlayerCounters(player models.MatchPlayer) string {
+	if player.Counters == "" {
+		return "{}"
+	}
+	return player.Counters
+}
+
+func matchPlayerCustomUpdates(player models.MatchPlayer) string {
+	if player.CustomUpdates == "" {
+		return `{"itemUpdates":[],"challengeUpdates":[],"eventChallengeUpdates":[],"clientUpdates":{}}`
+	}
+	return player.CustomUpdates
 }
 
 // normalizeProfileIDs drops the placeholder identifiers the client appends to

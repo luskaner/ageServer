@@ -11,8 +11,16 @@ type ChatChannel interface {
 	GetId() int32
 	GetName() string
 	GetUsers() iter.Seq[User]
-	AddUser(user User, clientLibVersion uint16) (exists bool, encodedUsers internal.A)
-	RemoveUser(user User) bool
+	// AddUser adds user to the channel. It reports whether the user was already
+	// a member, the roster the joining client must display (the members that
+	// were already inside, encoded for clientLibVersion) and those members,
+	// which are the only clients that have to be told about the arrival: a
+	// client that joins later already gets the newcomer in its roster.
+	AddUser(user User, clientLibVersion uint16) (exists bool, encodedRoster internal.A, members []User)
+	// RemoveUser removes user from the channel. It reports whether the user was
+	// a member and the members that are left, which are the only clients that
+	// have to be told about the departure.
+	RemoveUser(user User) (existed bool, members []User)
 	HasUser(user User) bool
 	Encode() internal.A
 }
@@ -59,20 +67,25 @@ func (channel *MainChatChannel) GetUsers() iter.Seq[User] {
 	}
 }
 
-func (channel *MainChatChannel) AddUser(user User, clientLibVersion uint16) (exists bool, encodedUsers internal.A) {
+func (channel *MainChatChannel) AddUser(user User, clientLibVersion uint16) (exists bool, encodedRoster internal.A, members []User) {
+	// IterAndStore runs the callback before storing the user, under the same
+	// lock, so the roster and the members snapshot exclude the newcomer and a
+	// concurrent join sees either all of it or none of it.
 	exists, _ = channel.users.IterAndStore(user.GetId(), user, nil, func(length int, users iter.Seq2[int32, User]) {
+		encodedRoster = make(internal.A, length)
+		members = make([]User, 0, length)
 		i := 0
-		encodedUsers = make(internal.A, length)
 		for _, el := range users {
-			encodedUsers[i] = internal.A{0, el.EncodeProfileInfo(clientLibVersion)}
+			encodedRoster[i] = internal.A{0, el.EncodeProfileInfo(clientLibVersion)}
+			members = append(members, el)
 			i++
 		}
 	})
 	return
 }
 
-func (channel *MainChatChannel) RemoveUser(user User) bool {
-	return channel.users.Delete(user.GetId())
+func (channel *MainChatChannel) RemoveUser(user User) (existed bool, members []User) {
+	return channel.users.DeleteAndValues(user.GetId())
 }
 
 func (channel *MainChatChannel) HasUser(user User) bool {

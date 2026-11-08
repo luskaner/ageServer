@@ -23,7 +23,10 @@ const CdnAgeOfEmpiresSubdomain = "cdn"
 const apiAgeOfEmpiresSuffix = "." + AgeOfEmpires + dotTld
 const ApiAgeOfEmpires = ApiAgeOfEmpiresSubdomain + apiAgeOfEmpiresSuffix
 const Aoe4ApiAgeOfEmpires = ApiAgeOfEmpiresSubdomain + "-" + aoe4Marker + apiAgeOfEmpiresSuffix
-const aoe2MacWorldsEdgeDomain = "arthurlive" + apiWorldsEdge
+const aoe2MacSubDomainPrefix = "arthurlive"
+const aoe2MacReleasePart = "-release"
+const aoe2MacReleaseMin = 2
+const aoe2MacWorldsEdgeDomain = aoe2MacSubDomainPrefix + apiWorldsEdge
 const CdnAgeOfEmpires = CdnAgeOfEmpiresSubdomain + "." + AgeOfEmpires + dotTld
 const playFabSuffix = "." + PlayFabDomain + dotTld
 const SubDomainAge2Prefix = "pb"
@@ -35,18 +38,21 @@ var SelfSignedCertDomains = []string{relicDomain, "*" + worldsEdge + dotTld, "*.
 
 var generatedDomainsCache = make(map[string][]string)
 
+var generatedMacOsDomainsCache []string
+
 var directHostToIPFn = DirectHostToIP
 
 var useInternet = true
 
 // SetUseInternet controls whether common may perform outbound internet access.
 // Currently it gates the public DNS enumeration of official release domains in
-// generateDomains. Disabling it returns only the statically known release
-// domains. It invalidates the generated domains cache as it may have been
-// populated with the previous setting.
+// generateDomains and generateMacOsDomains. Disabling it returns only the
+// statically known release domains. It invalidates the generated domains caches
+// as they may have been populated with the previous setting.
 func SetUseInternet(enabled bool) {
 	useInternet = enabled
 	generatedDomainsCache = make(map[string][]string)
+	generatedMacOsDomainsCache = nil
 }
 
 func CertDomains() []string {
@@ -73,6 +79,7 @@ func GameHosts(gameId string, withMacOsExclusive bool) (domains []string) {
 	}
 	if gameId == commonGame.AoE2 && withMacOsExclusive {
 		domains = append(domains, aoe2MacWorldsEdgeDomain)
+		domains = append(domains, generateMacOsDomains()...)
 	}
 	domains = append(domains, generateDomains(gameId)...)
 	return domains
@@ -124,15 +131,44 @@ func generateDomains(gameId string) (domains []string) {
 	for release := 1; release <= releaseMin; release++ {
 		domains = append(domains, generateDomainName(release))
 	}
-	if useInternet {
-		for release := releaseMin + 1; ; release++ {
-			if _, err := directHostToIPFn(generateDomainName(release)); err == nil {
-				domains = append(domains, generateDomainName(release))
-			} else {
-				break
-			}
+	domains = appendProbedReleases(domains, releaseMin, generateDomainName)
+	generatedDomainsCache[gameId] = domains
+	return
+}
+
+// appendProbedReleases appends the release domains that exist beyond the
+// statically known ones. It stops at the first release that does not resolve,
+// so it requires outbound DNS access.
+func appendProbedReleases(domains []string, releaseMin int, generateDomainName func(int) string) []string {
+	if !useInternet {
+		return domains
+	}
+	for release := releaseMin + 1; ; release++ {
+		if _, err := directHostToIPFn(generateDomainName(release)); err == nil {
+			domains = append(domains, generateDomainName(release))
+		} else {
+			break
 		}
 	}
-	generatedDomainsCache[gameId] = domains
+	return domains
+}
+
+func macOsDomainName(release int) string {
+	return fmt.Sprintf("%s%s%d%s", aoe2MacSubDomainPrefix, aoe2MacReleasePart, release, apiWorldsEdge)
+}
+
+func staticMacOsDomains() (domains []string) {
+	for release := 1; release <= aoe2MacReleaseMin; release++ {
+		domains = append(domains, macOsDomainName(release))
+	}
+	return
+}
+
+func generateMacOsDomains() (domains []string) {
+	if generatedMacOsDomainsCache != nil {
+		return generatedMacOsDomainsCache
+	}
+	domains = appendProbedReleases(staticMacOsDomains(), aoe2MacReleaseMin, macOsDomainName)
+	generatedMacOsDomainsCache = domains
 	return
 }

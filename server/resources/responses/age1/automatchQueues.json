@@ -1,0 +1,10 @@
+[0,[
+  {"matchTypes":[1],"ladder":1,"rated":true,"matchCompletionValue":0,"updateStatusAck":0,"matchTypeIsAdvertisement":true,"note":"Quick Match 1v1 Random Map"},
+  {"matchTypes":[2],"ladder":1,"rated":true,"matchCompletionValue":0,"updateStatusAck":0,"matchTypeIsAdvertisement":true,"note":"Quick Match 2v2 Random Map"},
+  {"matchTypes":[3],"ladder":1,"rated":true,"matchCompletionValue":0,"updateStatusAck":0,"matchTypeIsAdvertisement":true,"note":"Quick Match 3v3 Random Map"},
+  {"matchTypes":[4],"ladder":1,"rated":true,"matchCompletionValue":0,"updateStatusAck":0,"matchTypeIsAdvertisement":true,"note":"Quick Match 4v4 Random Map"},
+  {"matchTypes":[5],"ladder":3,"rated":true,"matchCompletionValue":0,"updateStatusAck":0,"matchTypeIsAdvertisement":true,"note":"Quick Match 1v1 Death Match"},
+  {"matchTypes":[6],"ladder":3,"rated":true,"matchCompletionValue":0,"updateStatusAck":0,"matchTypeIsAdvertisement":true,"note":"Quick Match 2v2 Death Match"},
+  {"matchTypes":[7],"ladder":3,"rated":true,"matchCompletionValue":0,"updateStatusAck":0,"matchTypeIsAdvertisement":true,"note":"Quick Match 3v3 Death Match"},
+  {"matchTypes":[8],"ladder":3,"rated":true,"matchCompletionValue":0,"updateStatusAck":0,"matchTypeIsAdvertisement":true,"note":"Quick Match 4v4 Death Match"}
+]]

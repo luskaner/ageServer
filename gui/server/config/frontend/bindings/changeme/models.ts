@@ -18,13 +18,13 @@ export interface BattleServerConfig {
 }
 
 /**
- * BattleServerReplaysConfiguration configures the optional recording of the
- * data the embedded battle server receives for a match. It mirrors CustomFiles:
- * sizes and the TTL are kept as strings and validated once at startup.
+ * ReplaysConfiguration configures the replays the game uploads after a match.
+ * They are always stored under <resources>/responses/cloud/<game>/replays, so
+ * there is no folder setting. Sizes and the TTL are kept as strings and
+ * validated once at startup.
  */
-export interface BattleServerReplaysConfiguration {
+export interface ReplaysConfiguration {
     "Enabled": boolean;
-    "Folder": string;
     "MaxFileSize": string;
     "MaxTotalSize": string;
     "Expiry": string;
@@ -49,7 +49,7 @@ export interface Configuration {
     "Games": GamesConfiguration;
     "Announcement": AnnouncementConfig;
     "CustomFiles": CustomFilesConfiguration;
-    "BattleServerReplays": BattleServerReplaysConfiguration;
+    "Replays": ReplaysConfiguration;
 }
 
 /**

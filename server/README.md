@@ -34,7 +34,9 @@ Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/Mi
 
 #### AoE 2: DE - Steam macOS
 
-* `arthurlive-api.worldsedgelink.com`: exclusive domain.
+* `arthurlive-api.worldsedgelink.com`: legacy exclusive domain.
+* `arthurlive-release<N>-api.worldsedgelink.com`: current exclusive domain. `N` starts at 1 and the releases beyond
+  the statically known ones are discovered via DNS when internet access is available.
 
 ### Playfab
 
@@ -232,9 +234,33 @@ is configured (via `[[Games.<game>.BattleServers]]`) and none is detected by the
 No explicit configuration is needed - it will use sensible defaults. To disable, set `StartIfMissing = "false"` in
 `[Games.<game>.EmbeddedBattleServer]` or configure an external battle server.
 
-Replay recording for embedded battle servers is configured under `[BattleServerReplays]` and mirrors the `[CustomFiles]`
-settings for folder, size limits, and expiry. Set `Expiry` to `0` or a negative value (e.g., `-1`) to keep replay files
-forever (no TTL-based expiration).
+## Replays
+
+The game uploads the replay of a finished match itself. The server hands the client an upload URL in `reportMatch`
+(multiplayer) and in the **report** step of `createOrReportSinglePlayer` (single player, `isComplete=1`), accepts the
+upload on `/cloudfiles/` (the same endpoint that serves the downloads, with the same signature scheme), and confirms it
+in `finalizeReplayUpload`. The stored file is then offered for download from the match history.
+
+Cloud files live under `resources/responses/cloud/<game>/`:
+
+| Folder | Contents |
+|---|---|
+| `builtin/` | Assets shipped with the server, indexed from `config/<game>/cloudfilesIndex.json`. Never evicted. |
+| `replays/` | Replays uploaded by the game. Subject to `[Replays]` limits and expiry. |
+
+Neither folder is configurable. The `[Replays]` section controls the upload:
+
+| Key | Description |
+|---|---|
+| `Enabled` | Whether to accept replay uploads. |
+| `MaxFileSize` | Maximum size of a single replay (default `32MB`). A larger `PUT` answers `413`. |
+| `MaxTotalSize` | Maximum accumulated size per game (default `1GB`). The oldest replays are evicted first. |
+| `Expiry` | How long a replay is kept since its last write. `0` or a negative value (e.g. `-1s`) keeps them forever. |
+
+**Known deviation from the official service.** The official backend stores one blob per `(matchId, player, kind)`; this
+server stores one per `(matchId, kind)`. When several players of the same match upload, the last upload wins and the
+history lists a single replay per match instead of one per player. This keeps storage bounded on a LAN server and is
+deliberate, not an oversight.
 
 ## Command Line
 
@@ -246,6 +272,16 @@ CLI is available with similar options as the configuration. You can see the avai
 For documentation on how what each endpoints does, please refer
 to [LibreMatch documentation](https://wiki.librematch.org/rlink/game/start). Other endpoints are mostly
 self-explanatory.
+
+## Ranked ladder
+
+For Age of Empires II: Definitive Edition the 1.16.0 client expects a profile
+to appear in the 1v1 ranked ladder as soon as it logs in. The server therefore
+creates the corresponding ladder row with the default rating (1000) and 0 games
+for every profile that logs in. The ladder listing and its `rankTotal` include
+those rows: a profile with 0 games is shown at the default rating until it
+plays its first ranked match. This is a deliberate product decision, not a
+missing filter.
 
 ## Docker
 

@@ -30,8 +30,9 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 	g.Matchmaking().RemoveUser(u.GetId())
 	sessions := g.Sessions()
 	for channelId, channel := range g.ChatChannels().Iter() {
-		if channel.RemoveUser(u) {
-			chat.NotifyLeaveChannel(sessions, users, u, channelId, sess.GetClientLibVersion())
+		if existed, members := channel.RemoveUser(u); existed {
+			// Only the members that are left are told about it.
+			chat.NotifyLeaveChannel(sessions, members, u, channelId)
 			// AoE3 only takes into account the first notify in a readSession (legacy) return
 			// so delay each message by 100ms so they go in different responses
 			// otherwise, it would appear as it left the first channel only

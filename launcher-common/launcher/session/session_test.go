@@ -758,7 +758,12 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	if o.newConfigFlushCacheOptionsFnVal != nil {
 		newConfigFlushCacheOptionsFn = o.newConfigFlushCacheOptionsFnVal
 	} else {
-		newConfigFlushCacheOptionsFn = executor.NewConfigFlushCacheOptions
+		// The real flush shells out to launcher-config, which is not built for
+		// these tests, and on Linux it is also requested for certificate
+		// changes. Tests that exercise the flush install their own override.
+		newConfigFlushCacheOptionsFn = func(bool, string, bool, bool) *executor.ConfigFlushCacheOptions {
+			return nil
+		}
 	}
 	if o.discoverServersFnVal != nil {
 		discoverServersFn = o.discoverServersFnVal

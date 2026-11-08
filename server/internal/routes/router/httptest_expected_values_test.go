@@ -130,7 +130,9 @@ func TestRouteExpectedValues_Httptest(t *testing.T) {
 			{"FindProfilesByPlatformID", game.AoE2, "POST", "/game/account/FindProfilesByPlatformID", "platformIDs=[1]", 0, nil},
 
 			// leaderboard
-			{"getLeaderBoard", game.AoE2, "GET", "/game/Leaderboard/getLeaderBoard?leaderboardIDs=[1]", "", 0, nil},
+			{"getLeaderBoard", game.AoE2, "GET", "/game/Leaderboard/getLeaderBoard?leaderboard_id=3", "", 0, nil},
+			{"getLeaderBoardAge1", game.AoE1, "GET", "/game/Leaderboard/getLeaderBoard?leaderboard_id=1", "", 0, nil},
+			{"getPersonalStat", game.AoE2, "GET", "/game/Leaderboard/getPersonalStat?profileids=[1]", "", 0, nil},
 			{"getAvailableLeaderboards", game.AoE2, "GET", "/game/Leaderboard/getAvailableLeaderboards", "", -1, func(t *testing.T, b []byte) {
 				var arr i.A
 				_ = json.Unmarshal(b, &arr)

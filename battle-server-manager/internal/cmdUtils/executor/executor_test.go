@@ -114,7 +114,9 @@ func TestExecuteBattleServer_ArgsConstruction(t *testing.T) {
 	// With outOfBand not -1, it should be present
 	captured = nil
 	ports2 := []int{27015, 27016, 27017}
-	_, _ = ExecuteBattleServer(game.AoE2, "/path/bs.exe", "eu", "Test", ports2, "/cert", "/key", nil, true, "/logs")
+	// No logRoot here: the logger keeps its file open and the stub never closes
+	// it, which would break TempDir cleanup on Windows.
+	_, _ = ExecuteBattleServer(game.AoE2, "/path/bs.exe", "eu", "Test", ports2, "/cert", "/key", nil, true, "")
 	if captured == nil {
 		t.Fatal("no captured")
 	}

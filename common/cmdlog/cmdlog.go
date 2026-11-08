@@ -134,7 +134,7 @@ func (h *SpinnerHandle) Done(format string, a ...any) {
 	}
 	h.active = false
 	h.doneMsg = fmt.Sprintf(format, a...)
-	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, okStyle(h.doneMsg))
+	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, okStyle("%s", h.doneMsg))
 }
 
 func (h *SpinnerHandle) Fail(format string, a ...any) {
@@ -143,7 +143,7 @@ func (h *SpinnerHandle) Fail(format string, a ...any) {
 	}
 	h.active = false
 	h.doneMsg = fmt.Sprintf(format, a...)
-	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, failStyle(h.doneMsg))
+	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, failStyle("%s", h.doneMsg))
 }
 
 func (h *SpinnerHandle) Info(format string, a ...any) {
@@ -152,7 +152,7 @@ func (h *SpinnerHandle) Info(format string, a ...any) {
 	}
 	h.active = false
 	h.doneMsg = fmt.Sprintf(format, a...)
-	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, infoStyle(h.doneMsg))
+	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, infoStyle("%s", h.doneMsg))
 }
 
 func (h *SpinnerHandle) Stop() {

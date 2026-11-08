@@ -35,6 +35,18 @@ func TestMappings_ContainsExpectedHosts(t *testing.T) {
 	}
 }
 
+func TestMappings_MacOsExclusive(t *testing.T) {
+	ip := net.ParseIP("192.168.1.1")
+	with := Mappings(game.AoE2, ip, true)
+	if _, ok := with[Host("arthurlive-release1-api.worldsedgelink.com")]; !ok {
+		t.Error("expected arthurlive-release1-api.worldsedgelink.com in the macOS mappings")
+	}
+	without := Mappings(game.AoE2, ip, false)
+	if _, ok := without[Host("arthurlive-release1-api.worldsedgelink.com")]; ok {
+		t.Error("the macOS domains must not be mapped without the flag")
+	}
+}
+
 func TestMappings_DifferentGames(t *testing.T) {
 	ip := net.ParseIP("10.0.0.1")
 	m1 := Mappings(game.AoE1, ip, false)

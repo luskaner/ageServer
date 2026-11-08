@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/luskaner/ageServer/server/internal"
 	"github.com/luskaner/ageServer/server/internal/logger"
 	"github.com/luskaner/ageServer/server/internal/models"
 )
@@ -18,37 +18,6 @@ import (
 // request body, so the multipart framing (boundaries and part headers) never
 // trips the reader before the counting writer enforces the exact file size.
 const multipartSlack = 1 << 20
-
-const (
-	// minUploadRate is the slowest sustained upload rate a client is given
-	// credit for; anything slower has its deadline recomputed upwards.
-	minUploadRate = 64 << 10
-	// minUploadDeadline covers a small file on a slow link without depending on
-	// MaxFileSize, and maxUploadDeadline keeps a stalled client bounded even
-	// when the cap is set to hundreds of megabytes.
-	minUploadDeadline = 30 * time.Second
-	maxUploadDeadline = 5 * time.Minute
-)
-
-// extendReadDeadline lifts the read deadline for this request. The server-wide
-// ReadTimeout is sized for the small form posts the game normally makes, and a
-// savegame would be cut off well before it finished arriving. The deadline is
-// still bounded by MaxFileSize instead of being cleared outright, so a client
-// that opens the connection and then stalls cannot hold it forever.
-func extendReadDeadline(w http.ResponseWriter, maxFileSize int64) {
-	deadline := minUploadDeadline
-	if maxFileSize > 0 {
-		if needed := time.Duration(maxFileSize/minUploadRate) * time.Second; needed > deadline {
-			deadline = needed
-		}
-	}
-	if deadline > maxUploadDeadline {
-		deadline = maxUploadDeadline
-	}
-	// A recorder has no connection to set a deadline on; the error is expected
-	// in tests and irrelevant in production.
-	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(deadline))
-}
 
 // Upload implements POST /api/MatchContent/. The multipart body carries the
 // raw savegame in the "fileContent" part and the advertisement id in the
@@ -63,7 +32,7 @@ func Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	maxFileSize := files.MaxFileSize()
-	extendReadDeadline(w, maxFileSize)
+	internal.ExtendReadDeadline(w, maxFileSize)
 	if maxFileSize > 0 && maxFileSize < math.MaxInt64-multipartSlack {
 		r.Body = http.MaxBytesReader(w, r.Body, maxFileSize+multipartSlack)
 	}

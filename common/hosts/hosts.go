@@ -8,13 +8,16 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	mapset "github.com/deckarep/golang-set/v3"
 	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/common/executor/exec"
 	"github.com/luskaner/ageServer/common/fileLock"
 	"github.com/luskaner/ageServer/common/hosts/text"
+	commonLogger "github.com/luskaner/ageServer/common/logger"
 )
 
 var pathFn = Path
@@ -98,6 +101,62 @@ func commentLineStr(line string) (ok bool, l Line) {
 	return
 }
 
+// normalizeOwnMarkerSpacing makes sure the own marker is separated from the
+// rest of the line by exactly one space, so the commented copy that a revert
+// uncomments has a stable, reparsable shape.
+func normalizeOwnMarkerSpacing(line string) string {
+	line = strings.TrimRight(line, " \t")
+	marker := string(commentMarker) + marking
+	if !strings.HasSuffix(line, marker) {
+		return line
+	}
+	prefix := strings.TrimSuffix(line, marker)
+	if prefix == "" {
+		return line
+	}
+	return strings.TrimRight(prefix, " \t") + " " + marker
+}
+
+// verifyPreservedLine checks that a commented copy round-trips back to a
+// usable mapping when a revert uncomments it.
+func verifyPreservedLine(l Line) bool {
+	if !l.OnlyComments() || !l.Preserved() {
+		return false
+	}
+	inner := l.WithoutOwnMarking().Uncommented()
+	ok, _, parsed := ParseLine(inner, true)
+	return ok && !parsed.OnlyComments() && parsed.IP() != nil && len(parsed.Hosts()) > 0
+}
+
+// normalizeOwnedComment decides what to do with a comment-only line that
+// carries an AgeServer marker.
+//
+// Preserved copies (written by this version) are kept untouched: a revert
+// uncomments them. Legacy owned comments (the bare marker) are never revived:
+// if they are a stale copy of a host this run is about to map they are dropped,
+// and otherwise they are kept as a plain comment without any marker.
+func normalizeOwnedComment(l Line, mappings *HostMappings) (Line, bool) {
+	if !l.Own() || l.Preserved() {
+		return l, false
+	}
+	inner := l.WithoutOwnMarking().Uncommented()
+	ok, _, parsed := ParseLine(inner, true)
+	if !ok || parsed.OnlyComments() || parsed.IP() == nil || len(parsed.Hosts()) == 0 {
+		cleaned := l.WithoutOwnMarking()
+		if len(cleaned.comments) == 0 {
+			return Line{}, true
+		}
+		return cleaned, false
+	}
+	for _, host := range parsed.Hosts() {
+		if _, inMappings := mappings.Get(host); inMappings {
+			// Stale copy of a mapping this run writes again.
+			return Line{}, true
+		}
+	}
+	return l.WithoutOwnMarking(), false
+}
+
 func missingIpMappings(mappings *HostMappings, hostFile *os.File) (restLines []Line, err error) {
 	var scanner *bufio.Scanner
 	err, _, scanner = decodeAndGetScanner(hostFile)
@@ -107,6 +166,11 @@ func missingIpMappings(mappings *HostMappings, hostFile *os.File) (restLines []L
 	var line string
 	for scanner.Scan() {
 		line = scanner.Text()
+		// Blank lines carry no information and would accumulate between runs
+		// because the generated block starts with its own separator.
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 		ok, overLimit, lineParsed := ParseLine(line, false)
 		if !ok {
 			ok, lineParsed = commentLineStr(line)
@@ -115,16 +179,35 @@ func missingIpMappings(mappings *HostMappings, hostFile *os.File) (restLines []L
 			}
 		}
 		if lineParsed.OnlyComments() {
-			restLines = append(restLines, lineParsed)
+			normalized, drop := normalizeOwnedComment(lineParsed, mappings)
+			if drop {
+				continue
+			}
+			restLines = append(restLines, normalized)
 			continue
 		}
 		lineIp := lineParsed.IP()
 		hosts := lineParsed.Hosts()
+		commentsBefore := lineParsed.comments
+		// Parse the line again without the platform limits so the preserved
+		// copy keeps every host, including those past maxHostsPerLine.
+		fullHosts := hosts
+		if fullOk, _, fullParsed := ParseLine(line, true); fullOk {
+			fullHosts = fullParsed.Hosts()
+			if len(fullParsed.comments) > 0 {
+				commentsBefore = fullParsed.comments
+			}
+		}
 		indexesToAvoid := mapset.NewThreadUnsafeSet[int]()
+		indexesToRemove := mapset.NewThreadUnsafeSet[int]()
+		removedOwnedHostMapping := false
 		for i, lineHost := range hosts {
 			if ip, ok := mappings.Get(lineHost); ok {
 				if ip.Equal(lineIp) {
 					mappings.Delete(lineHost)
+				} else if lineParsed.Own() {
+					indexesToRemove.Add(i)
+					removedOwnedHostMapping = true
 				} else {
 					indexesToAvoid.Add(i)
 				}
@@ -133,22 +216,42 @@ func missingIpMappings(mappings *HostMappings, hostFile *os.File) (restLines []L
 		var keptHosts []Host
 		var removedHosts bool
 		for i := range hosts {
-			if indexesToAvoid.ContainsOne(i) || commentHost(hosts[i]) {
+			if indexesToRemove.ContainsOne(i) || indexesToAvoid.ContainsOne(i) || commentHost(hosts[i]) {
 				removedHosts = true
 			} else {
 				keptHosts = append(keptHosts, hosts[i])
 			}
 		}
 		if overLimit {
-			ok, lineParsed = commentLineStr(line)
-			if ok {
-				removedHosts = true
-			}
+			removedHosts = true
 		}
 		if removedHosts {
-			var nl Line
-			if ok, nl = lineParsed.Commented(); ok {
-				restLines = append(restLines, nl.WithOwnMarking())
+			if removedOwnedHostMapping {
+				preservedHosts := make([]Host, 0, len(fullHosts))
+				for _, host := range fullHosts {
+					if ip, ok := mappings.Get(host); ok && !ip.Equal(lineIp) && lineParsed.Own() {
+						continue
+					}
+					preservedHosts = append(preservedHosts, host)
+				}
+				if len(preservedHosts) > 0 {
+					preservedLine := Line{ip: lineIp, hosts: preservedHosts, comments: commentsBefore}
+					if nlOk, nl := preservedLine.Commented(); nlOk {
+						nl = nl.WithPreservedMarking()
+						if verifyPreservedLine(nl) {
+							restLines = append(restLines, nl)
+						} else {
+							commonLogger.Printf(
+								"hosts: cannot preserve mapping %q without corrupting it; keeping it as a plain comment: %q\n",
+								lineIp.String(),
+								nl.String(),
+							)
+							restLines = append(restLines, Line{comments: nl.WithoutOwnMarking().comments})
+						}
+					}
+				}
+			} else if nlOk, nl := commentLineStr(normalizeOwnMarkerSpacing(line)); nlOk {
+				restLines = append(restLines, nl.WithPreservedMarking())
 			}
 		}
 		if len(keptHosts) > 0 {
@@ -226,6 +329,18 @@ func UpdateHosts(hostsLock *fileLock.Lock, updater func(file *os.File) error, fl
 	}
 
 	if err = updater(tmpLock.File); err == nil {
+		// Truncate temp file to the actual written size before copying back.
+		// Otherwise, if the updater wrote fewer bytes than the original content
+		// (e.g. stale owned mappings removed), the tail of the old temp file
+		// survives and gets copied back as stale active mappings.
+		pos, seekErr := tmpLock.File.Seek(0, io.SeekCurrent)
+		if seekErr != nil {
+			return fmt.Errorf("failed to get temp hosts file position: %w", seekErr)
+		}
+		if err = tmpLock.File.Truncate(pos); err != nil {
+			return fmt.Errorf("failed to truncate temp hosts file: %w", err)
+		}
+
 		_, err = tmpLock.File.Seek(0, io.SeekStart)
 		if err != nil {
 			return fmt.Errorf("failed to seek temp hosts file: %w", err)
@@ -255,6 +370,122 @@ func UpdateHosts(hostsLock *fileLock.Lock, updater func(file *os.File) error, fl
 	return err
 }
 
+func readHostsContents(file *os.File) ([]byte, error) {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	contents, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return contents, nil
+}
+
+func hostsBackupPath() string {
+	return filepath.Join(filepath.Dir(pathFn()), "hosts.bak")
+}
+
+func nextRotatedBackupPath(bakPath string) string {
+	base := bakPath + ".old-" + strconv.FormatInt(time.Now().Unix(), 10)
+	rotated := base
+	for i := 1; ; i++ {
+		if _, err := os.Stat(rotated); errors.Is(err, os.ErrNotExist) {
+			return rotated
+		}
+		rotated = base + "-" + strconv.Itoa(i)
+	}
+}
+
+// rotateHostsBackup never destroys an unrecognized backup: it is renamed so it
+// stays available for inspection, and setup continues.
+func rotateHostsBackup(bakPath string) (string, error) {
+	rotated := nextRotatedBackupPath(bakPath)
+	if err := os.Rename(bakPath, rotated); err != nil {
+		return "", fmt.Errorf("failed to rotate hosts backup %q: %w", bakPath, err)
+	}
+	commonLogger.Printf(
+		"hosts: existing backup %q does not match the current hosts file; preserved as %q\n",
+		bakPath,
+		rotated,
+	)
+	return rotated, nil
+}
+
+// createHostsBackup writes the pre-setup state, without any of our lines.
+func createHostsBackup(current []byte) (err error) {
+	stripped, stripErr := StrippedContents(current)
+	if stripErr != nil {
+		return fmt.Errorf("failed to prepare hosts backup contents: %w", stripErr)
+	}
+	bakLock, openErr := OpenLockedBackup(os.O_RDWR | os.O_CREATE | os.O_TRUNC)
+	if openErr != nil {
+		return fmt.Errorf("failed to create hosts backup %q: %w", hostsBackupPath(), openErr)
+	}
+	name := bakLock.File.Name()
+	defer func() {
+		_ = bakLock.Unlock()
+		if err != nil {
+			_ = os.Remove(name)
+		}
+	}()
+	if _, err = bakLock.File.Write(stripped); err != nil {
+		return fmt.Errorf("failed to write hosts backup %q: %w", name, err)
+	}
+	if err = bakLock.File.Sync(); err != nil {
+		return fmt.Errorf("failed to sync hosts backup %q: %w", name, err)
+	}
+	return nil
+}
+
+// ensureHostsBackup makes sure hosts.bak holds the state that preceded this
+// setup run. A reusable backup is left untouched; anything else is rotated
+// (never destroyed) and replaced with the current contents minus our lines.
+func ensureHostsBackup(current []byte) error {
+	bakPath := filepath.Join(filepath.Dir(pathFn()), "hosts.bak")
+	bakLock, openErr := OpenLockedBackup(os.O_RDONLY)
+	if openErr == nil {
+		info, statErr := bakLock.File.Stat()
+		if statErr != nil {
+			_ = bakLock.Unlock()
+			return fmt.Errorf("failed to inspect existing hosts backup %q: %w", bakPath, statErr)
+		}
+		if !info.Mode().IsRegular() {
+			_ = bakLock.Unlock()
+			return fmt.Errorf("existing hosts backup %q is not a regular file", bakPath)
+		}
+		backup, readErr := readHostsContents(bakLock.File)
+		unlockErr := bakLock.Unlock()
+		if readErr != nil {
+			return fmt.Errorf("failed to read existing hosts backup %q: %w", bakPath, readErr)
+		}
+		if unlockErr != nil {
+			return fmt.Errorf("failed to unlock existing hosts backup %q: %w", bakPath, unlockErr)
+		}
+		state, classifyErr := ClassifyBackup(current, backup)
+		if classifyErr == nil {
+			switch state {
+			case BackupMatches, BackupPreEmpty, BackupCurrentLost:
+				// A backup written by an older version may still contain our
+				// own lines. Reusing it as-is would bring stale mappings back
+				// on revert, so clean it in place.
+				if contaminated, ownedErr := containsOwnedLines(backup); ownedErr == nil && contaminated {
+					return createHostsBackup(backup)
+				}
+				return nil
+			}
+		}
+		if _, rotateErr := rotateHostsBackup(bakPath); rotateErr != nil {
+			return rotateErr
+		}
+	} else if !errors.Is(openErr, os.ErrNotExist) {
+		return fmt.Errorf("failed to open existing hosts backup %q: %w", bakPath, openErr)
+	}
+	return createHostsBackup(current)
+}
+
 func AddHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() (result *exec.Result)) (ok bool, err error) {
 	var systemHosts bool
 	if hostFilePath == "" {
@@ -277,6 +508,14 @@ func AddHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, 
 			return
 		}
 	}
+	// Capture the pre-setup state before missingIpMappings consumes the file:
+	// it is the source of the backup and the reference for its validation.
+	current, readErr := readHostsContents(hostsFileLock.File)
+	if readErr != nil {
+		_ = hostsFileLock.Unlock()
+		err = fmt.Errorf("failed to read hosts file %q (ip %q): %w", hostFilePath, ip.String(), readErr)
+		return
+	}
 	//goland:noinspection ALL
 	restLines, err = missingIpMappings(&mappings, hostsFileLock.File)
 	if err != nil {
@@ -296,35 +535,19 @@ func AddHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, 
 		return
 	}
 	err = UpdateHosts(hostsFileLock, func(f *os.File) error {
+		// Always rewrite the temp file from its start. UpdateHosts leaves the
+		// offset at the end of the copied hosts, so appending there duplicated
+		// the original contents whenever no backup branch re-seeked the file.
+		if _, seekErr := f.Seek(0, io.SeekStart); seekErr != nil {
+			return fmt.Errorf("failed to seek temp hosts file: %w", seekErr)
+		}
+		if truncateErr := f.Truncate(0); truncateErr != nil {
+			return fmt.Errorf("failed to truncate temp hosts file: %w", truncateErr)
+		}
 		if systemHosts {
-			var bakLock *fileLock.Lock
-			bakLock, err = OpenLockedBackup(os.O_RDWR | os.O_CREATE | os.O_EXCL)
-			if err != nil {
-				if errors.Is(err, os.ErrExist) {
-					return fmt.Errorf("failed to create hosts backup %q: file already exists (delete it after verifying its contents if the previous run failed): %w", filepath.Join(filepath.Dir(Path()), "hosts.bak"), err)
-				}
-				return fmt.Errorf("failed to create hosts backup %q: %w", filepath.Join(filepath.Dir(Path()), "hosts.bak"), err)
+			if backupErr := ensureHostsBackup(current); backupErr != nil {
+				return backupErr
 			}
-			clearBakFunc := func() {
-				filePath := bakLock.File.Name()
-				_ = bakLock.Unlock()
-				_ = os.Remove(filePath)
-			}
-			_, err = f.Seek(0, io.SeekStart)
-			if err != nil {
-				clearBakFunc()
-				return fmt.Errorf("failed to seek temp hosts file before backup: %w", err)
-			}
-			if _, err = io.Copy(bakLock.File, f); err != nil {
-				clearBakFunc()
-				return fmt.Errorf("failed to copy hosts contents to backup: %w", err)
-			}
-			_, err = f.Seek(0, io.SeekStart)
-			if err != nil {
-				clearBakFunc()
-				return fmt.Errorf("failed to seek temp hosts file after backup: %w", err)
-			}
-			_ = bakLock.Unlock()
 		}
 		for _, line := range restLines {
 			if _, err = f.WriteString(line.String()); err != nil {

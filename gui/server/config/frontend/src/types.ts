@@ -66,9 +66,8 @@ export interface CustomFilesConfig {
   Expiry: string;
 }
 
-export interface BattleServerReplaysConfig {
+export interface ReplaysConfig {
   Enabled: boolean;
-  Folder: string;
   MaxFileSize: string;
   MaxTotalSize: string;
   Expiry: string;
@@ -83,7 +82,7 @@ export interface AppConfig {
   Games: GamesConfig;
   Announcement: AnnouncementConfig;
   CustomFiles: CustomFilesConfig;
-  BattleServerReplays: BattleServerReplaysConfig;
+  Replays: ReplaysConfig;
 }
 
 export interface ValidationErrors {
@@ -121,11 +120,10 @@ export function fieldLabel(field: string): string {
   if (field === 'CustomFiles.MaxFileSize') return 'Maximum file size';
   if (field === 'CustomFiles.MaxTotalSize') return 'Total size limit';
   if (field === 'CustomFiles.Expiry') return 'File expiry';
-  if (field === 'BattleServerReplays.Enabled') return 'Replay recording';
-  if (field === 'BattleServerReplays.Folder') return 'Replay folder';
-  if (field === 'BattleServerReplays.MaxFileSize') return 'Maximum replay size';
-  if (field === 'BattleServerReplays.MaxTotalSize') return 'Replay total size limit';
-  if (field === 'BattleServerReplays.Expiry') return 'Replay expiry';
+  if (field === 'Replays.Enabled') return 'Replay uploads';
+  if (field === 'Replays.MaxFileSize') return 'Maximum replay size';
+  if (field === 'Replays.MaxTotalSize') return 'Replay total size limit';
+  if (field === 'Replays.Expiry') return 'Replay expiry';
   if (field.startsWith('Games.Enabled')) return 'Enabled games';
   if (field.startsWith('Sign.PlatformUserIdExceptions')) return 'Platform user ID exceptions';
 

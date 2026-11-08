@@ -1,8 +1,10 @@
 package models
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/luskaner/ageServer/common/paths"
@@ -37,8 +39,8 @@ text = "Second text"
 image_url = "https://example.com/second.jpg"
 body = "Second body"
 metadata = "{ \"version\": 2 }"
-date_visible = "1793294401"
-date_expiry = "1798480801"
+date_visible = 1793294401
+date_expiry = 1798480801
 
 [1]
 category = "first"
@@ -69,12 +71,113 @@ func TestInitializeNews_LoadsEntriesInOrder(t *testing.T) {
 		"1793294400", "1798480800",
 	}
 	for index, want := range wantFirst {
-		if got := resources.news[0][index]; got != want {
+		got := resources.news[0][index]
+		// subtitle is stored as *string (a nil pointer means "no subtitle").
+		if subtitle, ok := got.(*string); ok {
+			got = *subtitle
+		}
+		if got != want {
 			t.Fatalf("news 1 field %d = %v, want %v", index, got, want)
 		}
 	}
 	if got := resources.news[1][0]; got != 2 {
 		t.Fatalf("second news id = %v, want 2", got)
+	}
+	if got := resources.news[1][8]; got != "1793294401" {
+		t.Errorf("second news visible date = %v, want string timestamp %q", got, "1793294401")
+	}
+	if got := resources.news[1][9]; got != "1798480801" {
+		t.Errorf("second news expiry date = %v, want string timestamp %q", got, "1798480801")
+	}
+}
+
+// A news.toml without dates is valid: the client receives an empty date, not
+// a server panic.
+func TestInitializeNews_AllowsMissingDates(t *testing.T) {
+	configForGame(t, "age4", map[string]string{
+		"news.toml": `
+[1]
+title = "Only a title"
+`,
+	})
+	resources := &MainResources{}
+
+	resources.initializeNews("age4")
+
+	if len(resources.news) != 1 {
+		t.Fatalf("loaded %d news, want 1", len(resources.news))
+	}
+	if got := resources.news[0][8]; got != "" {
+		t.Errorf("date_visible = %v, want empty", got)
+	}
+	if got := resources.news[0][9]; got != "" {
+		t.Errorf("date_expiry = %v, want empty", got)
+	}
+}
+
+// TOML does not reliably distinguish 1 from 1.0, so an integral float is
+// accepted.
+func TestInitializeNews_AllowsIntegralFloatDates(t *testing.T) {
+	configForGame(t, "age4", map[string]string{
+		"news.toml": `
+[1]
+title = "Float date"
+date_visible = 1793294400.0
+`,
+	})
+	resources := &MainResources{}
+
+	resources.initializeNews("age4")
+
+	if got := resources.news[0][8]; got != "1793294400" {
+		t.Fatalf("date_visible = %v, want %q", got, "1793294400")
+	}
+}
+
+func TestInitializeNews_RejectsFloatTimestamp(t *testing.T) {
+	configForGame(t, "age4", map[string]string{
+		"news.toml": `
+[1]
+title = "Bad date"
+date_visible = 1.5
+`,
+	})
+	resources := &MainResources{}
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatal("expected a panic for a fractional timestamp")
+		}
+		if !strings.Contains(fmt.Sprint(recovered), "date_visible") {
+			t.Fatalf("panic does not name the field: %v", recovered)
+		}
+	}()
+
+	resources.initializeNews("age4")
+}
+
+func TestInitializeNews_RejectsInvalidType(t *testing.T) {
+	for name, value := range map[string]string{
+		"boolean": "true",
+		"array":   "[1, 2]",
+	} {
+		t.Run(name, func(t *testing.T) {
+			configForGame(t, "age4", map[string]string{
+				"news.toml": "[1]\ntitle = \"Bad type\"\ndate_expiry = " + value + "\n",
+			})
+			resources := &MainResources{}
+			defer func() {
+				recovered := recover()
+				if recovered == nil {
+					t.Fatal("expected a panic for an invalid timestamp type")
+				}
+				if !strings.Contains(fmt.Sprint(recovered), "date_expiry") {
+					t.Fatalf("panic does not name the field: %v", recovered)
+				}
+			}()
+
+			resources.initializeNews("age4")
+		})
 	}
 }
 

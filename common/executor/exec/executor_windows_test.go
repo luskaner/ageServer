@@ -14,6 +14,12 @@ import (
 //
 // Bodies are verbatim from executor_test.go; only the location changed.
 func TestExecAdminPath(t *testing.T) {
+	// The CI runner may already be elevated, which would clear AsAdmin before
+	// the admin path is taken. Force the non-elevated path so the mock is used.
+	origAdmin := isAdminFn
+	isAdminFn = func() bool { return false }
+	defer func() { isAdminFn = origAdmin }()
+
 	origCall := shellExecuteExCallFn
 	origPid := getProcessIdFn
 	SetShellExecuteExCallFn(func(_ *SHELLEXECUTEINFO) (uintptr, uintptr, error) { return 1, 0, nil })

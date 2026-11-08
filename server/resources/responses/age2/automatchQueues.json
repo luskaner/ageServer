@@ -1,0 +1,16 @@
+[0,[
+  {"matchTypes":[6],"ladder":3,"rated":true,"matchCompletionValue":225,"updateStatusAck":0,"note":"1v1 Random Map (ranked)"},
+  {"matchTypes":[7],"ladder":4,"rated":true,"matchCompletionValue":225,"updateStatusAck":0,"note":"2v2 Random Map (ranked)"},
+  {"matchTypes":[8],"ladder":4,"rated":true,"matchCompletionValue":225,"updateStatusAck":0,"note":"3v3 Random Map (ranked)"},
+  {"matchTypes":[9],"ladder":4,"rated":true,"matchCompletionValue":225,"updateStatusAck":0,"note":"4v4 Random Map (ranked)"},
+  {"matchTypes":[66],"ladder":1,"rated":true,"matchCompletionValue":225,"updateStatusAck":0,"note":"1v1 Death Match (ranked)"},
+  {"matchTypes":[67],"ladder":2,"rated":true,"matchCompletionValue":225,"updateStatusAck":0,"note":"2v2 Death Match (ranked)"},
+  {"matchTypes":[68],"ladder":2,"rated":true,"matchCompletionValue":225,"updateStatusAck":0,"note":"3v3 Death Match (ranked)"},
+  {"matchTypes":[69],"ladder":2,"rated":true,"matchCompletionValue":225,"updateStatusAck":0,"note":"4v4 Death Match (ranked)"},
+  {"matchTypes":[22],"ladder":0,"rated":false,"matchCompletionValue":225,"updateStatusAck":0,"note":"co-op 2 players (unranked)"},
+  {"matchTypes":[23],"ladder":0,"rated":false,"matchCompletionValue":225,"updateStatusAck":0,"note":"co-op 3 players (unranked)"},
+  {"matchTypes":[24],"ladder":0,"rated":false,"matchCompletionValue":225,"updateStatusAck":0,"note":"co-op 4 players (unranked)"},
+  {"matchTypes":[57],"ladder":0,"rated":false,"matchCompletionValue":225,"updateStatusAck":0,"note":"Quick Play 1 team, 2 players (unranked)"},
+  {"matchTypes":[58],"ladder":0,"rated":false,"matchCompletionValue":225,"updateStatusAck":0,"note":"Quick Play 1 team, 3 players (unranked)"},
+  {"matchTypes":[59],"ladder":0,"rated":false,"matchCompletionValue":225,"updateStatusAck":0,"note":"Quick Play 1 team, 4 players (unranked)"}
+]]

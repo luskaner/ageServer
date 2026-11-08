@@ -13,12 +13,12 @@ type searchQuery struct {
 	AppBinaryChecksum int32 `schema:"appBinaryChecksum"`
 	DataChecksum      int32 `schema:"dataChecksum"`
 	// AoE3 does not send match type when searching for observable games
-	MatchType      *uint8 `schema:"matchType_id"`
-	ModDllFile     string `schema:"modDLLFile"`
-	ModDllChecksum int32  `schema:"modDLLChecksum"`
-	ModName        string `schema:"modName"`
-	ModVersion     string `schema:"modVersion"`
-	VersionFlags   uint32 `schema:"versionFlags"`
+	MatchType      *uint16 `schema:"matchType_id"`
+	ModDllFile     string  `schema:"modDLLFile"`
+	ModDllChecksum int32   `schema:"modDLLChecksum"`
+	ModName        string  `schema:"modName"`
+	ModVersion     string  `schema:"modVersion"`
+	VersionFlags   uint32  `schema:"versionFlags"`
 }
 
 type wanQuery struct {
