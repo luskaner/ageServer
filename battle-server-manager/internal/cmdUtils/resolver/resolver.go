@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	battleServerResolvePath        = battleServer.ResolvePath
+	battleServerResolvePath         = battleServer.ResolvePath
 	battleServerResolvePathPriority = battleServer.ResolvePathPriority
-	resolveAutoPathFn              = resolveAutoPath
-	validPathFn                    = validPath
+	resolveAutoPathFn               = resolveAutoPath
+	validPathFn                     = validPath
 )
 
 func validPath(path string) bool {

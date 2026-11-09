@@ -536,12 +536,10 @@ func itoa(value int32) string {
 // observer password set, so the absence checks are meaningful.
 func communityHostRequest() *advertisementShared.AdvertisementHostRequest {
 	return &advertisementShared.AdvertisementHostRequest{
-		AdvertisementBaseRequest: advertisementShared.AdvertisementBaseRequest{
-			Race:         3,
-			Team:         1,
-			Party:        -1,
-			VersionFlags: 1,
-		},
+		Race:             3,
+		Team:             1,
+		Party:            -1,
+		VersionFlags:     1,
 		Description:      "community test lobby",
 		MapName:          "Arabia",
 		Observable:       true,

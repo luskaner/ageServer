@@ -259,7 +259,7 @@ func TestCommunityInput_IsStrictButSoft(t *testing.T) {
 func TestCommunityAliases_AreCapped(t *testing.T) {
 	g := newTestGame(t, game.AoE2)
 	aliases := make([]string, 0, 500)
-	for index := 0; index < 500; index++ {
+	for index := range 500 {
 		aliases = append(aliases, "alias"+strings.Repeat("x", index%5))
 	}
 	encoded, err := json.Marshal(aliases)
