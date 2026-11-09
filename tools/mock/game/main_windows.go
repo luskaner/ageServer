@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// The log-to-file setup below is deliberately duplicated with tools/mock/launcher:
+// the two mocks are separate development-only modules, and sharing it would add
+// a module dependency for ~20 lines that never ship.
 func main() {
 	dir := filepath.Join("logs", "game")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

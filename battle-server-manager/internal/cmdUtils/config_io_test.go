@@ -147,22 +147,21 @@ func TestRemoveKillsNothingAndDeletesFile(t *testing.T) {
 	}
 }
 
-func TestWriteConfigCreatesDirectory(t *testing.T) {
-	ln1, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
+// listenPort binds an ephemeral TCP port and releases it when the test ends.
+func listenPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
 	if err != nil {
 		t.Skip("cannot bind ephemeral listener")
 	}
-	defer func() { _ = ln1.Close() }()
-	ln2, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
-	if err != nil {
-		t.Skip("cannot bind ephemeral listener")
-	}
-	defer func() { _ = ln2.Close() }()
+	t.Cleanup(func() { _ = ln.Close() })
+	return ln.Addr().(*net.TCPAddr).Port
+}
 
-	cfg := battleServer.Config{
-		Region: "new-region", Name: "New Server", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
-		PID: uint32(os.Getpid()),
-	}
+func TestWriteConfigCreatesDirectory(t *testing.T) {
+	cfg, closePorts := liveValidateConfig(t)
+	defer closePorts()
+
 	gameId := "unit-newdir"
 	dir := battleServer.Folder(gameId)
 	_ = os.RemoveAll(dir)
@@ -177,21 +176,9 @@ func TestWriteConfigCreatesDirectory(t *testing.T) {
 }
 
 func TestWriteConfigIncrementsFileName(t *testing.T) {
-	ln1, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
-	if err != nil {
-		t.Skip("cannot bind ephemeral listener")
-	}
-	defer func() { _ = ln1.Close() }()
-	ln2, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
-	if err != nil {
-		t.Skip("cannot bind ephemeral listener")
-	}
-	defer func() { _ = ln2.Close() }()
-	ln3, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
-	if err != nil {
-		t.Skip("cannot bind ephemeral listener")
-	}
-	defer func() { _ = ln3.Close() }()
+	bsPort := listenPort(t)
+	wsPort := listenPort(t)
+	secondBsPort := listenPort(t)
 
 	gameId := "unit-increment"
 	dir := battleServer.Folder(gameId)
@@ -202,14 +189,14 @@ func TestWriteConfigIncrementsFileName(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	cfg1 := battleServer.Config{
-		Region: "r1", Name: "S1", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
+		Region: "r1", Name: "S1", IPv4: "127.0.0.1", BsPort: bsPort, WebSocketPort: wsPort,
 		PID: uint32(os.Getpid()),
 	}
 	if err := WriteConfig(gameId, cfg1); err != nil {
 		t.Fatal(err)
 	}
 	cfg2 := battleServer.Config{
-		Region: "r2", Name: "S2", IPv4: "127.0.0.1", BsPort: ln3.Addr().(*net.TCPAddr).Port, WebSocketPort: 0,
+		Region: "r2", Name: "S2", IPv4: "127.0.0.1", BsPort: secondBsPort, WebSocketPort: 0,
 		PID: uint32(os.Getpid()),
 	}
 	if err := WriteConfig(gameId, cfg2); err != nil {
@@ -258,21 +245,8 @@ func TestRemoveEmptyConfigs(t *testing.T) {
 }
 
 func TestRemoveOnlyInvalidSkipsValid(t *testing.T) {
-	ln1, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
-	if err != nil {
-		t.Skip("cannot bind ephemeral listener")
-	}
-	defer func() { _ = ln1.Close() }()
-	ln2, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
-	if err != nil {
-		t.Skip("cannot bind ephemeral listener")
-	}
-	defer func() { _ = ln2.Close() }()
-
-	cfg := battleServer.Config{
-		Region: "valid-region", Name: "Valid", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
-		PID: uint32(os.Getpid()),
-	}
+	cfg, closePorts := liveValidateConfig(t)
+	defer closePorts()
 
 	gameId := "unit-onlyinvalid"
 	dir := battleServer.Folder(gameId)
