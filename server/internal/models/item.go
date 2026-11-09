@@ -80,9 +80,17 @@ type Attribute struct {
 	Vtype  int    `json:"vtype,omitempty,omitzero"`
 }
 
-// isNewAttributeKey is a client side transient flag. It never belongs to the
-// persisted item metadata nor to the att representation sent to the client.
+// isNewAttributeKey is the per-item "not seen yet" flag. The item definitions
+// declare it as "1" for reward items (portraits, monuments, sigils, ...), and
+// the client shows a new badge until the player opens the item, at which point
+// it reports the flag as "0" through updateItemAttributes. The official service
+// stores that value on the item instance and returns it in the encoded item, so
+// it is persisted here too.
 const isNewAttributeKey = "is_new"
+
+// isNewAttributeSeenValue is the value the client reports once the player has
+// opened the item.
+const isNewAttributeSeenValue = "0"
 
 type ReadOnlyItemMetadata struct {
 	attributes map[string]Attribute
@@ -174,9 +182,6 @@ func (i *ItemMetadata) UnmarshalJSON(data []byte) error {
 		}
 		i.attributes = make(map[string]Attribute, len(raw))
 		for k, v := range raw {
-			if k == isNewAttributeKey {
-				continue
-			}
 			attr, err := unmarshalAttribute(v)
 			if err != nil {
 				return err
@@ -229,25 +234,47 @@ func (i *ItemMetadata) GetAttribute(key string) (string, bool) {
 }
 
 // UpdateAttribute stores value under key and reports whether it was accepted.
-// Keys that are not valid item metadata, such as the transient is_new flag,
-// are rejected instead of being silently dropped.
+//
+// is_new is accepted: the client reports the item as seen through this call and
+// the official service persists it on the item instance. Its value is stored
+// alone, without the source/mtype the definitions declare, which is the shape
+// the official service returns.
 func (i *ItemMetadata) UpdateAttribute(key string, value string) bool {
-	if key == isNewAttributeKey {
-		return false
-	}
 	if i.attributes == nil {
 		i.attributes = make(map[string]Attribute)
 	}
 	attr := i.attributes[key]
-	if attr.Source == 0 {
-		attr.Source = 1
-	}
-	if attr.Mtype == 0 {
-		attr.Mtype = 1
+	if key != isNewAttributeKey {
+		if attr.Source == 0 {
+			attr.Source = 1
+		}
+		if attr.Mtype == 0 {
+			attr.Mtype = 1
+		}
 	}
 	attr.Value = value
 	i.attributes[key] = attr
 	return true
+}
+
+// markSeen flags the item as already opened by the player, which is the state
+// the client reports through updateItemAttributes.
+func (i *ItemMetadata) markSeen() {
+	if i.attributes == nil {
+		i.attributes = make(map[string]Attribute)
+	}
+	i.attributes[isNewAttributeKey] = Attribute{Value: isNewAttributeSeenValue}
+}
+
+// declaresNew reports whether the item definition marks the item as a reward
+// that starts unseen. Only those items get an is_new attribute on the instance,
+// matching the official service.
+func declaresNew(metadata *ReadOnlyItemMetadata) bool {
+	if metadata == nil {
+		return false
+	}
+	_, ok := metadata.attributes[isNewAttributeKey]
+	return ok
 }
 
 func (i *ItemMetadata) UpdateOther(key string, value any) {
@@ -736,11 +763,66 @@ type ItemsUpgradableDefaultData struct {
 	definitions Items
 }
 
+// itemsVersion is the version of the persisted items document.
+//
+// Version 1 marks the reward items the profile already owns as seen. Version 0
+// stored no is_new attribute, so the client showed a new badge on every reward
+// the server had handed out by default.
+const itemsVersion uint32 = 1
+
 func NewItemsUpgradableDefaultData(gameId string, definitions Items) *ItemsUpgradableDefaultData {
 	return &ItemsUpgradableDefaultData{
 		InitialUpgradableDefaultData: InitialUpgradableDefaultData[*map[int32]*MainItem]{},
 		gameId:                       gameId,
 		definitions:                  definitions,
+	}
+}
+
+// CurrentVersion reports the version of the documents Default builds.
+func (is *ItemsUpgradableDefaultData) CurrentVersion() uint32 {
+	return itemsVersion
+}
+
+// ObjectOfVersion returns the document of a stored version, ready to be
+// upgraded. Both versions share the same layout.
+func (is *ItemsUpgradableDefaultData) ObjectOfVersion(_ uint32) any {
+	items := make(map[int32]*MainItem)
+	return &items
+}
+
+// UpgradeToNextVersion migrates a stored document one version forward.
+func (is *ItemsUpgradableDefaultData) UpgradeToNextVersion(oldVersion uint32, oldObject any) *map[int32]*MainItem {
+	items, ok := oldObject.(*map[int32]*MainItem)
+	if !ok || items == nil {
+		empty := make(map[int32]*MainItem)
+		return &empty
+	}
+	if *items == nil {
+		// A document saved as JSON null must not leave the profile without a
+		// usable map.
+		*items = make(map[int32]*MainItem)
+	}
+	if oldVersion == 0 {
+		is.markOwnedItemsSeen(items)
+	}
+	return items
+}
+
+// markOwnedItemsSeen flags every reward item of the profile as already opened,
+// without touching the items whose definition does not declare is_new.
+func (is *ItemsUpgradableDefaultData) markOwnedItemsSeen(items *map[int32]*MainItem) {
+	if items == nil || is.definitions == nil {
+		return
+	}
+	for _, item := range *items {
+		if item == nil {
+			continue
+		}
+		definition, ok := is.definitions.GetDefinition(item.itemDefinitionID)
+		if !ok || !declaresNew(definition.GetMetadata()) {
+			continue
+		}
+		item.metadata.markSeen()
 	}
 }
 
@@ -765,19 +847,27 @@ func (is *ItemsUpgradableDefaultData) Default() *map[int32]*MainItem {
 			}
 		})
 		metadata := ItemMetadata{}
+		var itemDeclaresNew bool
 		if md := itemDefinition.GetMetadata(); md != nil {
+			itemDeclaresNew = declaresNew(md)
 			if attrs := md.attributes; len(attrs) > 0 {
 				metadata.attributes = make(map[string]Attribute, len(attrs))
 				for k, v := range attrs {
 					// sigil_pos is written by the client through updateItemAttributes,
 					// so the position declared by the definition is not a valid
-					// starting value. is_new is a transient client flag.
+					// starting value. is_new is per item: the instance carries the
+					// state, and it is set below.
 					if k == sigilPosAttributeKey || k == isNewAttributeKey {
 						continue
 					}
 					metadata.attributes[k] = v
 				}
 			}
+		}
+		// Items handed out by default are already seen: the client would
+		// otherwise show a new badge on every reward the profile owns.
+		if itemDeclaresNew {
+			metadata.markSeen()
 		}
 
 		// Starting sigil position of the Coat of Arms. updateItemAttributes

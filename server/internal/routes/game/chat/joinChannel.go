@@ -12,6 +12,9 @@ type chatroomRequest struct {
 	ChatroomID int32 `schema:"chatroomID"`
 }
 
+// chatroomID names the channel for bindChatRequest without exposing the field.
+func (q chatroomRequest) chatroomID() int32 { return q.ChatroomID }
+
 func JoinChannel(w http.ResponseWriter, r *http.Request) {
 	var req chatroomRequest
 	err := i.Bind(r, &req)

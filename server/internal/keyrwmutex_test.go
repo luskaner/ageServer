@@ -16,11 +16,11 @@ func TestKeyRWMutexConcurrentSameKey(t *testing.T) {
 	var mu sync.Mutex // Protects the counter itself
 	counter := 0
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < iterations; j++ {
+			for range iterations {
 				kl.Lock("shared-key")
 				mu.Lock()
 				counter++

@@ -20,11 +20,11 @@ func setupHostsEnv(t *testing.T) (hostsPath, bakPath string) {
 	oldLogger := internal.Logger
 	internal.Logger = nil
 	t.Cleanup(func() {
-		os.Setenv("WINDIR", oldWindir)
+		_ = os.Setenv("WINDIR", oldWindir)
 		internal.Logger = oldLogger
 	})
 	tmp := t.TempDir()
-	os.Setenv("WINDIR", tmp)
+	_ = os.Setenv("WINDIR", tmp)
 	hostsPath = filepath.Join(tmp, "System32", "drivers", "etc", "hosts")
 	bakPath = filepath.Join(tmp, "System32", "drivers", "etc", "hosts.bak")
 	if err := os.MkdirAll(filepath.Dir(hostsPath), 0755); err != nil {
@@ -36,8 +36,8 @@ func setupHostsEnv(t *testing.T) (hostsPath, bakPath string) {
 func TestRemoveHostsNoFiles(t *testing.T) {
 	hostsPath, _ := setupHostsEnv(t)
 	// Ensure no files exist
-	os.Remove(hostsPath)
-	os.Remove(hostsPath + ".bak")
+	_ = os.Remove(hostsPath)
+	_ = os.Remove(hostsPath + ".bak")
 	if err := RemoveHosts(); err != nil {
 		t.Fatalf("expected nil when no hosts, got %v", err)
 	}
@@ -83,8 +83,8 @@ func TestRemoveHostsWithMatchingBackupRestoresBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	os.Chtimes(bakPath, now, now)
-	os.Chtimes(hostsPath, now.Add(-2*time.Second), now.Add(-2*time.Second))
+	_ = os.Chtimes(bakPath, now, now)
+	_ = os.Chtimes(hostsPath, now.Add(-2*time.Second), now.Add(-2*time.Second))
 
 	if err := RemoveHosts(); err != nil {
 		t.Fatalf("RemoveHosts with matching backup failed: %v", err)
@@ -112,8 +112,8 @@ func TestRemoveHostsWithBackupOlderDoesInPlace(t *testing.T) {
 	}
 	// Make backup older than hosts
 	now := time.Now()
-	os.Chtimes(hostsPath, now, now)
-	os.Chtimes(bakPath, now.Add(-2*time.Second), now.Add(-2*time.Second))
+	_ = os.Chtimes(hostsPath, now, now)
+	_ = os.Chtimes(bakPath, now.Add(-2*time.Second), now.Add(-2*time.Second))
 
 	if err := RemoveHosts(); err != nil {
 		t.Fatalf("RemoveHosts with backup older failed: %v", err)
@@ -177,7 +177,7 @@ func TestStaleAgeServerBackupCanBeReusedAndReverted(t *testing.T) {
 
 func TestRemoveHostsBackupWithNoMainCreatesMain(t *testing.T) {
 	hostsPath, bakPath := setupHostsEnv(t)
-	os.Remove(hostsPath)
+	_ = os.Remove(hostsPath)
 	bakContent := "127.0.0.1 restored.com\r\n"
 	if err := os.WriteFile(bakPath, []byte(bakContent), 0644); err != nil {
 		t.Fatal(err)
@@ -346,8 +346,8 @@ func TestRemoveHostsRefusesForeignBackupAndFallsBackInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	os.Chtimes(bakPath, now, now)
-	os.Chtimes(hostsPath, now.Add(-2*time.Second), now.Add(-2*time.Second))
+	_ = os.Chtimes(bakPath, now, now)
+	_ = os.Chtimes(hostsPath, now.Add(-2*time.Second), now.Add(-2*time.Second))
 
 	if err := RemoveHosts(); err != nil {
 		t.Fatalf("RemoveHosts: %v", err)

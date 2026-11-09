@@ -20,13 +20,6 @@ func with(t *testing.T, c Capability) (restore func()) {
 	return func() { set(prevOut, prevCap) }
 }
 
-// withTier installs a plain capability at the given tier, which is what most of
-// the rendering tests need: glyphs differ, colours do not.
-func withTier(t *testing.T, tier GlyphTier) {
-	t.Helper()
-	with(t, Capability{Profile: colorprofile.NoTTY, Tier: tier})
-}
-
 // withColor installs a capability with colour enabled at the given tier.
 func withColor(t *testing.T, tier GlyphTier) {
 	t.Helper()

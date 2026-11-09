@@ -24,11 +24,11 @@ type stubResolver struct {
 
 func (s *stubResolver) HostToIPs(string) []net.IP { return nil }
 func (s *stubResolver) IPToHosts(string) []string { return nil }
-func (s *stubResolver) DirectHostToIP(host string) (string, error) {
+func (s *stubResolver) DirectHostToIP(_ string) (string, error) {
 	s.calls.Add(1)
 	return s.ip, s.dnsErr
 }
-func (s *stubResolver) DialTCP(network, address string, timeout time.Duration) (net.Conn, error) {
+func (s *stubResolver) DialTCP(_, _ string, _ time.Duration) (net.Conn, error) {
 	return nil, errors.New("offline")
 }
 func (s *stubResolver) NetInterfaces() ([]net.Interface, error) { return nil, nil }

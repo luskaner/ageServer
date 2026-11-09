@@ -47,7 +47,7 @@ func TestPreExistingPeerNotEvictedOnRollback(t *testing.T) {
 
 func TestRollbackOnlyRemovesNewlyAdded(t *testing.T) {
 	existingPeers := map[int32]bool{}
-	addedUserIds := []int32{}
+	var addedUserIds []int32
 
 	// Add Alice (1) and Bob (2) — both new, both succeed
 	for _, id := range []int32{1, 2} {

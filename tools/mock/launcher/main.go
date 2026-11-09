@@ -12,6 +12,9 @@ import (
 	"github.com/luskaner/ageServer/common"
 )
 
+// The log-to-file setup below is deliberately duplicated with tools/mock/game:
+// the two mocks are separate development-only modules, and sharing it would add
+// a module dependency for ~20 lines that never ship.
 func main() {
 	common.ChdirToExe()
 	dir := filepath.Join("logs", "launcher")

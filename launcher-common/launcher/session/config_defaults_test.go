@@ -19,6 +19,9 @@ func TestInitConfigDefaultsCoverIsolationProfiles(t *testing.T) {
 
 	fs := pflag.NewFlagSet("probe", pflag.ContinueOnError)
 	cfg := initConfig(fs)
+	if cfg == nil {
+		t.Fatal("initConfig returned nil")
+	}
 
 	if cfg.Client.Isolation.Profiles != "required" {
 		t.Fatalf("Isolation.Profiles = %q, want %q by default", cfg.Client.Isolation.Profiles, "required")

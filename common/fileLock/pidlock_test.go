@@ -116,7 +116,7 @@ func TestLockContended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f1.Close()
+	defer func() { _ = f1.Close() }()
 
 	l1 := Lock{}
 	if err := l1.Lock(f1); err != nil {
@@ -130,7 +130,7 @@ func TestLockContended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f2.Close()
+	defer func() { _ = f2.Close() }()
 	l2 := Lock{}
 	_ = l2.Lock(f2)
 	l2.clean()
@@ -151,8 +151,8 @@ func TestWritePidTruncatesFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Write extra data first
-	f.Write([]byte("extra data that should be truncated"))
-	f.Close()
+	_, _ = f.Write([]byte("extra data that should be truncated"))
+	_ = f.Close()
 
 	f, err = os.OpenFile(pidPath, os.O_WRONLY, 0644)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestWritePidTruncatesFile(t *testing.T) {
 	if err := writePid(f); err != nil {
 		t.Fatalf("writePid: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	data, err := os.ReadFile(pidPath)
 	if err != nil {
@@ -216,7 +216,7 @@ func TestWritePidClosedFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
+	_ = f.Close()
 	if err := writePid(f); err == nil {
 		t.Error("writePid on closed file should error")
 	}
@@ -258,7 +258,7 @@ func TestWritePidWriteError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if err := writePid(f); err == nil || err.Error() != "write fail" {
 		t.Fatalf("expected write fail, got %v", err)
 	}
@@ -314,11 +314,11 @@ func TestPidLockLockFileLockError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
+	_ = f.Close()
 	// Return a closed file so Lock fails
 	openFileFn = func() (error, *os.File) {
 		ff, _ := os.OpenFile(f.Name(), os.O_RDWR, 0644)
-		ff.Close()
+		_ = ff.Close()
 		return nil, ff
 	}
 	defer func() { _ = os.Remove(f.Name()) }()
@@ -338,7 +338,7 @@ func TestPidLockLockWritePidError(t *testing.T) {
 	// Keep file open for Lock to succeed
 	openFileFn = func() (error, *os.File) { return nil, f }
 	writePidFn = func(*os.File) error { return errors.New("write fail") }
-	defer func() { _ = os.Remove(f.Name()); f.Close() }()
+	defer func() { _ = os.Remove(f.Name()); _ = f.Close() }()
 	if err := (&PidLock{}).Lock(); err == nil || err.Error() != "write fail" {
 		t.Fatalf("expected write fail, got %v", err)
 	}
@@ -379,7 +379,7 @@ func TestLockIntegrationContended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
+	_ = f.Close()
 	cmd := exec.Command(os.Args[0], "-test.run=^$", "-test.count=1")
 	cmd.Env = append(os.Environ(), "TEST_LOCK_CHILD=1", "TEST_LOCK_PATH="+path)
 	if err := cmd.Start(); err != nil {
@@ -391,7 +391,7 @@ func TestLockIntegrationContended(t *testing.T) {
 		_ = os.Remove(path + ".locked")
 	}()
 	// Wait for child to acquire lock (signal file)
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if _, err := os.Stat(path + ".locked"); err == nil {
 			break
 		}
@@ -401,7 +401,7 @@ func TestLockIntegrationContended(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f2.Close()
+	defer func() { _ = f2.Close() }()
 	var l Lock
 	err = l.Lock(f2)
 	if err == nil {

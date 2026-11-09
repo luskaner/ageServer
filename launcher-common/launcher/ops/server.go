@@ -31,7 +31,7 @@ type processedServer struct {
 	label string
 }
 
-func processedServers(r launcher.Reporter, gameTitle string, servers map[uuid.UUID]*server.AnnounceMessage) []*processedServer {
+func processedServers(gameTitle string, servers map[uuid.UUID]*server.AnnounceMessage) []*processedServer {
 	var processed []*processedServer
 	for serverId, data := range servers {
 		_, measuredIPs, internalData := server.FilterServerIPs(serverId, "", gameTitle, data.IpAddrs)
@@ -121,7 +121,7 @@ func DiscoverServersAndSelectBestIpAddr(r launcher.Reporter, stdin io.Reader, ga
 		search.Stop()
 	}
 	if len(servers) > 0 {
-		if procServers := processedServers(r, gameTitle, servers); len(procServers) > 0 {
+		if procServers := processedServers(gameTitle, servers); len(procServers) > 0 {
 			idx, ok := selectDiscoveredServer(r, procServers, singleAutoSelect, stdin)
 			if i := usableServerIndex(idx, ok, len(procServers)); i >= 0 {
 				selectedServer := procServers[i]

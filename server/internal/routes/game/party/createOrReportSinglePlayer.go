@@ -49,7 +49,7 @@ const singlePlayerMatchIDAttempts = 100
 func newSinglePlayerMatchID(history models.MatchHistory) int64 {
 	singlePlayerMatchIDMu.Lock()
 	defer singlePlayerMatchIDMu.Unlock()
-	for attempt := 0; attempt < singlePlayerMatchIDAttempts; attempt++ {
+	for range singlePlayerMatchIDAttempts {
 		id := time.Now().UnixMicro() & 0x7fffffff
 		if id == 0 || history.HasMatch(id) {
 			continue
@@ -150,7 +150,7 @@ func CreateOrReportSinglePlayer(w http.ResponseWriter, r *http.Request) {
 	reportSinglePlayerMatch(w, r, history, &req, profileID, profile)
 }
 
-func createSinglePlayerMatch(w http.ResponseWriter, r *http.Request, history models.MatchHistory, req *createOrReportSinglePlayerRequest, profile i.A) {
+func createSinglePlayerMatch(w http.ResponseWriter, _ *http.Request, history models.MatchHistory, req *createOrReportSinglePlayerRequest, profile i.A) {
 	matchID := newSinglePlayerMatchID(history)
 	matchKey := newSinglePlayerMatchKey()
 	history.RecordPendingMatch(models.MatchResult{

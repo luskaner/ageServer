@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/luskaner/ageServer/common/battleServer"
 )
 
 // -------------------------------------------------------------------
@@ -98,7 +96,7 @@ func TestConfigurationGetGameHosts(t *testing.T) {
 }
 
 func TestConfigurationGetGameBattleServers(t *testing.T) {
-	bs := BattleServer{Base: battleServer.Base{Region: "r1", IPv4: "127.0.0.1", BsPort: 1000, WebSocketPort: 1001}}
+	bs := BattleServer{Region: "r1", IPv4: "127.0.0.1", BsPort: 1000, WebSocketPort: 1001}
 	cfg := &Configuration{
 		Games: Games{
 			Age1: Game{BattleServers: []BattleServer{bs}},
@@ -265,7 +263,7 @@ func TestSafeMapBasic(t *testing.T) {
 	}
 	// Iter break early
 	count = 0
-	for k, _ := range m.Iter() {
+	for k := range m.Iter() {
 		_ = k
 		count++
 		break
@@ -323,7 +321,7 @@ func TestReadOnlyOrderedMap(t *testing.T) {
 	}
 	// Iter order should be b, a
 	var order []string
-	for k, _ := range m.Iter() {
+	for k := range m.Iter() {
 		order = append(order, k)
 	}
 	if order[0] != "b" || order[1] != "a" {
@@ -587,9 +585,9 @@ func TestRngAndRootSignal(t *testing.T) {
 func TestGetGameBattleServersAllGames(t *testing.T) {
 	cfg := &Configuration{
 		Games: Games{
-			Age3:   Game{BattleServers: []BattleServer{{Base: battleServer.Base{Region: "r3"}}}},
-			Age4:   Game{BattleServers: []BattleServer{{Base: battleServer.Base{Region: "r4"}}}},
-			Athens: Game{BattleServers: []BattleServer{{Base: battleServer.Base{Region: "ath"}}}},
+			Age3:   Game{BattleServers: []BattleServer{{Region: "r3"}}},
+			Age4:   Game{BattleServers: []BattleServer{{Region: "r4"}}},
+			Athens: Game{BattleServers: []BattleServer{{Region: "ath"}}},
 		},
 	}
 	if len(cfg.GetGameBattleServers("age3")) != 1 {

@@ -156,7 +156,7 @@ func TestHandleWebSocketFullFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	defer client.NetConn().Close()
+	defer func() { _ = client.NetConn().Close() }()
 
 	// Login con sessionToken válido.
 	login := fmt.Sprintf(`{"operation":0,"sessionToken":"%s"}`, sid)
@@ -180,7 +180,7 @@ func TestHandleWebSocketFullFlow(t *testing.T) {
 	_ = client.WriteMessage(gws.OpcodeText, []byte(`{"operation":3}`))
 
 	// Cerrar el cliente; el servidor debe romper el bucle y limpiar la conexión.
-	client.NetConn().Close()
+	_ = client.NetConn().Close()
 
 	deadline = time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

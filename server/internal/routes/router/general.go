@@ -8,8 +8,8 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/luskaner/ageServer/server/internal"
 	cacertPem "github.com/luskaner/ageServer/server/internal/routes/cacert.pem"
-	sigkeyder "github.com/luskaner/ageServer/server/internal/routes/sigkeyder"
 	"github.com/luskaner/ageServer/server/internal/routes/shutdown"
+	"github.com/luskaner/ageServer/server/internal/routes/sigkeyder"
 	"github.com/luskaner/ageServer/server/internal/routes/test"
 )
 

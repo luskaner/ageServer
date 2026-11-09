@@ -7,11 +7,11 @@ import (
 
 func TestDecodeInvalidJSON(t *testing.T) {
 	tmp, _ := os.CreateTemp(t.TempDir(), "log*.json")
-	tmp.Write([]byte("not json\n"))
-	tmp.Close()
+	_, _ = tmp.Write([]byte("not json\n"))
+	_ = tmp.Close()
 	f, _ := os.Open(tmp.Name())
 	err := Decode(f)
-	f.Close()
+	_ = f.Close()
 	if err == nil {
 		t.Fatal("should fail on invalid json")
 	}
@@ -19,11 +19,11 @@ func TestDecodeInvalidJSON(t *testing.T) {
 
 func TestDecodeUnknownType(t *testing.T) {
 	tmp, _ := os.CreateTemp(t.TempDir(), "log*.json")
-	tmp.Write([]byte(`{"type":"unknown"}` + "\n"))
-	tmp.Close()
+	_, _ = tmp.Write([]byte(`{"type":"unknown"}` + "\n"))
+	_ = tmp.Close()
 	f, _ := os.Open(tmp.Name())
 	err := Decode(f)
-	f.Close()
+	_ = f.Close()
 	if err == nil {
 		t.Fatal("should fail on unknown type")
 	}
@@ -35,23 +35,23 @@ func TestDecodeUnknownType(t *testing.T) {
 
 func TestDecodeEmpty(t *testing.T) {
 	tmp, _ := os.CreateTemp(t.TempDir(), "log*.json")
-	tmp.Close()
+	_ = tmp.Close()
 	f, _ := os.Open(tmp.Name())
 	if err := Decode(f); err != nil {
 		t.Fatalf("empty should not error, got %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 }
 
 func TestDecodeRequestInvalidJSON(t *testing.T) {
 	tmp, _ := os.CreateTemp(t.TempDir(), "log*.json")
 	// Write a valid MessageType for request, but invalid request JSON (missing required fields, but json unmarshal will still succeed? Let's make it invalid json for request)
-	tmp.Write([]byte(`{"type":"request"}` + "\n"))
-	tmp.Write([]byte(`{"type":"request","in":{bad json}` + "\n"))
-	tmp.Close()
+	_, _ = tmp.Write([]byte(`{"type":"request"}` + "\n"))
+	_, _ = tmp.Write([]byte(`{"type":"request","in":{bad json}` + "\n"))
+	_ = tmp.Close()
 	f, _ := os.Open(tmp.Name())
 	err := Decode(f)
-	f.Close()
+	_ = f.Close()
 	if err == nil {
 		t.Fatal("should fail on invalid request json")
 	}
