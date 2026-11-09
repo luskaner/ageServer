@@ -106,6 +106,3 @@ func TestRunFallsBackToThisPackagesStorage(t *testing.T) {
 		t.Fatalf("the run asked about game %q, want the one BindFlags wrote (%q)", asked, "age2")
 	}
 }
-
-//go:fix inline
-func ptr[T any](v T) *T { return new(v) }

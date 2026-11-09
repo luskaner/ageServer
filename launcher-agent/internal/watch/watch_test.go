@@ -31,13 +31,13 @@ func TestHelperProcessSleep(t *testing.T) {
 
 func spawnSleeper(t *testing.T, ms int) *os.Process {
 	t.Helper()
-	cmd := osexec.Command(os.Args[0], "-test.run=TestHelperProcessSleep$", "-test.v")
-	cmd.Env = append(os.Environ(), "GO_WATCH_HELPER=1", "SLEEP_MS="+strconv.Itoa(ms))
-	if err := cmd.Start(); err != nil {
+	proc := osexec.Command(os.Args[0], "-test.run=TestHelperProcessSleep$", "-test.v")
+	proc.Env = append(os.Environ(), "GO_WATCH_HELPER=1", "SLEEP_MS="+strconv.Itoa(ms))
+	if err := proc.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill() })
-	return cmd.Process
+	t.Cleanup(func() { _ = proc.Process.Kill() })
+	return proc.Process
 }
 
 func TestWaitForProcessesToExitWaitsForAll(t *testing.T) {

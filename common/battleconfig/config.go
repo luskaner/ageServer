@@ -135,17 +135,6 @@ func ValidatePorts(ports PortConfig) error {
 	return nil
 }
 
-// IsPortAvailable checks if a TCP port is available for binding.
-func IsPortAvailable(port int) bool {
-	address := net.JoinHostPort(netip.IPv4Unspecified().String(), strconv.Itoa(port))
-	l, err := net.Listen("tcp", address)
-	if err != nil {
-		return false
-	}
-	_ = l.Close()
-	return true
-}
-
 // ConfigBuilder helps build a battleServer.Config with common settings.
 type ConfigBuilder struct {
 	GameID           string

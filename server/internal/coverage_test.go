@@ -263,7 +263,7 @@ func TestSafeMapBasic(t *testing.T) {
 	}
 	// Iter break early
 	count = 0
-	for k, _ := range m.Iter() {
+	for k := range m.Iter() {
 		_ = k
 		count++
 		break
@@ -321,7 +321,7 @@ func TestReadOnlyOrderedMap(t *testing.T) {
 	}
 	// Iter order should be b, a
 	var order []string
-	for k, _ := range m.Iter() {
+	for k := range m.Iter() {
 		order = append(order, k)
 	}
 	if order[0] != "b" || order[1] != "a" {
