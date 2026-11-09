@@ -156,7 +156,7 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 	game.resources.Initialize(gameId, opts.Resources)
 	// Extract challenges.json from resources for games with challenge progress
 	if mainUsers, ok := game.users.(*MainUsers); ok && mainUsers != nil {
-		if challengesData, ok := game.resources.SignedAssets()["challenges.json"]; ok {
+		if challengesData := ChallengeDefinitionsData(game.resources); challengesData != nil {
 			mainUsers.challengesData = challengesData
 			// Tell the upgrader which JSON format this game uses
 			mainUsers.challengesFormat = getChallengeFormat(gameId)
@@ -305,10 +305,19 @@ func (g *MainGame) CustomFiles() CustomFiles {
 
 // getChallengeFormat returns the JSON format used by a game's challenges.json.
 func getChallengeFormat(gameId string) ChallengeFormat {
+	return ChallengeFormatForGame(gameId)
+}
+
+// ChallengeFormatForGame returns the JSON format used by a game's
+// challenges.json.
+func ChallengeFormatForGame(gameId string) ChallengeFormat {
 	switch gameId {
 	case "age4":
 		return FormatAoE4
-	case "age2", "athens": // AoE II and AoM (Athens) use flat array format
+	case "age2", "athens":
+		// Historical flat-array layout. Current resources wrap the definitions
+		// like AoE IV, and decodeChallengeRows accepts both; this only selects
+		// which layout is tried first.
 		return FormatFlatArray
 	default:
 		return FormatAoE4 // default to AoE4 format

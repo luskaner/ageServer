@@ -50,11 +50,16 @@ func (f *fakeResources) Initialize(_ string, _ *models.ResourcesOpts) {
 	// Provide empty but correctly shaped structures to avoid nil panics in handlers.
 	f.signedAssets["itemDefinitions.json"] = []byte(`{"itemCategories":[],"itemDefinitions":[]}`)
 	f.signatures["itemDefinitions.json"] = "fake"
-	// challenges.json for AoE IV challenge progress loading
+	// challenges.json for AoE IV challenge progress loading. The regular
+	// resource loader decodes it into arrayFiles (it is not a keyed asset), so
+	// keep it there to exercise the production path.
 	// Format: [result, seasons, definitions, signature]
-	// definitions is an array of challenge definition arrays, first element is definition ID
-	f.signedAssets["challenges.json"] = []byte(`[0,[],[[1,"test_challenge","","Test","Desc",null,1,"{}",-1,-1,2009,1000]],"fake"]`)
-	f.signatures["challenges.json"] = "fake"
+	// A definition is a 13-field row: [definitionID, seasonID, name, "",
+	// displayName, description, extraDescription, target, metadataJSON,
+	// achievementID, nextDefinitionID, rewardOrderID, rewardXP].
+	f.arrayFiles["challenges.json"] = i.A{0, i.A{}, i.A{i.A{
+		1, 1, "test_challenge", "", "Test", "Desc", "", 1, "{}", -1, -1, -1, 1000,
+	}}, "fake"}
 	// leaderboards.json must have at least 9 elements where index 8 is avatarStats array
 	f.arrayFiles["leaderboards.json"] = i.A{i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}}
 	// itemLocations: empty list means no locations, loop does zero iterations -> safe

@@ -88,6 +88,9 @@ type Users interface {
 	GetOrCreateUser(gameId string, itemDefinitions Items, avatarStatsDefinitions AvatarStatDefinitions, remoteAddr string, remoteMacAddress string, isXbox bool, platformUserId uint64, alias string) User
 	GetUserByStatGroupID(statGroupID int32) (User, bool)
 	GetUserById(id int32) (User, bool)
+	// GetUserByProfileId returns the user with the given profile ID, which is
+	// how the routes that take a profile_id identify a profile.
+	GetUserByProfileId(profileId int32) (User, bool)
 	GetUserIds() func(func(int32) bool)
 	EncodeProfileInfo(definitions PresenceDefinitions, matches func(user User) bool, clientLibVersion uint16) []i.A
 	GetUserByPlatformUserId(xbox bool, id uint64) (User, bool)
@@ -202,8 +205,9 @@ func (users *MainUsers) Generate(gameId string, persistentData *PersistentString
 		if challengeProgress != nil {
 			// Reconcile the saved progress with the challenges of the current
 			// resources on every user load: definitions added by a resource
-			// update are included and IDs stay sequential, while the progress
-			// the client already reported is kept.
+			// update are included, IDs stay sequential, and any challenge a
+			// profile still had pending is unlocked, so profiles created by an
+			// older build end up completed too.
 			upgrader := NewChallengeProgressUpgradableDefaultData(users.challengesData, users.challengesFormat)
 			if err := challengeProgress.WithReadWrite(func(data *[]ChallengeProgress) error {
 				*data = reconcileChallengeProgress(*data, upgrader)
@@ -347,6 +351,12 @@ func (users *MainUsers) GetUserByStatGroupID(statGroupID int32) (User, bool) {
 
 func (users *MainUsers) GetUserById(id int32) (User, bool) {
 	return users.getFirst(func(u User) bool { return u.GetId() == id })
+}
+
+// GetUserByProfileId returns the user with the given profile ID. The client
+// identifies profiles by this ID in the routes that take a profile_id.
+func (users *MainUsers) GetUserByProfileId(profileId int32) (User, bool) {
+	return users.getFirst(func(u User) bool { return u.GetProfileId() == profileId })
 }
 
 func (users *MainUsers) GetUserByPlatformUserId(xbox bool, id uint64) (User, bool) {

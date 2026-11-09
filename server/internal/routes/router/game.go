@@ -85,8 +85,7 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 		ChallengeGroup.HandleFunc("GET", "/getChallengeProgress", challenge.GetChallengeProgress)
 	}
 	if gameId == game.AoE4 {
-		// FIXME: Implement as a separate route
-		ChallengeGroup.HandleFunc("GET", "/getChallengeProgressByProfileID", challenge.GetChallengeProgress)
+		ChallengeGroup.HandleFunc("GET", "/getChallengeProgressByProfileID", challenge.GetChallengeProgressByProfileID)
 	}
 	ChallengeGroup.HandleFunc("GET", "/getChallenges", challenge.GetChallenges)
 
