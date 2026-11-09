@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/common/battleServer"
+	"github.com/luskaner/ageServer/common/bytesize"
 	"github.com/luskaner/ageServer/common/cmd"
 	commonLogger "github.com/luskaner/ageServer/common/logger"
 	"github.com/luskaner/ageServer/common/paths"
@@ -571,9 +571,45 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 	return &c, usedFile
 }
 
+// sizeLimits are the parsed MaxFileSize/MaxTotalSize/Expiry triple shared by the
+// CustomFiles and Replays sections.
+type sizeLimits struct {
+	maxFileSize  int64
+	maxTotalSize int64
+	expiry       time.Duration
+}
+
+// resolveSizeLimits parses and cross-checks the MaxFileSize/MaxTotalSize/Expiry
+// triple shared by the CustomFiles and Replays sections. Sizes accept the usual
+// B/KB/MB/GB suffixes; the TTL is a Go duration such as 12h or 5m. Expiry <= 0 is
+// left to the caller: CustomFiles rejects it, Replays reads it as "keep forever".
+func resolveSizeLimits(maxFileSizeRaw, maxTotalSizeRaw, expiryRaw string) (sizeLimits, error) {
+	maxFileSize, err := bytesize.Parse(maxFileSizeRaw)
+	if err != nil {
+		return sizeLimits{}, fmt.Errorf("MaxFileSize: %w", err)
+	}
+	maxTotalSize, err := bytesize.Parse(maxTotalSizeRaw)
+	if err != nil {
+		return sizeLimits{}, fmt.Errorf("MaxTotalSize: %w", err)
+	}
+	if maxFileSize <= 0 {
+		return sizeLimits{}, fmt.Errorf("MaxFileSize must be greater than zero")
+	}
+	if maxTotalSize <= 0 {
+		return sizeLimits{}, fmt.Errorf("MaxTotalSize must be greater than zero")
+	}
+	if maxFileSize > maxTotalSize {
+		return sizeLimits{}, fmt.Errorf("MaxFileSize (%d) must not exceed MaxTotalSize (%d)", maxFileSize, maxTotalSize)
+	}
+	expiry, err := time.ParseDuration(strings.TrimSpace(expiryRaw))
+	if err != nil {
+		return sizeLimits{}, fmt.Errorf("expiry: %w", err)
+	}
+	return sizeLimits{maxFileSize: maxFileSize, maxTotalSize: maxTotalSize, expiry: expiry}, nil
+}
+
 // applyCustomFilesConfig validates the CustomFiles section and publishes the
-// resolved values in the internal runtime globals. Sizes accept the usual
-// B/KB/MB/GB suffixes; the TTL is a Go duration such as 12h or 5m.
+// resolved values in the internal runtime globals.
 func applyCustomFilesConfig(cfg *internal.Configuration) error {
 	internal.CustomFilesEnabled = cfg.CustomFiles.Enabled
 	internal.CustomFilesFolder = cfg.CustomFiles.Folder
@@ -582,98 +618,33 @@ func applyCustomFilesConfig(cfg *internal.Configuration) error {
 		// typo in them must not stop a server that does not use the feature.
 		return nil
 	}
-	maxFileSize, err := parseByteSize(cfg.CustomFiles.MaxFileSize)
+	limits, err := resolveSizeLimits(cfg.CustomFiles.MaxFileSize, cfg.CustomFiles.MaxTotalSize, cfg.CustomFiles.Expiry)
 	if err != nil {
-		return fmt.Errorf("MaxFileSize: %w", err)
+		return err
 	}
-	maxTotalSize, err := parseByteSize(cfg.CustomFiles.MaxTotalSize)
-	if err != nil {
-		return fmt.Errorf("MaxTotalSize: %w", err)
+	if limits.expiry <= 0 {
+		return fmt.Errorf("expiry must be greater than zero")
 	}
-	if maxFileSize <= 0 {
-		return fmt.Errorf("MaxFileSize must be greater than zero")
-	}
-	if maxTotalSize <= 0 {
-		return fmt.Errorf("MaxTotalSize must be greater than zero")
-	}
-	if maxFileSize > maxTotalSize {
-		return fmt.Errorf("MaxFileSize (%d) must not exceed MaxTotalSize (%d)", maxFileSize, maxTotalSize)
-	}
-	expiry, err := time.ParseDuration(strings.TrimSpace(cfg.CustomFiles.Expiry))
-	if err != nil {
-		return fmt.Errorf("Expiry: %w", err)
-	}
-	if expiry <= 0 {
-		return fmt.Errorf("Expiry must be greater than zero")
-	}
-	internal.CustomFilesMaxFileSize = maxFileSize
-	internal.CustomFilesMaxTotalSize = maxTotalSize
-	internal.CustomFilesExpiry = expiry
+	internal.CustomFilesMaxFileSize = limits.maxFileSize
+	internal.CustomFilesMaxTotalSize = limits.maxTotalSize
+	internal.CustomFilesExpiry = limits.expiry
 	return nil
 }
 
-func parseByteSize(value string) (int64, error) {
-	value = strings.ToUpper(strings.TrimSpace(value))
-	if value == "" {
-		return 0, errors.New("empty size")
-	}
-	units := []struct {
-		suffix     string
-		multiplier int64
-	}{
-		{"GB", 1 << 30},
-		{"G", 1 << 30},
-		{"MB", 1 << 20},
-		{"M", 1 << 20},
-		{"KB", 1 << 10},
-		{"K", 1 << 10},
-		{"B", 1},
-	}
-	for _, unit := range units {
-		if before, ok := strings.CutSuffix(value, unit.suffix); ok {
-			number := strings.TrimSpace(before)
-			n, err := strconv.ParseInt(number, 10, 64)
-			if err != nil {
-				return 0, err
-			}
-			return n * unit.multiplier, nil
-		}
-	}
-	return strconv.ParseInt(value, 10, 64)
-}
-
-// applyReplaysConfig validates the Replays section and publishes
-// the resolved values in the internal runtime globals. Sizes accept the usual
-// B/KB/MB/GB suffixes; the TTL is a Go duration such as 12h or 5m.
+// applyReplaysConfig validates the Replays section and publishes the resolved
+// values in the internal runtime globals.
 func applyReplaysConfig(cfg *internal.Configuration) error {
 	internal.ReplaysEnabled = cfg.Replays.Enabled
 	if !cfg.Replays.Enabled {
 		return nil
 	}
-	maxFileSize, err := parseByteSize(cfg.Replays.MaxFileSize)
+	limits, err := resolveSizeLimits(cfg.Replays.MaxFileSize, cfg.Replays.MaxTotalSize, cfg.Replays.Expiry)
 	if err != nil {
-		return fmt.Errorf("MaxFileSize: %w", err)
-	}
-	maxTotalSize, err := parseByteSize(cfg.Replays.MaxTotalSize)
-	if err != nil {
-		return fmt.Errorf("MaxTotalSize: %w", err)
-	}
-	if maxFileSize <= 0 {
-		return fmt.Errorf("MaxFileSize must be greater than zero")
-	}
-	if maxTotalSize <= 0 {
-		return fmt.Errorf("MaxTotalSize must be greater than zero")
-	}
-	if maxFileSize > maxTotalSize {
-		return fmt.Errorf("MaxFileSize (%d) must not exceed MaxTotalSize (%d)", maxFileSize, maxTotalSize)
-	}
-	expiry, err := time.ParseDuration(strings.TrimSpace(cfg.Replays.Expiry))
-	if err != nil {
-		return fmt.Errorf("expiry: %w", err)
+		return err
 	}
 	// Expiry <= 0 means keep forever (no TTL-based expiration)
-	internal.ReplaysMaxFileSize = maxFileSize
-	internal.ReplaysMaxTotalSize = maxTotalSize
-	internal.ReplaysExpiry = expiry
+	internal.ReplaysMaxFileSize = limits.maxFileSize
+	internal.ReplaysMaxTotalSize = limits.maxTotalSize
+	internal.ReplaysExpiry = limits.expiry
 	return nil
 }

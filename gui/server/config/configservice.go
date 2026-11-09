@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luskaner/ageServer/common/bytesize"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -932,8 +933,8 @@ func validateCustomFiles(config *Configuration) []ValidationError {
 		})
 	}
 
-	maxFileSize, fileSizeErr := parseByteSize(config.CustomFiles.MaxFileSize)
-	maxTotalSize, totalSizeErr := parseByteSize(config.CustomFiles.MaxTotalSize)
+	maxFileSize, fileSizeErr := bytesize.Parse(config.CustomFiles.MaxFileSize)
+	maxTotalSize, totalSizeErr := bytesize.Parse(config.CustomFiles.MaxTotalSize)
 	fileSizeValid := true
 	totalSizeValid := true
 	if fileSizeErr != nil {
@@ -990,8 +991,8 @@ func validateReplays(config *Configuration) []ValidationError {
 		return nil
 	}
 	var validationErrors []ValidationError
-	maxFileSize, fileSizeErr := parseByteSize(config.Replays.MaxFileSize)
-	maxTotalSize, totalSizeErr := parseByteSize(config.Replays.MaxTotalSize)
+	maxFileSize, fileSizeErr := bytesize.Parse(config.Replays.MaxFileSize)
+	maxTotalSize, totalSizeErr := bytesize.Parse(config.Replays.MaxTotalSize)
 	fileSizeValid := true
 	totalSizeValid := true
 	if fileSizeErr != nil {
@@ -1094,38 +1095,6 @@ func validateEmbeddedBattleServers(config *Configuration) []ValidationError {
 		}
 	}
 	return validationErrors
-}
-
-// parseByteSize mirrors the server's size parser: a plain byte count or an
-// integer followed by B, KB, MB or GB.
-func parseByteSize(value string) (int64, error) {
-	value = strings.ToUpper(strings.TrimSpace(value))
-	if value == "" {
-		return 0, errors.New("empty size")
-	}
-	units := []struct {
-		suffix     string
-		multiplier int64
-	}{
-		{"GB", 1 << 30},
-		{"G", 1 << 30},
-		{"MB", 1 << 20},
-		{"M", 1 << 20},
-		{"KB", 1 << 10},
-		{"K", 1 << 10},
-		{"B", 1},
-	}
-	for _, unit := range units {
-		if before, ok := strings.CutSuffix(value, unit.suffix); ok {
-			number := strings.TrimSpace(before)
-			n, err := strconv.ParseInt(number, 10, 64)
-			if err != nil {
-				return 0, err
-			}
-			return n * unit.multiplier, nil
-		}
-	}
-	return strconv.ParseInt(value, 10, 64)
 }
 
 // hostOwner is a host of a game, with the position it holds in its list.
