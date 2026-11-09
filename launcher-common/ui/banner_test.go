@@ -18,7 +18,7 @@ func TestBannerFitsTheConsole(t *testing.T) {
 			if strings.TrimSpace(got) == "" {
 				t.Fatalf("columns %d tier %d printed nothing", columns, tier)
 			}
-			for _, l := range strings.Split(strings.TrimSpace(got), "\n") {
+			for l := range strings.SplitSeq(strings.TrimSpace(got), "\n") {
 				if w := lineWidth(l); w > columns {
 					t.Errorf("columns %d tier %d: a %d cell line does not fit: %q", columns, tier, w, l)
 				}
@@ -88,7 +88,7 @@ func TestBannerIsNotDoubleIndented(t *testing.T) {
 	got := StripANSI(render(t, at(colorprofile.NoTTY, TierASCII, 80), func() {
 		Banner("AGE SERVER", "v1.4.0")
 	}))
-	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSuffix(got, "\n"), "\n") {
 		if line == "" {
 			continue
 		}

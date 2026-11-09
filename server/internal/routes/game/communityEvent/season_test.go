@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -145,7 +145,7 @@ func TestAoE4CommunityEventsPublishesAnActiveSeason(t *testing.T) {
 	for _, bases := range baseByEvent {
 		allBases = append(allBases, bases...)
 	}
-	sort.Slice(allBases, func(a, b int) bool { return allBases[a] < allBases[b] })
+	slices.Sort(allBases)
 	want := []int32{1, 2, 3, 4, 214, 220, 226, 232}
 	if len(allBases) != len(want) {
 		t.Fatalf("active season base ladders = %v, want %v", allBases, want)

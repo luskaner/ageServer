@@ -1,8 +1,7 @@
 package models
 
 import (
-	"sort"
-	"strconv"
+	"slices"
 
 	"github.com/luskaner/ageServer/common/game"
 	i "github.com/luskaner/ageServer/server/internal"
@@ -137,7 +136,7 @@ func (l *MainLeaderboardDefinitions) LadderIDs() []int32 {
 	for id := range l.ladders {
 		ids = append(ids, id)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	slices.Sort(ids)
 	return ids
 }
 
@@ -157,17 +156,6 @@ func DefaultLeaderboardFor(gameId string) int32 {
 	default:
 		return SoloRMRanked
 	}
-}
-
-// LadderName renders a ladder id for logs (the client always uses ids).
-func LadderName(definitions LeaderboardDefinitions, id int32) string {
-	if definitions == nil {
-		return strconv.Itoa(int(id))
-	}
-	if name, ok := definitions.LadderDefinitions()[id]; ok {
-		return name
-	}
-	return strconv.Itoa(int(id))
 }
 
 type AvatarStatDefinitions interface {

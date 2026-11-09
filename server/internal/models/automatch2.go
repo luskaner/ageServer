@@ -341,7 +341,7 @@ func (mm *MainMatchmaking) Initialize(game Game) {
 		return
 	}
 	title := game.Title()
-	catalog, err := LoadQueueCatalog(title, game.Resources(), game.LeaderboardDefinitions())
+	catalog, err := loadQueueCatalog(title, game.Resources(), game.LeaderboardDefinitions())
 	if err != nil {
 		// A broken catalog disables QM for that title instead of pairing the
 		// wrong mode. The error is loud and the rest of the server keeps
@@ -480,7 +480,7 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 	entry.SearchState = 1
 	mm.queue[userID] = entry
 
-	if match := mm.tryCreateMatchLocked(entry, matchTypes); match != nil {
+	if match := mm.tryCreateMatchLocked(entry); match != nil {
 		if entry.UserID == match.HostID {
 			if response, ok := mm.matchedResponseLocked(entry, match, r); ok {
 				return response, nil
@@ -507,7 +507,10 @@ func matchHasUser(match *automatchMatch, userID int32) bool {
 // tryCreateMatchLocked is the deterministic matching rule of §4.3: resolve the
 // polling group against the catalog, then assemble complete groups FIFO until
 // the queue is full. It never pairs two known but different queues.
-func (mm *MainMatchmaking) tryCreateMatchLocked(entry *automatchQueueEntry, matchTypes []int32) *automatchMatch {
+//
+// The queues the entry accepts are already recorded in entry.MatchTypes before
+// this runs, so the entry is the single source of that filter.
+func (mm *MainMatchmaking) tryCreateMatchLocked(entry *automatchQueueEntry) *automatchMatch {
 	if mm.catalog == nil {
 		return nil
 	}
@@ -709,12 +712,7 @@ func groupContainsEntry(group *automatchPartyGroup, entry *automatchQueueEntry) 
 	if group == nil || entry == nil {
 		return false
 	}
-	for _, member := range group.Entries {
-		if member == entry {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(group.Entries, entry)
 }
 
 func groupSupportsQueue(group *automatchPartyGroup, queueID int32) bool {

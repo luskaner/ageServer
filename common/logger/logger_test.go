@@ -77,7 +77,7 @@ func TestCloseFileLogDumpsBufferSafely(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 500; i++ {
+			for i := range 500 {
 				Printf("concurrent line %d", i)
 			}
 		}()

@@ -44,7 +44,6 @@ func repoRoot(t *testing.T) string {
 func TestNoLiteralGlyphsOutsideTheCatalogue(t *testing.T) {
 	root := repoRoot(t)
 	for _, module := range inScopeModules {
-		module := module
 		t.Run(module, func(t *testing.T) {
 			if module == "launcher-common" {
 				t.Skip("the catalogue itself lives here")

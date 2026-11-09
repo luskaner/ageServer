@@ -32,17 +32,18 @@ var Authentication string
 // unrated 1v1 Random Map fallback described in docs/matchmaking.md §4.1.
 var AutomatchAssumeQueue string
 
-// CustomFiles holds the resolved /api/MatchContent/ configuration. Set once at
-// startup, before any game is created, so both the model and the HTTP handlers
-// see the same values without dragging the whole config around.
+// CustomFilesEnabled and the fields below hold the resolved /api/MatchContent/
+// configuration. Set once at startup, before any game is created, so both the
+// model and the HTTP handlers see the same values without dragging the whole
+// config around.
 var CustomFilesEnabled bool
 var CustomFilesFolder string
 var CustomFilesMaxFileSize int64
 var CustomFilesMaxTotalSize int64
 var CustomFilesExpiry time.Duration
 
-// Replays holds the resolved replay upload configuration.
-// Set once at startup.
+// ReplaysEnabled and the fields below hold the resolved replay upload
+// configuration. Set once at startup.
 var ReplaysEnabled bool
 var ReplaysMaxFileSize int64
 var ReplaysMaxTotalSize int64

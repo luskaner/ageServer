@@ -41,7 +41,7 @@ func TestRunReadsItsOptionsFromTheFrontendStorage(t *testing.T) {
 	installValues(t, launcher.Values{
 		ConfigFile:     new(string),
 		GameConfigFile: new(string),
-		GameID:         ptr("age2"),
+		GameID:         new("age2"),
 		Output:         new(string),
 	})
 	var asked string
@@ -107,4 +107,5 @@ func TestRunFallsBackToThisPackagesStorage(t *testing.T) {
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
+//go:fix inline
+func ptr[T any](v T) *T { return new(v) }

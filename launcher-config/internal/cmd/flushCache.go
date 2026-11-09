@@ -27,7 +27,9 @@ func runFlushCache(args []string) (err error, exitCode int) {
 		}
 	}()
 	if flushCacheValues.LogRoot != "" {
-		initializeFn(flushCacheValues.LogRoot)
+		if initErr := initializeFn(flushCacheValues.LogRoot); initErr != nil {
+			commonLogger.Println(commonUi.Fail("Failed to initialize file logging: %s", initErr))
+		}
 	}
 	if flushCacheValues.IPs || flushCacheValues.Certs {
 		if isAdminFn() {

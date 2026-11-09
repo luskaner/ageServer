@@ -230,14 +230,6 @@ func ConfigRevert(gameId string, logRoot string, headless bool, out io.Writer, o
 	return Default.ConfigRevert(gameId, logRoot, headless, out, optionsFn, runRevertFn)
 }
 
-func RequiresAdminElevation(bin bool) bool {
-	return Default.RequiresAdminElevation(bin)
-}
-
-func RevertRequiresAdminElevation(args []string, bin bool) bool {
-	return Default.RevertRequiresAdminElevation(args, bin)
-}
-
 func RunRevert(flags []string, bin bool, out io.Writer, optionsFn func(options *exec.Options)) (result *exec.Result) {
 	return Default.RunRevert(flags, bin, out, optionsFn)
 }

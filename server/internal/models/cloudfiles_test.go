@@ -119,7 +119,7 @@ func TestPutPublishesAndFindReplayFinds(t *testing.T) {
 	if !ok {
 		t.Fatal("Open failed for a published replay")
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	content, err := io.ReadAll(reader)
 	if err != nil || string(content) != "replay-bytes" || file.Length != len(content) {
 		t.Fatalf("Open = %+v, %q, %v", file, content, err)
@@ -367,14 +367,14 @@ func TestConcurrentPutAndReadsAreRaceFree(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for idx := 0; idx < 200; idx++ {
+		for range 200 {
 			_, _ = store.Get("builtin/_data.txt")
 			for range store.Values() {
 			}
 			_, _, _ = store.GetByKey("game/abc")
 		}
 	}()
-	for idx := 0; idx < 50; idx++ {
+	for idx := range 50 {
 		key := "replays/" + strconv.Itoa(idx) + "/0/x.gz"
 		if _, err := writeReplay(store, key, "payload"); err != nil {
 			t.Fatalf("Put: %v", err)

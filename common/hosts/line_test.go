@@ -15,7 +15,7 @@ func TestParseLineMapping(t *testing.T) {
 	if !l.IP().Equal(net.ParseIP("1.2.3.4")) {
 		t.Fatalf("IP = %v", l.IP())
 	}
-	if hosts := l.Hosts(); len(hosts) != 1 || hosts[0] != Host("example.com") {
+	if hosts := l.Hosts(); len(hosts) != 1 || hosts[0] != "example.com" {
 		t.Fatalf("Hosts = %v", hosts)
 	}
 	if l.OnlyComments() {
@@ -149,20 +149,20 @@ func TestLineStringFormat(t *testing.T) {
 func TestHostMappingsCRUD(t *testing.T) {
 	m := HostMappings{}
 	ip := net.ParseIP("127.0.0.1")
-	m.Set(Host("a.test"), ip)
-	got, ok := m.Get(Host("a.test"))
+	m.Set("a.test", ip)
+	got, ok := m.Get("a.test")
 	if !ok || !got.Equal(ip) {
 		t.Fatalf("Get after Set = %v, %v", got, ok)
 	}
-	m.Delete(Host("a.test"))
-	if _, ok := m.Get(Host("a.test")); ok {
+	m.Delete("a.test")
+	if _, ok := m.Get("a.test"); ok {
 		t.Fatal("Delete did not remove entry")
 	}
 }
 
 func TestHostMappingsString(t *testing.T) {
 	m := HostMappings{}
-	m.Set(Host("a.test"), net.ParseIP("127.0.0.2"))
+	m.Set("a.test", net.ParseIP("127.0.0.2"))
 	out := m.String("\n")
 	if !strings.Contains(out, "127.0.0.2\ta.test") {
 		t.Fatalf("String output missing mapping: %q", out)
@@ -179,7 +179,7 @@ func TestParseHostRejectsIPAsHost(t *testing.T) {
 	if ok, _ := parseHost("1.2.3.4"); ok {
 		t.Fatal("IP must not be accepted as host name")
 	}
-	if ok, parsed := parseHost("example.com"); !ok || parsed != Host("example.com") {
+	if ok, parsed := parseHost("example.com"); !ok || parsed != "example.com" {
 		t.Fatalf("parseHost(example.com) = %v, %v", ok, parsed)
 	}
 }

@@ -13,7 +13,7 @@ func TestAddMessageNonBlockingWhenFull(t *testing.T) {
 	}
 
 	// Fill the buffer.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		sess.AddMessage(internal.A{int32(i)})
 	}
 

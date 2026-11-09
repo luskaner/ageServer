@@ -525,10 +525,7 @@ func (m *MainCustomFiles) nextExpiration() time.Duration {
 		}
 		return minInterval
 	}
-	d := next.Sub(m.now())
-	if d < minInterval {
-		d = minInterval
-	}
+	d := max(next.Sub(m.now()), minInterval)
 	return d
 }
 

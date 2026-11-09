@@ -374,6 +374,7 @@ type fakeResources struct {
 
 func (f *fakeResources) Initialize(string, *ResourcesOpts) {
 	f.arrayFiles = map[string]i.A{
+		// i.A is []any, so the element type cannot be elided here.
 		"leaderboards.json":  i.A{i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}},
 		"itemLocations.json": i.A{},
 		"presenceData.json":  i.A{},

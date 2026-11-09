@@ -86,7 +86,7 @@ func TestPlacementCalibrationEndsAtHiddenMMR(t *testing.T) {
 	clock := time.Date(2026, time.November, 7, 1, 0, 0, 0, time.UTC)
 	store := newSeasonStore(t, "age4", &clock)
 
-	for match := 0; match < PlacementMatches; match++ {
+	for match := range PlacementMatches {
 		result := ratedResult(int64(200+match), 1, []int32{1, 2}, []int32{0, 1}, []int32{0, 1})
 		if _, rated := store.ApplyResult(result); !rated {
 			t.Fatalf("placement match %d was not rated", match)
