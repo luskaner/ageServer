@@ -23,6 +23,14 @@ const (
 	seasonHistoryDepth = 2
 )
 
+// SeasonEvents exposes the AoE4 rolling-season events for the public
+// /community API, which serves the same definitions in object form. Exporting
+// this instead of duplicating the season arithmetic keeps a single source of
+// truth for the window and the season number.
+func SeasonEvents(definitions i.A, now time.Time) i.A {
+	return aoe4CommunityEvents(definitions, now)
+}
+
 // aoe4CommunityEvents builds the getAvailableCommunityEvents response for
 // AoE4. The season definitions (rank table, placement matches, decay and the
 // leaderboards each queue scores on) come from communityEvents.json; the

@@ -12,9 +12,10 @@ import (
 )
 
 var (
-	battleServerResolvePath = battleServer.ResolvePath
-	resolveAutoPathFn       = resolveAutoPath
-	validPathFn             = validPath
+	battleServerResolvePath        = battleServer.ResolvePath
+	battleServerResolvePathPriority = battleServer.ResolvePathPriority
+	resolveAutoPathFn              = resolveAutoPath
+	validPathFn                    = validPath
 )
 
 func validPath(path string) bool {
@@ -67,21 +68,37 @@ func doResolveAutoPath(gameId string) (resolvedPath string, err error) {
 	if gameId == game.AoE4 || gameId == game.AoM {
 		gameId = game.AoE2
 	}
-	var suffixPath string
-	var ok bool
-	if ok, suffixPath = battleServerResolvePath(gameId); !ok {
-		err = fmt.Errorf("could not find battle server executable")
-		return
+
+	// Get the priority order of game IDs to try for battle server resolution
+	priorityGameIds := battleServerResolvePathPriority(gameId)
+
+	for _, priorityGameId := range priorityGameIds {
+		var suffixPath string
+		var ok bool
+		if ok, suffixPath = battleServerResolvePath(priorityGameId); !ok {
+			continue
+		}
+		path := resolveAutoPathFn(gameId, suffixPath)
+		if path != "" && validPathFn(path) {
+			// Warn when using a fallback battle server from another game
+			if priorityGameId != gameId {
+				switch gameId {
+				case game.AoE1:
+					if priorityGameId == game.AoE2 || priorityGameId == game.AoE3 {
+						cmdlog.Warn("AoE1 is using %s's BattleServer.exe (fallback) - it may not work correctly", priorityGameId)
+					}
+				case game.AoE3:
+					// AoE2 is the primary for AoE3, only warn for AoE3's own or AoE1
+					if priorityGameId == game.AoE3 || priorityGameId == game.AoE1 {
+						cmdlog.Warn("AoE3 is using %s's BattleServer.exe (fallback) - it may not work correctly", priorityGameId)
+					}
+				}
+			}
+			resolvedPath = path
+			return
+		}
 	}
-	path := resolveAutoPathFn(gameId, suffixPath)
-	if path == "" {
-		err = fmt.Errorf("could not find battle server executable")
-		return
-	}
-	if !validPathFn(path) {
-		err = fmt.Errorf("could not find battle server executable")
-		return
-	}
-	resolvedPath = path
+
+	err = fmt.Errorf("could not find battle server executable")
 	return
 }

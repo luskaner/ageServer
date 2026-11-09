@@ -91,6 +91,10 @@ type Users interface {
 	// GetUserByProfileId returns the user with the given profile ID, which is
 	// how the routes that take a profile_id identify a profile.
 	GetUserByProfileId(profileId int32) (User, bool)
+	// GetUserByAlias resolves a connected user by alias. GetUserIds only
+	// yields ids, so a lookup by alias would otherwise be O(n) calls to
+	// GetUserById on top of an O(n) scan (community API, §3.2).
+	GetUserByAlias(alias string) (User, bool)
 	GetUserIds() func(func(int32) bool)
 	EncodeProfileInfo(definitions PresenceDefinitions, matches func(user User) bool, clientLibVersion uint16) []i.A
 	GetUserByPlatformUserId(xbox bool, id uint64) (User, bool)
@@ -361,6 +365,13 @@ func (users *MainUsers) GetUserByProfileId(profileId int32) (User, bool) {
 
 func (users *MainUsers) GetUserByPlatformUserId(xbox bool, id uint64) (User, bool) {
 	return users.getFirst(func(u User) bool { return u.GetXbox() == xbox && u.GetPlatformUserID() == id })
+}
+
+func (users *MainUsers) GetUserByAlias(alias string) (User, bool) {
+	if alias == "" {
+		return nil, false
+	}
+	return users.getFirst(func(u User) bool { return u.GetAlias() == alias })
 }
 
 func (users *MainUsers) getFirst(fn func(u User) bool) (User, bool) {
@@ -663,6 +674,16 @@ func PlaceholderProfile(profileID int32, statGroupID int32) *StoredProfile {
 		PlatformUserID: uint64(profileID),
 		Level:          1,
 	}
+}
+
+// StoredProfilePlatformPath renders the /steam/<id> or /xboxlive/<id> name of a
+// stored profile. It is the stored-identity twin of User.GetPlatformPath and
+// exists so callers outside this package do not have to rebuild the format.
+func StoredProfilePlatformPath(p *StoredProfile) string {
+	if p == nil {
+		return ""
+	}
+	return getPlatformPath(p.IsXbox, p.PlatformUserID)
 }
 
 // EncodeStoredProfileInfo builds the same profileInfo for a player that is not

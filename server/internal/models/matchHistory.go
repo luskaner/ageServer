@@ -468,6 +468,22 @@ func (s *MatchHistoryStore) GetMatch(matchID int64) (MatchResult, bool) {
 	return m, true
 }
 
+// GetMatchWithPlayers is GetMatch plus the per-player rows. The player rows are
+// loaded with the same helper GetRecentForProfiles uses, so a match looks
+// identical whichever endpoint returned it.
+func (s *MatchHistoryStore) GetMatchWithPlayers(matchID int64) (MatchResult, bool) {
+	m, found := s.GetMatch(matchID)
+	if !found {
+		return MatchResult{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return m, true
+	}
+	return s.loadPlayersLocked(m), true
+}
+
 // QueueIDFromQueueType extracts the pool id from the "automatch2-<id>" queue
 // type the server stores. It returns false for non-automatch matches.
 func QueueIDFromQueueType(queueType string) (int32, bool) {
@@ -1118,6 +1134,25 @@ func (s *MatchHistoryStore) GetLeaderboard(limit int) []*PlayerRating {
 // client's sortBy=1 query (rating descending) and the total number of ranked
 // profiles.
 func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count int) ([]*PlayerRating, int64) {
+	return s.GetLeaderboardPageBy(leaderboardID, start, count, leaderboardSortRating)
+}
+
+const (
+	// leaderboardSortWins orders a ladder page by games won, which is the
+	// sortBy=0 the public API uses for the "wins" tab.
+	leaderboardSortWins = 0
+	// leaderboardSortRating orders a ladder page by rating, the default.
+	leaderboardSortRating = 1
+)
+
+// GetLeaderboardPageBy returns one page of a ladder ordered by wins (sortBy 0)
+// or by rating (any other value), plus the total number of ranked profiles.
+//
+// Only the two ORDER BY clauses are swapped: the total, the season filter and
+// the rank numbering are shared with GetLeaderboardPage, so both orderings
+// report a consistent rankTotal. The wins ordering has no index behind it
+// (idx_ratings_ladder is rating-based), which is why §7.6 benchmarks it.
+func (s *MatchHistoryStore) GetLeaderboardPageBy(leaderboardID int32, start, count int, sortBy int) ([]*PlayerRating, int64) {
 	if leaderboardID <= 0 {
 		leaderboardID = s.defaultLeaderboard()
 	}
@@ -1129,6 +1164,10 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 	}
 	if count > MaxLeaderboardPageSize {
 		count = MaxLeaderboardPageSize
+	}
+	orderBy := "rating DESC, profile_id ASC"
+	if sortBy == leaderboardSortWins {
+		orderBy = "wins DESC, rating DESC, profile_id ASC"
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1145,7 +1184,7 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 	rows, err := s.db.Query(
 		`SELECT profile_id, rating, highest_rating, games, wins, losses, streak, stat_id, last_match
 		 FROM ratings WHERE leaderboard_id = ? AND season = ?
-		 ORDER BY rating DESC, profile_id ASC LIMIT ? OFFSET ?`,
+		 ORDER BY `+orderBy+` LIMIT ? OFFSET ?`,
 		leaderboardID, season, count, start,
 	)
 	if err != nil {
@@ -1166,6 +1205,98 @@ func (s *MatchHistoryStore) GetLeaderboardPage(leaderboardID int32, start, count
 		list = append(list, r)
 	}
 	return list, total
+}
+
+// GetAllRatingsForProfiles returns every ladder row the profiles have in the
+// active season, grouped by profile and ordered by leaderboard id so a client
+// gets a stable sequence. It is what the public GetPersonalStat endpoint needs:
+// the official service returns one row per ladder, not just the default one.
+func (s *MatchHistoryStore) GetAllRatingsForProfiles(profileIDs []int32) map[int32][]*PlayerRating {
+	out := make(map[int32][]*PlayerRating, len(profileIDs))
+	if len(profileIDs) == 0 {
+		return out
+	}
+	wanted, err := json.Marshal(profileIDs)
+	if err != nil {
+		return out
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return out
+	}
+	season := s.season()
+	rows, err := s.db.Query(
+		`SELECT profile_id, leaderboard_id, stat_id, rating, highest_rating, games, wins, losses,
+		        streak, last_match
+		 FROM ratings
+		 WHERE season = ? AND profile_id IN (SELECT value FROM json_each(?))
+		 ORDER BY profile_id ASC, leaderboard_id ASC`,
+		season, string(wanted),
+	)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	// ranktotal is the population of each ladder the profile appears on. It is
+	// collected in a second pass because the pool holds a single connection and
+	// a nested query would block until this cursor is closed.
+	raw := make([]*PlayerRating, 0, len(profileIDs))
+	leaderboardIDs := make(map[int32]struct{}, len(profileIDs))
+	for rows.Next() {
+		r := &PlayerRating{}
+		var lastMatch int64
+		if err = rows.Scan(&r.ProfileID, &r.LeaderboardID, &r.StatID, &r.Rating, &r.HighestRating,
+			&r.Games, &r.Wins, &r.Losses, &r.Streak, &lastMatch); err != nil {
+			continue
+		}
+		r.LastMatch = time.Unix(lastMatch, 0)
+		raw = append(raw, r)
+		leaderboardIDs[r.LeaderboardID] = struct{}{}
+	}
+	_ = rows.Close()
+	totals := s.ladderTotalsLocked(leaderboardIDs, season)
+	for _, r := range raw {
+		r.RankTotal = totals[r.LeaderboardID]
+		// The rank of a ladder row is its position by rating among the whole
+		// population, which is the same ordering GetLeaderboardPageBy uses.
+		// Without this a profile would report rank -1 even when it is ranked,
+		// and ranklevel would fall to 0 (§3.3).
+		r.Rank = s.ladderRankLocked(r, season)
+		out[r.ProfileID] = append(out[r.ProfileID], r)
+	}
+	return out
+}
+
+// ladderRankLocked computes the 1-based position of a rating row in its ladder,
+// ordered by rating descending with the profile id as the tie-break. Callers must
+// hold at least the read lock and must not have an open cursor on the pool.
+func (s *MatchHistoryStore) ladderRankLocked(r *PlayerRating, season int) int64 {
+	var better int64
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM ratings
+		 WHERE leaderboard_id = ? AND season = ?
+		   AND (rating > ? OR (rating = ? AND profile_id < ?))`,
+		r.LeaderboardID, season, r.Rating, r.Rating, r.ProfileID,
+	).Scan(&better); err != nil {
+		return -1
+	}
+	return better + 1
+}
+
+// ladderTotalsLocked returns the population of each ladder. Callers must hold
+// at least the read lock and must not have an open cursor on the pool.
+func (s *MatchHistoryStore) ladderTotalsLocked(leaderboardIDs map[int32]struct{}, season int) map[int32]int64 {
+	totals := make(map[int32]int64, len(leaderboardIDs))
+	for leaderboardID := range leaderboardIDs {
+		var total int64
+		if err := s.db.QueryRow(
+			`SELECT COUNT(*) FROM ratings WHERE leaderboard_id = ? AND season = ?`, leaderboardID, season,
+		).Scan(&total); err == nil {
+			totals[leaderboardID] = total
+		}
+	}
+	return totals
 }
 
 // GetMMR returns the hidden matchmaking rating of the requested profiles for a
@@ -1465,4 +1596,44 @@ func (s *MatchHistoryStore) GetProfiles(profileIDs []int32) map[int32]*StoredPro
 		out[p.ProfileID] = p
 	}
 	return out
+}
+
+// GetProfileByPlatformUserID resolves the stored identity of a platform
+// account (/steam/<id> or /xboxlive/<id>). The public API receives those paths
+// as profile_names and has no other way back to a profile id: every existing
+// lookup goes profile id -> identity, never the reverse.
+//
+// Platform user ids are not guaranteed unique across a reinstall (a profile
+// recreated from a fresh user data folder gets new ids), so the most recently
+// updated row wins.
+func (s *MatchHistoryStore) GetProfileByPlatformUserID(platformUserID uint64, isXbox bool) (*StoredProfile, bool) {
+	if platformUserID == 0 {
+		return nil, false
+	}
+	isXboxInt := 0
+	if isXbox {
+		isXboxInt = 1
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, false
+	}
+	p := &StoredProfile{PlatformUserID: platformUserID, IsXbox: isXbox}
+	var xp, level, region int64
+	var storedIsXbox int
+	err := s.db.QueryRow(
+		`SELECT profile_id, stat_group_id, alias, avatar_metadata, xp, level, region, is_xbox
+		 FROM profiles WHERE platform_user_id = ? AND is_xbox = ?
+		 ORDER BY updated_at DESC, profile_id DESC LIMIT 1`,
+		int64(platformUserID), isXboxInt,
+	).Scan(&p.ProfileID, &p.StatGroupID, &p.Alias, &p.AvatarMetadata, &xp, &level, &region, &storedIsXbox)
+	if err != nil {
+		return nil, false
+	}
+	p.XP = uint32(xp)
+	p.Level = uint16(level)
+	p.Region = uint8(region)
+	p.IsXbox = storedIsXbox != 0
+	return p, true
 }

@@ -58,13 +58,19 @@ type DailyCelestialChallenge struct {
 }
 
 type CommunityEvent struct {
-	Id           uint64
-	Name         string
-	Start        time.Time
-	End          time.Time
-	ExpiryTime   time.Time
-	CustomData   any
-	EventState   int
+	Id         uint64
+	Name       string
+	Start      time.Time
+	End        time.Time
+	ExpiryTime time.Time
+	CustomData any
+	EventState int
+	// EventType is the community-event kind the public API reports as
+	// eventtype. It has no shared enum across titles: AoM uses 2, 3 and 5,
+	// while AoE4 uses 6, 0 and 7. It is deliberately not written into Encode:
+	// the game client's positional layout keeps that slot nil and changing it
+	// is a client-visible change this server has no capture to justify.
+	EventType    int
 	Leaderboards []EventLeaderBoard
 }
 
