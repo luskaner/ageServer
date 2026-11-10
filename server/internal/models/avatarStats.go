@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/luskaner/ageServer/common/game"
@@ -175,12 +176,12 @@ func (a *AvatarStatsUpgradableDefaultData) Default() *AvatarStats {
 			"STAT_POP_CAP_200_MP":           0,
 			"STAT_POP_PEAK_200_MP":          0,
 			"STAT_TOTAL_GAMES":              0,
+			"STAT_GAMES_PLAYED_OFFLINE":     2000,
 		}
-	// TODO: What benefits Aoe4 here ?
-	case game.AoE3:
-		// FIXME: Is this even needed?
-		values = map[string]int64{
-			"STAT_EVENT_EXPLORER_SKIN_CHALLENGE_14c": 16,
+		for stat := range a.avatarStatsDefinitions.Names() {
+			if strings.HasPrefix(stat, "STAT_VICTORY_") {
+				values[stat] = 100
+			}
 		}
 	case game.AoM:
 		values = map[string]int64{
