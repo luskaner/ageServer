@@ -183,7 +183,7 @@ func TestEncodeUnmatchedStatusesEchoesRaceIDs(t *testing.T) {
 }
 
 func TestAutomatchUnmatchedResponseGolden(t *testing.T) {
-	response := automatchUnmatchedResponse("", estimatedWaitMillis(), []int32{57, 58, 59}, []int32{0, 0, 0}, []int{1, 1, 1}, 0)
+	response := automatchUnmatchedResponse("", 0, []int32{57, 58, 59}, []int32{0, 0, 0}, []int{1, 1, 1}, 0)
 	encoded, err := json.Marshal(response)
 	if err != nil {
 		t.Fatal(err)
@@ -195,16 +195,62 @@ func TestAutomatchUnmatchedResponseGolden(t *testing.T) {
 }
 
 // The client renders polling response slot 2 as an H:MM:SS estimated wait:
-// a random token made Quick Play show "157:45:32" (567932821 ms). The LAN
-// server cannot predict waits, so the estimate must stay 0 (00:00:00).
-func TestEstimatedWaitMillisIsZero(t *testing.T) {
-	if got := estimatedWaitMillis(); got != 0 {
+// a random token made Quick Play show "157:45:32" (567932821 ms). Without any
+// observed wait the estimate must stay 0 (00:00:00).
+func TestEstimatedWaitMillisIsZeroWithoutHistory(t *testing.T) {
+	mm := &MainMatchmaking{waits: map[int32][]time.Duration{}}
+	if got := mm.estimatedWaitMillisLocked([]int32{57, 58}); got != 0 {
 		t.Fatalf("estimated wait = %d ms, want 0 (rendered by the client as H:MM:SS)", got)
 	}
 }
 
+func TestEstimatedWaitMillisAveragesRecentWaits(t *testing.T) {
+	mm := &MainMatchmaking{waits: map[int32][]time.Duration{
+		57: {10 * time.Second, 20 * time.Second},
+		58: {90 * time.Second},
+	}}
+	if got := mm.estimatedWaitMillisLocked([]int32{57}); got != 15000 {
+		t.Fatalf("queue 57 estimate = %d, want 15000", got)
+	}
+	// The shortest average wins; queues without history are ignored.
+	if got := mm.estimatedWaitMillisLocked([]int32{57, 58, 59}); got != 15000 {
+		t.Fatalf("multi-queue estimate = %d, want 15000", got)
+	}
+	if got := mm.estimatedWaitMillisLocked([]int32{58, 59}); got != 90000 {
+		t.Fatalf("queue 58/59 estimate = %d, want 90000", got)
+	}
+}
+
+func TestEstimatedWaitMillisIsCapped(t *testing.T) {
+	mm := &MainMatchmaking{waits: map[int32][]time.Duration{57: {1000 * time.Hour}}}
+	if got := mm.estimatedWaitMillisLocked([]int32{57}); got != int32(maxEstimatedWait/time.Millisecond) {
+		t.Fatalf("estimate = %d, want the cap", got)
+	}
+}
+
+func TestRecordWaitLockedKeepsWindowAndCountsSearchOnce(t *testing.T) {
+	mm := &MainMatchmaking{}
+	queue := &automatchQueue{ID: 57}
+	now := time.Now()
+	player := &automatchQueueEntry{QueuedAt: now.Add(-30 * time.Second)}
+	mm.recordWaitLocked(queue, []*automatchQueueEntry{player}, now)
+	mm.recordWaitLocked(queue, []*automatchQueueEntry{player}, now.Add(time.Minute))
+	if got := mm.estimatedWaitMillisLocked([]int32{57}); got != 30000 {
+		t.Fatalf("estimate = %d, want 30000 (requeued search counted once)", got)
+	}
+	for n := 0; n < automatchWaitWindow+5; n++ {
+		mm.recordWaitLocked(queue, []*automatchQueueEntry{{QueuedAt: now.Add(-time.Second)}}, now)
+	}
+	if got := len(mm.waits[57]); got != automatchWaitWindow {
+		t.Fatalf("samples = %d, want %d", got, automatchWaitWindow)
+	}
+	if got := mm.estimatedWaitMillisLocked([]int32{57}); got != 1000 {
+		t.Fatalf("estimate = %d, want 1000 after old samples rolled off", got)
+	}
+}
+
 func TestAutomatchUnmatchedResponseCarriesAssignedMatchID(t *testing.T) {
-	response := automatchUnmatchedResponse("", estimatedWaitMillis(), []int32{57}, []int32{0}, []int{0}, 508712036)
+	response := automatchUnmatchedResponse("", 0, []int32{57}, []int32{0}, []int{0}, 508712036)
 	if response[12] != int32(508712036) {
 		t.Fatalf("slot 12 = %#v, want the assigned matchID", response[11])
 	}

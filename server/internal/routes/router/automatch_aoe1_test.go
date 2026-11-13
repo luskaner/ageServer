@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/luskaner/ageServer/common/game"
 	i "github.com/luskaner/ageServer/server/internal"
@@ -106,5 +107,43 @@ func TestAoE1QuickMatchPollingAndPairing(t *testing.T) {
 	}
 	if third[5] != "" {
 		t.Fatalf("aoe1 matched body leaked map: %#v", third[5])
+	}
+}
+
+// Slot 2 is the estimated wait. It is 0 until a match has been made and then
+// follows the waits observed in that queue.
+func TestAoE1QuickMatchReportsObservedWaitEstimate(t *testing.T) {
+	g := newTestGameWithResourceSetup(t, game.AoE1, bundledAoE1Resources(t))
+	h := gameHandler(game.AoE1)
+	poll := func(sid string, userID int32, partySessionID int64) i.A {
+		t.Helper()
+		body := fmt.Sprintf(
+			"callNum=1&connect_id=x&matchTypes=[5]&partySessionID=%d&raceInfoRaceID=[17]"+
+				"&raceInfoKey=[0]&raceInfoProfileID=[%d]&relayRegion=Server&versionFlags=0",
+			partySessionID,
+			userID,
+		)
+		rr := doRequest(h, http.MethodPost, "/game/automatch2/polling", g, sid, body, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("poll code = %d, want 200 (body=%q)", rr.Code, rr.Body.String())
+		}
+		var response i.A
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatalf("poll response is not JSON: %v body=%q", err, rr.Body.String())
+		}
+		return response
+	}
+	first, firstSid := createUserAndSessionForGame(t, g, 76561198000000051, "aoe1WaitFirst")
+	second, secondSid := createUserAndSessionForGame(t, g, 76561198000000052, "aoe1WaitSecond")
+	third, thirdSid := createUserAndSessionForGame(t, g, 76561198000000053, "aoe1WaitThird")
+
+	if got := poll(firstSid, first.GetId(), 6000001)[2]; got != float64(0) {
+		t.Fatalf("estimate without history = %v, want 0", got)
+	}
+	time.Sleep(50 * time.Millisecond)
+	poll(secondSid, second.GetId(), 6000002) // pairs with the first player
+
+	if got, _ := poll(thirdSid, third.GetId(), 6000003)[2].(float64); got < 1 {
+		t.Fatalf("estimate after an observed wait = %v, want > 0", got)
 	}
 }
