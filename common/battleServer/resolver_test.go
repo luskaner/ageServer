@@ -31,3 +31,29 @@ func TestResolvePath(t *testing.T) {
 		})
 	}
 }
+
+func TestResolvePathPriority(t *testing.T) {
+	tests := []struct {
+		gameId       string
+		wantPriority []string
+	}{
+		{game.AoE1, []string{game.AoE1, game.AoE2, game.AoE3}},
+		{game.AoE3, []string{game.AoE2, game.AoE3, game.AoE1}},
+		{game.AoE2, []string{game.AoE2}},
+		{game.AoE4, []string{game.AoE4}},
+		{game.AoM, []string{game.AoM}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.gameId, func(t *testing.T) {
+			got := ResolvePathPriority(tt.gameId)
+			if len(got) != len(tt.wantPriority) {
+				t.Fatalf("ResolvePathPriority(%q) len = %d, want %d", tt.gameId, len(got), len(tt.wantPriority))
+			}
+			for i, want := range tt.wantPriority {
+				if got[i] != want {
+					t.Errorf("ResolvePathPriority(%q)[%d] = %q, want %q", tt.gameId, i, got[i], want)
+				}
+			}
+		})
+	}
+}

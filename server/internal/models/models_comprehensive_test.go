@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	mapset "github.com/deckarep/golang-set/v3"
@@ -314,7 +315,7 @@ func TestBattleServer(t *testing.T) {
 		t.Fatalf("ports without oob = %v", bsNoOob.EncodePorts())
 	}
 
-	if ip := bs.ResolveIPv4(nil); ip != "10.0.0.1" {
+	if ip := bs.ResolveIPv4(httptest.NewRequest(http.MethodGet, "http://10.0.0.1/", nil)); ip != "10.0.0.1" {
 		t.Fatalf("resolve ipv4 = %q", ip)
 	}
 
@@ -374,9 +375,11 @@ type fakeResources struct {
 
 func (f *fakeResources) Initialize(string, *ResourcesOpts) {
 	f.arrayFiles = map[string]i.A{
-		"leaderboards.json":  i.A{i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}},
-		"itemLocations.json": i.A{},
-		"presenceData.json":  i.A{},
+		// i.A is []any, so the element type of each inner entry cannot be
+		// elided; the outer map value can, and is.
+		"leaderboards.json":  {i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}},
+		"itemLocations.json": {},
+		"presenceData.json":  {},
 	}
 	f.signedAssets = map[string][]byte{
 		"itemDefinitions.json": []byte(`{"itemCategories":[],"itemDefinitions":[]}`),
@@ -390,6 +393,7 @@ func (f *fakeResources) ReturnSignedAsset(string, *http.ResponseWriter, *http.Re
 func (f *fakeResources) LoginData() []i.A                                                    { return f.loginData }
 func (f *fakeResources) ChatChannels() map[string]*MainChatChannel                           { return f.chatChannels }
 func (f *fakeResources) News() []i.A                                                         { return nil }
+func (f *fakeResources) MenuBackgrounds() *MenuBackgrounds                                   { return nil }
 func (f *fakeResources) ArrayFiles() map[string]i.A                                          { return f.arrayFiles }
 func (f *fakeResources) SignedAssets() map[string][]byte                                     { return f.signedAssets }
 func (f *fakeResources) CloudFiles() *CloudFiles {

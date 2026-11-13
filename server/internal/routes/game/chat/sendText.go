@@ -21,20 +21,11 @@ type sendTextRequest struct {
 
 func SendText(w http.ResponseWriter, r *http.Request) {
 	var req sendTextRequest
-	err := i.Bind(r, &req)
-	if err != nil {
-		i.JSON(&w, i.A{2})
-		return
-	}
-	game := models.G(r)
-	chatChannel, ok := game.ChatChannels().GetById(req.ChatroomID)
+	game, chatChannel, user, ok := bindChatRequest(w, r, &req)
 	if !ok {
-		i.JSON(&w, i.A{2})
 		return
 	}
-	sess := models.SessionOrPanic(r)
-	user, ok := game.Users().GetUserById(sess.GetUserId())
-	if !ok || !chatChannel.HasUser(user) {
+	if !chatChannel.HasUser(user) {
 		i.JSON(&w, i.A{2})
 		return
 	}

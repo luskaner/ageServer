@@ -415,6 +415,13 @@ func mergeBuilds(path string, main string, operatingSystem OperatingSystem, buil
 			b.Goamd64 = append(b.Goamd64, currentBuild.Goamd64...)
 		}
 	}
+	// The builds come from maps, so their iteration order is not stable. Sort
+	// the merged lists so the generated config is the same on every run.
+	slices.Sort(b.Goarch)
+	slices.Sort(b.Goarm)
+	slices.Sort(b.Goarm64)
+	slices.Sort(b.Go386)
+	slices.Sort(b.Goamd64)
 	return b
 }
 

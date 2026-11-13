@@ -31,6 +31,8 @@ Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/Mi
 
 * `aoe-api.reliclink.com`: legacy domain for AoE I: DE, AoE II: DE, AoE III: DE and AoE IV: AE.
 * `*.worldsedgelink.com`: current domain for all games.
+* `aoe-api.worldsedgelink.com` and `andromeda-live-releaseNN-api.worldsedgelink.com` are served from the same listener
+  as the rest, which is what makes the public `/community/` API reachable on its official host.
 
 #### AoE 2: DE - Steam macOS
 
@@ -172,6 +174,7 @@ the [`responses`](resources/responses) base directory.
 - [`Item Locations`](resources/responses/age4/itemLocations.json): Locations of items.
 - [`Item Bundle Items`](resources/responses/age4/itemBundleItems.json): Grouping of items into bundles.
 - [`Level Rewards Table`](resources/responses/age4/levelRewardsTable.json): Level rewards table.
+- [`Menu Backgrounds`](resources/responses/age4/menuBackgrounds.json): Catalogue of the main-menu backgrounds the client can display.
 
 #### Age of Mythology: Retold
 
@@ -272,6 +275,103 @@ CLI is available with similar options as the configuration. You can see the avai
 For documentation on how what each endpoints does, please refer
 to [LibreMatch documentation](https://wiki.librematch.org/rlink/game/start). Other endpoints are mostly
 self-explanatory.
+
+### Community API
+
+The public `/community/` API is served alongside `/game/`. It is the object-shaped
+counterpart of the game API: the same data, but as JSON objects with named fields
+instead of the positional arrays the game client parses. Third-party tools
+(LibreMatch's `rlink` client, overlays, statistics pages) use it.
+
+**No authentication.** Unlike `/game/`, these routes do not require `sessionID`
+and are not wrapped by `SessionMiddleware`; the official service is public too.
+Only the prefix `/community/` is affected, and `/game/` keeps its 401 behaviour.
+
+**18 endpoints are registered** across 20 paths (two of them are served under
+both capitalisations, see below), including the ones that can only answer with a
+stub. No documented path returns 404:
+
+| Endpoint | Data |
+|---|---|
+| `GET /community/news/getNews` | complete |
+| `GET /community/leaderboard/getAvailableLeaderboards` | complete |
+| `GET /community/achievement/getAvailableAchievements` | complete |
+| `GET /community/leaderboard/getLeaderBoard2` | complete |
+| `GET /community/leaderboard/GetPersonalStat` | complete |
+| `GET /community/leaderboard/GetAvatarStatForProfile` | complete (connected users only) |
+| `GET /community/leaderboard/getRecentMatchHistory` | complete |
+| `GET /community/leaderboard/getMatchHistory` | complete (not in the OpenAPI spec) |
+| `GET /community/leaderboard/getReplayFiles` | complete (not in the OpenAPI spec) |
+| `GET /community/advertisement/findAdvertisements` | complete |
+| `GET /community/CommunityEvent/getAvailableCommunityEvents` | complete |
+| `GET /community/external/proxysteamuserrequest` | partial: no Steam key, so `steamResults` is empty |
+| `GET /community/achievement/getAchievements` | stub by design: empty arrays per profile |
+| `GET /community/item/getInventoryByProfileIDs` | stub faithful to the official: empty arrays per profile |
+| `GET /community/clan/find` | stub: `clans: []` |
+| `GET /community/clan/getClanInfoFull` | stub: `clan: null` |
+| `GET /community/item/getItems` | stub: 404 in the official service |
+| `GET /community/leaderboard/getStatGroupsByProfileIDs` | stub: 404 in the official service |
+
+Two paths are served under both capitalisations, `GetAvailableLeaderboards` and
+`GetPersonalStat`, because the spec and the live service disagree on those two.
+No other alias is registered: a path that is not evidenced by the spec or by a
+live response would be untested surface, so the capitalisation is copied
+literally everywhere else.
+
+**Endpoints in stub are a deliberate decision, not a bug.** They return the exact
+outer shape of the endpoint with `result.code = 0` so a client can parse them:
+
+- the clan endpoints wait for a clan model (the server has none);
+- `getAchievements` stays empty because serving achievements to the game client
+  grants them on Xbox, and the server does not persist progress;
+- `proxysteamuserrequest` has no Steam Web API key and does not proxy outbound
+  requests (the `request` parameter would otherwise be a server-side request
+  forgery vector);
+- `getItems` and `getStatGroupsByProfileIDs` are listed in the wiki but the
+  official service answers 404, so they are registered for robustness only.
+
+**`title` and hosts.** Each title has its own official host and the `title` query
+parameter must match it: `aoe-api.worldsedgelink.com` serves `age1`–`age4`, while
+AoM is served from `andromeda-live-releaseNN-api.worldsedgelink.com` (and the
+`athens-live-api` alias) with `title=athens`. Both hosts are served by this
+server from the same listener. A title this listener does not serve answers
+`HTTP 200` with `result.code = 2` instead of the official 404, so the failure is
+diagnosable and a documented path never disappears. The `title` is resolved once
+by a middleware that stores the game in the request context, so the handlers read
+it exactly like the `/game` ones do (`models.G(r)`); a rejected title never
+reaches a handler.
+
+**Field deviations** (documented so nobody reads them as data loss):
+
+- `country`, `clanlist_name`, `highestrank`, `highestranklevel`, `regionrank`,
+  `regionranktotal`, `disputes`, `drops` and `steamlobbyid` have no source in
+  this server and are served as `""`, `0` or `-1`;
+- `newsimage`/`newsbody` carry the raw text because this server has no
+  localisation table, so the `locstringid` fields are `-1`;
+- `matchurls[].profile_id` is the match creator, not the player that uploaded the
+  replay: the stored index keeps one replay per `(matchId, kind)` and does not
+  record the uploader;
+- replay URLs carry no SAS signature, unlike the official service.
+
+**Privacy note.** `findAdvertisements` lists the LAN lobbies with the same
+visibility the game client gets, and it deliberately never exposes lobby
+passwords, observer passwords or the internal advertisement IP. Keep in mind that
+anything reaching port 443 of this server sees those lobbies. On a single-LAN
+deployment this is the same exposure the game client already has.
+
+The implementation notes, field-by-field contracts and the reasoning behind each
+decision are in [`docs/community-api-implementation.md`](../docs/community-api-implementation.md).
+
+### Menu backgrounds (AoE IV)
+
+The AoE IV client reads its main-menu background from a type-0 community event, so the
+server can show a dated background to every player. The schedule lives in
+`resources/config/age4/menuBackgrounds.toml`, which is **not shipped**: without it the
+endpoint behaves exactly as before. The file is read at startup, and an invalid one
+stops the server with a message naming the offending entry.
+
+See [Menu backgrounds](./menuBackgrounds.md) for the catalogue, the file format and the
+publish rules.
 
 ## Ranked ladder
 

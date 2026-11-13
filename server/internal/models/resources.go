@@ -52,6 +52,7 @@ type Resources interface {
 	LoginData() []i.A
 	ChatChannels() map[string]*MainChatChannel
 	News() []i.A
+	MenuBackgrounds() *MenuBackgrounds
 	ArrayFiles() map[string]i.A
 	SignedAssets() map[string][]byte
 	CloudFiles() *CloudFiles
@@ -62,6 +63,7 @@ type MainResources struct {
 	chatChannels            map[string]*MainChatChannel
 	loginData               []i.A
 	news                    []i.A
+	menuBackgrounds         *MenuBackgrounds
 	arrayFiles              map[string]i.A
 	keyedFiles              map[string][]byte // The currently active version (signed or captured)
 	keyedFilesCaptured      map[string][]byte // The captured (unsigned) version
@@ -88,6 +90,7 @@ func (r *MainResources) Initialize(gameId string, opts *ResourcesOpts) {
 	r.initializeChatChannels(gameId)
 	r.initializeNews(gameId)
 	r.initializeResponses(gameId)
+	r.initializeMenuBackgrounds(gameId)
 	r.initializeCloud(gameId)
 }
 
@@ -103,12 +106,42 @@ func (r *MainResources) News() []i.A {
 	return r.news
 }
 
+// MenuBackgrounds returns the parsed menu-background catalogue and schedule,
+// or nil when the game ships no catalogue.
+func (r *MainResources) MenuBackgrounds() *MenuBackgrounds {
+	return r.menuBackgrounds
+}
+
 func (r *MainResources) ArrayFiles() map[string]i.A {
 	return r.arrayFiles
 }
 
 func (r *MainResources) SignedAssets() map[string][]byte {
 	return r.keyedFiles
+}
+
+// ChallengeDefinitionsData returns the challenges.json served by the resources.
+//
+// challenges.json is not a keyed asset, so the regular loader decodes it into
+// ArrayFiles. A keyed copy is preferred when present (tests or a future
+// resource change); the decoded form is re-encoded to the JSON the challenge
+// upgrader expects.
+func ChallengeDefinitionsData(resources Resources) []byte {
+	if resources == nil {
+		return nil
+	}
+	if data, ok := resources.SignedAssets()["challenges.json"]; ok && len(data) > 0 {
+		return data
+	}
+	data, ok := resources.ArrayFiles()["challenges.json"]
+	if !ok || len(data) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	return encoded
 }
 
 func (r *MainResources) CloudFiles() *CloudFiles {
@@ -273,6 +306,20 @@ func (r *MainResources) initializeResponses(gameId string) {
 			}
 		}
 	}
+}
+
+func (r *MainResources) initializeMenuBackgrounds(gameId string) {
+	path := filepath.Join(paths.ConfigsPath, gameId, "menuBackgrounds.toml")
+	catalog := ParseMenuBackgroundCatalog(r.arrayFiles["menuBackgrounds.json"])
+	if len(catalog) == 0 {
+		warnMenuBackgroundsWithoutCatalog(path)
+		return
+	}
+	periods, err := loadMenuBackgroundSchedule(path, catalog)
+	if err != nil {
+		panic(err)
+	}
+	r.menuBackgrounds = &MenuBackgrounds{Periods: periods}
 }
 
 func (r *MainResources) initializeCloud(gameId string) {

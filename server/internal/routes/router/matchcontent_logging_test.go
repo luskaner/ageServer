@@ -41,7 +41,7 @@ func TestResponseLoggingMemoryBound(t *testing.T) {
 	rr := httptest.NewRecorder()
 	w := NewResponseWriterWrapper(rr)
 	chunk := bytes.Repeat([]byte("x"), 32<<10)
-	for n := 0; n < 100; n++ {
+	for range 100 {
 		if _, err := w.Write(chunk); err != nil {
 			t.Fatal(err)
 		}

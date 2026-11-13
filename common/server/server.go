@@ -85,7 +85,7 @@ func LanServerIP(id uuid.UUID, gameTitle string, ipAddr net.IP, serverName strin
 	u := buildURLFn(ipAddr)
 	if !ignoreLatency {
 		var latencyAccumulator time.Duration
-		for i := 0; i < LatencyMeasurementCount; i++ {
+		for range LatencyMeasurementCount {
 			start := time.Now()
 			req, err := http.NewRequest("HEAD", u.String(), nil)
 			if err != nil {

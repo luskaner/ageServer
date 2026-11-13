@@ -19,17 +19,8 @@ type createItemLoadoutRequest struct {
 
 func CreateItemLoadout(w http.ResponseWriter, r *http.Request) {
 	var req createItemLoadoutRequest
-	err := i.Bind(r, &req)
-	if err != nil {
-		i.JSON(&w, i.A{2, i.A{}})
-		return
-	}
-	game := models.G(r)
-	sess := models.SessionOrPanic(r)
-	userId := sess.GetUserId()
-	u, ok := game.Users().GetUserById(userId)
+	game, u, ok := bindAndResolveUser(w, r, &req, i.A{2, i.A{}})
 	if !ok {
-		i.JSON(&w, i.A{2, i.A{}})
 		return
 	}
 	items := game.Items()
@@ -58,7 +49,7 @@ func CreateItemLoadout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = loadouts.WithReadWrite(func(data *models.MainItemLoadouts) error {
-		itemLoadoutEncoded = data.NewItemLoadout(req.Name, req.Type, mapset.NewThreadUnsafeSet(req.ItemOrLocIDs...), userId)
+		itemLoadoutEncoded = data.NewItemLoadout(req.Name, req.Type, mapset.NewThreadUnsafeSet(req.ItemOrLocIDs...), u.GetId())
 		return nil
 	})
 	i.JSON(&w, i.A{0, itemLoadoutEncoded})

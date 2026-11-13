@@ -154,7 +154,7 @@ func TestGenerateSelfSignedCertificateReadOnlyDir(t *testing.T) {
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(dir, 0755)
+	defer func() { _ = os.Chmod(dir, 0755) }()
 	if generateSelfSignedCertificate(dir) {
 		t.Error("should fail in read-only directory")
 	}
@@ -168,7 +168,7 @@ func TestGenerateCertificatePairsReadOnlyDir(t *testing.T) {
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(dir, 0755)
+	defer func() { _ = os.Chmod(dir, 0755) }()
 	ok, _ := generateCertificatePairs(dir, "cert.pem", "key.pem", nil, nil)
 	if ok {
 		t.Error("should fail in read-only directory")
@@ -236,7 +236,7 @@ func TestGenerateCertificatePairsKeyCreateFails(t *testing.T) {
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(dir, 0755)
+	defer func() { _ = os.Chmod(dir, 0755) }()
 	ok, _ := generateCertificatePairs(dir, "cert.pem", "key.pem", nil, nil)
 	if ok {
 		t.Error("should fail when key file cannot be created")
@@ -257,7 +257,7 @@ func TestGenerateCertificatePairsCABackupOnServerFail(t *testing.T) {
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(dir, 0755)
+	defer func() { _ = os.Chmod(dir, 0755) }()
 	ok := GenerateCertificatePairs(dir)
 	if ok {
 		t.Error("should fail when server cert generation fails")
@@ -286,7 +286,7 @@ func TestGenerateCertificatePairsSelfSignedFails(t *testing.T) {
 	if err := os.Chmod(dir, 0555); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(dir, 0755)
+	defer func() { _ = os.Chmod(dir, 0755) }()
 	ok = GenerateCertificatePairs(dir)
 	if ok {
 		t.Error("should fail when self-signed generation fails")

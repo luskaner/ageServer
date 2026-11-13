@@ -23,6 +23,14 @@ const (
 	seasonHistoryDepth = 2
 )
 
+// SeasonEvents exposes the AoE4 rolling-season events for the public
+// /community API, which serves the same definitions in object form. Exporting
+// this instead of duplicating the season arithmetic keeps a single source of
+// truth for the window and the season number.
+func SeasonEvents(definitions i.A, now time.Time) i.A {
+	return aoe4CommunityEvents(definitions, now)
+}
+
 // aoe4CommunityEvents builds the getAvailableCommunityEvents response for
 // AoE4. The season definitions (rank table, placement matches, decay and the
 // leaderboards each queue scores on) come from communityEvents.json; the
@@ -47,9 +55,9 @@ func aoe4CommunityEvents(definitions i.A, now time.Time) i.A {
 	events := make(i.A, 0, len(seasons)*seasonHistoryDepth)
 	links := make(i.A, 0, len(seasons)*seasonHistoryDepth)
 	seasonLeaderboards := make(i.A, 0, len(seasons)*seasonHistoryDepth)
-	for depth := 0; depth < seasonHistoryDepth; depth++ {
+	for depth := range seasonHistoryDepth {
 		season := current
-		for step := 0; step < depth; step++ {
+		for range depth {
 			if season.Number <= 1 {
 				season = models.RankedSeason{}
 				break
@@ -66,7 +74,7 @@ func aoe4CommunityEvents(definitions i.A, now time.Time) i.A {
 				continue
 			}
 			name := fmt.Sprintf("Season %d - %s", season.Number, definition.name)
-			id := int32(1000 + baseIndex + index)
+			id := int32(models.RankedSeasonEventIDBase + baseIndex + index)
 			seasonIndex := baseIndex + index + 1
 			events = append(events, i.A{
 				name,

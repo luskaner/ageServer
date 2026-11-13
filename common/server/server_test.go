@@ -272,9 +272,9 @@ func (m *mockResolverForServer) HostToIPs(host string) []net.IP {
 	}
 	return out
 }
-func (m *mockResolverForServer) IPToHosts(ip string) []string               { return nil }
-func (m *mockResolverForServer) DirectHostToIP(host string) (string, error) { return "", nil }
-func (m *mockResolverForServer) DialTCP(network, address string, timeout time.Duration) (net.Conn, error) {
+func (m *mockResolverForServer) IPToHosts(_ string) []string             { return nil }
+func (m *mockResolverForServer) DirectHostToIP(_ string) (string, error) { return "", nil }
+func (m *mockResolverForServer) DialTCP(_, _ string, _ time.Duration) (net.Conn, error) {
 	return nil, nil
 }
 func (m *mockResolverForServer) NetInterfaces() ([]net.Interface, error) { return nil, nil }

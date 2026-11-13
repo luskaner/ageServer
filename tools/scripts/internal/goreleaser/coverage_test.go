@@ -12,8 +12,8 @@ import (
 func TestGenerateSuccess(t *testing.T) {
 	dir := t.TempDir()
 	orig, _ := os.Getwd()
-	defer os.Chdir(orig)
-	os.Chdir(dir)
+	defer func() { _ = os.Chdir(orig) }()
+	_ = os.Chdir(dir)
 	// Generate should create .goreleaser.yaml
 	if err := Generate(); err != nil {
 		t.Fatalf("Generate failed: %v", err)
@@ -29,7 +29,7 @@ func TestGenerateCurrentExcludesWindows7Builds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(orig)
+	defer func() { _ = os.Chdir(orig) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestGenerateCurrentLegacyWindowsBuilds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(orig)
+	defer func() { _ = os.Chdir(orig) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestAddSrcFile(t *testing.T) {
 	archive := NewArchive("test", Targets64, nil)
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src.txt")
-	os.WriteFile(src, []byte("hello"), 0644)
+	_ = os.WriteFile(src, []byte("hello"), 0644)
 	archive.AddSrcFile(src)
 }
 
@@ -190,8 +190,8 @@ func TestNameAndGoarch(t *testing.T) {
 func TestGenerateConfig(t *testing.T) {
 	dir := t.TempDir()
 	orig, _ := os.Getwd()
-	defer os.Chdir(orig)
-	os.Chdir(dir)
+	defer func() { _ = os.Chdir(orig) }()
+	_ = os.Chdir(dir)
 	archive := NewArchive("test", Targets64, nil)
 	archive.AddMainBinary(NewBinary("./test", Targets64))
 	if err := GenerateConfig(archive); err != nil {
@@ -211,7 +211,7 @@ func TestGenerateConfigIncludesAllPlatforms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(orig)
+	defer func() { _ = os.Chdir(orig) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestGenerateConfigUniversalMacOS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(orig)
+	defer func() { _ = os.Chdir(orig) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +362,7 @@ func TestGenerateConfigReplacesDraft(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(orig)
+	defer func() { _ = os.Chdir(orig) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func TestGenerateCurrentLinux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(orig)
+	defer func() { _ = os.Chdir(orig) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +470,7 @@ func TestGenerateCurrentMacOS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(orig)
+	defer func() { _ = os.Chdir(orig) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +520,7 @@ func TestGenerateCurrentWindowsArm64(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(orig)
+	defer func() { _ = os.Chdir(orig) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}

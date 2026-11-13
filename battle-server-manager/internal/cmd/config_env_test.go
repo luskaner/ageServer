@@ -8,7 +8,7 @@ import (
 	"github.com/knadh/koanf/parsers/toml/v2"
 	"github.com/knadh/koanf/v2"
 	"github.com/luskaner/ageServer/common"
-	bsManager "github.com/luskaner/ageServer/common/cmd/bsManager"
+	"github.com/luskaner/ageServer/common/cmd/bsManager"
 	"github.com/luskaner/ageServer/common/executables"
 	"github.com/spf13/pflag"
 )

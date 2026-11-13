@@ -31,6 +31,9 @@ type fakeResources struct {
 	signedAssets map[string][]byte
 	signatures   map[string]string
 	cloudFiles   *models.CloudFiles
+	// menuBackgrounds is what the AoE4 menu-background tests inject; nil keeps
+	// the endpoint behaving as if the feature were off.
+	menuBackgrounds *models.MenuBackgrounds
 }
 
 func (f *fakeResources) Initialize(_ string, _ *models.ResourcesOpts) {
@@ -50,11 +53,16 @@ func (f *fakeResources) Initialize(_ string, _ *models.ResourcesOpts) {
 	// Provide empty but correctly shaped structures to avoid nil panics in handlers.
 	f.signedAssets["itemDefinitions.json"] = []byte(`{"itemCategories":[],"itemDefinitions":[]}`)
 	f.signatures["itemDefinitions.json"] = "fake"
-	// challenges.json for AoE IV challenge progress loading
+	// challenges.json for AoE IV challenge progress loading. The regular
+	// resource loader decodes it into arrayFiles (it is not a keyed asset), so
+	// keep it there to exercise the production path.
 	// Format: [result, seasons, definitions, signature]
-	// definitions is an array of challenge definition arrays, first element is definition ID
-	f.signedAssets["challenges.json"] = []byte(`[0,[],[[1,"test_challenge","","Test","Desc",null,1,"{}",-1,-1,2009,1000]],"fake"]`)
-	f.signatures["challenges.json"] = "fake"
+	// A definition is a 13-field row: [definitionID, seasonID, name, "",
+	// displayName, description, extraDescription, target, metadataJSON,
+	// achievementID, nextDefinitionID, rewardOrderID, rewardXP].
+	f.arrayFiles["challenges.json"] = i.A{0, i.A{}, i.A{i.A{
+		1, 1, "test_challenge", "", "Test", "Desc", "", 1, "{}", -1, -1, -1, 1000,
+	}}, "fake"}
 	// leaderboards.json must have at least 9 elements where index 8 is avatarStats array
 	f.arrayFiles["leaderboards.json"] = i.A{i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}, i.A{}}
 	// itemLocations: empty list means no locations, loop does zero iterations -> safe
@@ -108,6 +116,7 @@ func (f *fakeResources) ReturnSignedAsset(name string, w *http.ResponseWriter, r
 func (f *fakeResources) LoginData() []i.A                                 { return f.loginData }
 func (f *fakeResources) ChatChannels() map[string]*models.MainChatChannel { return f.chatChannels }
 func (f *fakeResources) News() []i.A                                      { return f.news }
+func (f *fakeResources) MenuBackgrounds() *models.MenuBackgrounds         { return f.menuBackgrounds }
 func (f *fakeResources) ArrayFiles() map[string]i.A                       { return f.arrayFiles }
 func (f *fakeResources) SignedAssets() map[string][]byte                  { return f.signedAssets }
 func (f *fakeResources) CloudFiles() *models.CloudFiles                   { return f.cloudFiles }
@@ -678,13 +687,6 @@ func TestCdnAgeOfEmpires_httptest(t *testing.T) {
 			}
 		})
 	}
-}
-
-func testServerStatusViaHttptest(t *testing.T, rr *httptest.ResponseRecorder, req *http.Request, gid string) {
-	t.Helper()
-	_ = rr
-	_ = req
-	_ = gid
 }
 
 // useRealServerStatusHandler demonstrates httptest with the real serverStatus handler

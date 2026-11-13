@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 
 	i "github.com/luskaner/ageServer/server/internal"
@@ -117,9 +118,7 @@ func updateProgress(w http.ResponseWriter, r *http.Request) {
 			if found {
 				// Merge fields: batched/event updates often contain only status or
 				// progress and must not erase the other persisted fields.
-				for key, value := range next {
-					(*data)[idx][key] = value
-				}
+				maps.Copy((*data)[idx], next)
 				indexRecord(idx, (*data)[idx])
 				continue
 			}
@@ -130,9 +129,7 @@ func updateProgress(w http.ResponseWriter, r *http.Request) {
 			}
 			idx = len(*data)
 			copyRecord := make(models.ChallengeProgress, len(next))
-			for key, value := range next {
-				copyRecord[key] = value
-			}
+			maps.Copy(copyRecord, next)
 			*data = append(*data, copyRecord)
 			indexRecord(idx, copyRecord)
 		}

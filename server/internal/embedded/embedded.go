@@ -60,14 +60,12 @@ func (opts *Options) Validate() error {
 			return fmt.Errorf("invalid IPv4 %q", opts.IPv4)
 		}
 	}
-	if opts.BsPort < 0 || opts.BsPort > 65535 {
-		return fmt.Errorf("BsPort must be 0..65535")
-	}
-	if opts.WebSocketPort < 0 || opts.WebSocketPort > 65535 {
-		return fmt.Errorf("WebSocketPort must be 0..65535")
-	}
-	if opts.OutOfBandPort < 0 || opts.OutOfBandPort > 65535 {
-		return fmt.Errorf("OutOfBandPort must be 0..65535")
+	if err := battleconfig.ValidatePorts(battleconfig.PortConfig{
+		BsPort:        opts.BsPort,
+		WebSocketPort: opts.WebSocketPort,
+		OutOfBandPort: opts.OutOfBandPort,
+	}); err != nil {
+		return err
 	}
 	validLevels := map[string]bool{
 		"none": true, "error": true, "warning": true, "notice": true, "info": true, "debug": true,

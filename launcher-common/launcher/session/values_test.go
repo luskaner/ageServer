@@ -41,7 +41,7 @@ func TestRunReadsItsOptionsFromTheFrontendStorage(t *testing.T) {
 	installValues(t, launcher.Values{
 		ConfigFile:     new(string),
 		GameConfigFile: new(string),
-		GameID:         ptr("age2"),
+		GameID:         new("age2"),
 		Output:         new(string),
 	})
 	var asked string
@@ -106,5 +106,3 @@ func TestRunFallsBackToThisPackagesStorage(t *testing.T) {
 		t.Fatalf("the run asked about game %q, want the one BindFlags wrote (%q)", asked, "age2")
 	}
 }
-
-func ptr[T any](v T) *T { return &v }

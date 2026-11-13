@@ -57,7 +57,7 @@ func TestRootCmdWait(t *testing.T) {
 	executableGame = "game.exe"
 	execFn = func(exec.Options) *exec.Result { return &exec.Result{Pid: 1} }
 	start := time.Now()
-	rootCmd(nil)
+	_ = rootCmd(nil)
 	if time.Since(start) < 5*time.Millisecond {
 		t.Fatal("should have waited")
 	}
@@ -75,8 +75,8 @@ func TestExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		flag.Set("exitBeforeRunning", "false")
-		flag.Set("waitBeforeRunning", "10s")
+		_ = flag.Set("exitBeforeRunning", "false")
+		_ = flag.Set("waitBeforeRunning", "10s")
 	}()
 	if err := Execute(); err != nil {
 		t.Fatalf("Execute failed: %v", err)

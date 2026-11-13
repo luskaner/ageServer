@@ -31,7 +31,7 @@ func TestHandleHostFileInvalidContent(t *testing.T) {
 	// Write invalid content that GetAllLines will fail? Actually GetAllLines may succeed with empty, but we can test with a file that is not readable?
 	// Create a file with binary content that will cause GetAllLines to error due to encoding?
 	// For now, just test that it handles a file with a valid line that is not an IP (should still succeed, just no caching)
-	os.WriteFile(path, []byte("not an ip line\n"), 0644)
+	_ = os.WriteFile(path, []byte("not an ip line\n"), 0644)
 	if err := HandleHostFile(path); err != nil {
 		t.Fatalf("should succeed even with invalid line, got %v", err)
 	}

@@ -51,7 +51,7 @@ func writePEM(t *testing.T, path string, ders ...[]byte) {
 	if err != nil {
 		t.Fatalf("create %s: %v", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	for _, der := range ders {
 		if err := common.WriteAsPem(der, f); err != nil {
 			t.Fatalf("WriteAsPem: %v", err)
@@ -59,16 +59,18 @@ func writePEM(t *testing.T, path string, ders ...[]byte) {
 	}
 }
 
-func pemEncode(der []byte) []byte {
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+func mustCACert(t *testing.T, gameId string, dir string) *CACert {
+	t.Helper()
+	c := NewCACert(gameId, dir)
+	if c == nil {
+		t.Fatalf("expected CACert for %s", gameId)
+	}
+	return c
 }
 
 func TestCACertBackup_MissingOriginal(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
-	if c == nil {
-		t.Fatal("expected CACert for age2")
-	}
+	c := mustCACert(t, "age2", dir)
 	if err := c.Backup(); err == nil {
 		t.Fatal("expected error when original missing")
 	}
@@ -76,7 +78,7 @@ func TestCACertBackup_MissingOriginal(t *testing.T) {
 
 func TestCACertBackup_AlreadyBackedUp(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
 		t.Fatal(err)
@@ -96,7 +98,7 @@ func TestCACertBackup_AlreadyBackedUp(t *testing.T) {
 
 func TestCACertBackup_Success(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
 		t.Fatal(err)
@@ -120,7 +122,7 @@ func TestCACertBackup_Success(t *testing.T) {
 
 func TestCACertBackup_ExistingBackupIsDirectoryReturnsNil(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
 		t.Fatal(err)
@@ -140,7 +142,7 @@ func TestCACertBackup_ExistingBackupIsDirectoryReturnsNil(t *testing.T) {
 
 func TestCACertAppend_MissingOriginal(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	der, cert := genCertDER(t, "append-missing.test")
 	_ = cert
 	if err := c.Append([]*x509.Certificate{{Raw: der}}); err == nil {
@@ -150,7 +152,7 @@ func TestCACertAppend_MissingOriginal(t *testing.T) {
 
 func TestCACertAppend_Success(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
 		t.Fatal(err)
@@ -177,7 +179,7 @@ func TestCACertAppend_Success(t *testing.T) {
 
 func TestCACertRestore_MissingOriginal(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	if err, _ := c.Restore(); err == nil {
 		t.Fatal("expected error when original missing")
 	}
@@ -185,7 +187,7 @@ func TestCACertRestore_MissingOriginal(t *testing.T) {
 
 func TestCACertRestore_MissingBackup(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
 		t.Fatal(err)
@@ -199,7 +201,7 @@ func TestCACertRestore_MissingBackup(t *testing.T) {
 
 func TestCACertRestore_TmpAlreadyExists(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	backup := c.BackupPath()
 	tmp := c.TmpPath()
@@ -219,7 +221,7 @@ func TestCACertRestore_TmpAlreadyExists(t *testing.T) {
 
 func TestCACertRestore_Success(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	backup := c.BackupPath()
 	tmp := c.TmpPath()
@@ -267,7 +269,7 @@ func TestCACertRestore_Success(t *testing.T) {
 
 func TestCACertRestore_ReadFailureReverts(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	backup := c.BackupPath()
 	if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
@@ -301,7 +303,7 @@ func TestCACertRestore_ReadFailureReverts(t *testing.T) {
 
 func TestCACertRestore_RemoveTmpFailureReverts(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("age2", dir)
+	c := mustCACert(t, "age2", dir)
 	orig := c.OriginalPath()
 	backup := c.BackupPath()
 	if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
@@ -330,7 +332,7 @@ func TestCACertRestore_RemoveTmpFailureReverts(t *testing.T) {
 
 func TestCACertAppend_WriteFailure(t *testing.T) {
 	dir := t.TempDir()
-	c := NewCACert("athens", dir) // AoM does not use certificates subfolder
+	c := mustCACert(t, "athens", dir) // AoM does not use certificates subfolder
 	orig := c.OriginalPath()
 	if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
 		t.Fatal(err)
@@ -350,10 +352,7 @@ func TestCACertAppend_WriteFailure(t *testing.T) {
 func TestCACertForAoMAndAoE3(t *testing.T) {
 	for _, gameId := range []string{"age3", "athens"} {
 		dir := t.TempDir()
-		c := NewCACert(gameId, dir)
-		if c == nil {
-			t.Fatalf("expected CACert for %s", gameId)
-		}
+		c := mustCACert(t, gameId, dir)
 		orig := c.OriginalPath()
 		if err := os.MkdirAll(filepath.Dir(orig), 0755); err != nil {
 			t.Fatal(err)

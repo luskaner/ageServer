@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
-	gos_exec "os/exec"
+	osexec "os/exec"
 	"strconv"
 	"sync"
 	"testing"
@@ -31,13 +31,13 @@ func TestHelperProcessSleep(t *testing.T) {
 
 func spawnSleeper(t *testing.T, ms int) *os.Process {
 	t.Helper()
-	cmd := gos_exec.Command(os.Args[0], "-test.run=TestHelperProcessSleep$", "-test.v")
-	cmd.Env = append(os.Environ(), "GO_WATCH_HELPER=1", "SLEEP_MS="+strconv.Itoa(ms))
-	if err := cmd.Start(); err != nil {
+	proc := osexec.Command(os.Args[0], "-test.run=TestHelperProcessSleep$", "-test.v")
+	proc.Env = append(os.Environ(), "GO_WATCH_HELPER=1", "SLEEP_MS="+strconv.Itoa(ms))
+	if err := proc.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill() })
-	return cmd.Process
+	t.Cleanup(func() { _ = proc.Process.Kill() })
+	return proc.Process
 }
 
 func TestWaitForProcessesToExitWaitsForAll(t *testing.T) {
@@ -231,15 +231,15 @@ func applyWatchOverrides(o watchOverrides) func() {
 	}
 }
 
-func noopConfigRevert(gameId, logRoot string, headless bool, out io.Writer, optionsFn func(*exec.Options), runRevertFn func([]string, bool, io.Writer, func(*exec.Options)) *exec.Result) bool {
+func noopConfigRevert(_, _ string, _ bool, _ io.Writer, _ func(*exec.Options), _ func([]string, bool, io.Writer, func(*exec.Options)) *exec.Result) bool {
 	return true
 }
 
-func noopRevertCommand(out io.Writer, optionsFn func(*exec.Options)) error {
+func noopRevertCommand(_ io.Writer, _ func(*exec.Options)) error {
 	return nil
 }
 
-func noopLoggerBuffer(name string, fn func(io.Writer)) error {
+func noopLoggerBuffer(_ string, _ func(io.Writer)) error {
 	return nil
 }
 
@@ -248,13 +248,9 @@ func noopLoggerBuffer(name string, fn func(io.Writer)) error {
 // The buffer only decides where the wrapped work is logged, so a test that wants
 // to know whether the teardown reached the revert has to let it run. The other
 // tests use the no-op because they only care about the path taken to it.
-func runningLoggerBuffer(name string, fn func(io.Writer)) error {
+func runningLoggerBuffer(_ string, fn func(io.Writer)) error {
 	fn(nil)
 	return nil
-}
-
-func noopRemoveBSRegion(exe, gameId, region string, out io.Writer, optionsFn func(*exec.Options)) *exec.Result {
-	return &exec.Result{}
 }
 
 func TestWatchGameTimeoutStart(t *testing.T) {

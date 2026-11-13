@@ -530,8 +530,8 @@ func TestComplex_InputValidation_Httptest(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name+"_ValidVsInvalid", func(t *testing.T) {
-			var bodyValid string = tc.validBody
-			var pathValid string = tc.path
+			bodyValid := tc.validBody
+			pathValid := tc.path
 			// si validBody es GET con query, ya está en path
 			if tc.method == "GET" {
 				bodyValid = ""
@@ -544,8 +544,8 @@ func TestComplex_InputValidation_Httptest(t *testing.T) {
 			t.Logf("✓ %s válido → %s", tc.name, rrValid.Body.String())
 
 			if tc.invalidBody != "" {
-				var pathInvalid string = tc.path
-				var bodyInvalid string = tc.invalidBody
+				pathInvalid := tc.path
+				bodyInvalid := tc.invalidBody
 				// si es GET, el invalid va como query
 				if tc.method == "GET" && tc.invalidBody != "" {
 					// construir path con query inválida

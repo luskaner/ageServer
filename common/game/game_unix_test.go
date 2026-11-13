@@ -48,7 +48,7 @@ func TestGameConstants(t *testing.T) {
 func TestFirstExistingFile_Found(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "exists.txt")
-	os.WriteFile(f, []byte("hi"), 0644)
+	_ = os.WriteFile(f, []byte("hi"), 0644)
 
 	got := FirstExistingFile([]string{filepath.Join(dir, "nope.txt"), f}, nil, func(fi os.FileInfo) bool {
 		return !fi.IsDir()
@@ -70,7 +70,7 @@ func TestFirstExistingFile_NotFound(t *testing.T) {
 func TestFirstExistingFile_NilFileFn(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "test.txt")
-	os.WriteFile(f, []byte("data"), 0644)
+	_ = os.WriteFile(f, []byte("data"), 0644)
 
 	got := FirstExistingFile([]string{f}, nil, func(fi os.FileInfo) bool {
 		return !fi.IsDir()
@@ -83,7 +83,7 @@ func TestFirstExistingFile_NilFileFn(t *testing.T) {
 func TestFirstExistingFile_CustomFileFn(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "test.txt")
-	os.WriteFile(f, []byte("data"), 0644)
+	_ = os.WriteFile(f, []byte("data"), 0644)
 
 	got := FirstExistingFile([]string{"test.txt"}, func(s string) string {
 		return filepath.Join(dir, s)

@@ -15,11 +15,16 @@ type ConditionalHandler interface {
 }
 
 func HostMiddleware(gameId string, writer io.Writer) http.Handler {
+	// Community must come before Game: both serve any Host, and Game is the
+	// catch-all. Check() is what keeps /community/ out of the session-protected
+	// /game tree.
+	communityHandler := &Community{}
 	var condHandlerOrder = []ConditionalHandler{
 		&PlayfabApi{},
 		NewApiAgeOfEmpires(),
 		NewAoe4ApiAgeOfEmpires(),
 		&CdnAgeOfEmpires{},
+		communityHandler,
 		&Game{},
 	}
 	var writers []*internal.PrefixedWriter

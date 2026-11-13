@@ -11,7 +11,6 @@ import (
 
 	"github.com/luskaner/ageBattleServer"
 	"github.com/luskaner/ageServer/common"
-	"github.com/luskaner/ageServer/common/executables"
 	"github.com/luskaner/ageServer/common/game"
 )
 
@@ -31,21 +30,6 @@ func GetDefaultSimulationPeriod(gameID string) float64 {
 		return period
 	}
 	return 125
-}
-
-// TLSFiles returns the resolved certificate and key file paths for a game.
-// For age4 and athens (AoM), uses cert.pem/key.pem.
-// For other games, uses selfsigned_cert.pem/selfsigned_key.pem.
-// If certsPath is "auto", it finds the server executable to locate the certs.
-func TLSFiles(gameID, certsPath string) (certFile, keyFile string, err error) {
-	if certsPath == "auto" {
-		serverExe := executables.FindPath(executables.NativeFileName(true, executables.Server))
-		if serverExe == "" {
-			return "", "", fmt.Errorf("could not find server executable")
-		}
-		certsPath = common.CertificatePairFolder(serverExe)
-	}
-	return TLSFilesFromFolder(gameID, certsPath)
 }
 
 // TLSFilesFromFolder returns the resolved certificate and key file paths from a given folder.
@@ -94,35 +78,6 @@ type PortConfig struct {
 	BsPort        int
 	WebSocketPort int
 	OutOfBandPort int
-}
-
-// AllocatePorts allocates free ports for any zero-valued ports in the config.
-// Returns the updated PortConfig with all ports assigned.
-func AllocatePorts(ports PortConfig) (PortConfig, error) {
-	if ports.BsPort == 0 {
-		p, err := GetFreePort()
-		if err != nil {
-			return ports, fmt.Errorf("auto-assign BsPort: %w", err)
-		}
-		ports.BsPort = p
-	}
-	if ports.WebSocketPort == 0 {
-		p, err := GetFreePort()
-		if err != nil {
-			return ports, fmt.Errorf("auto-assign WebSocketPort: %w", err)
-		}
-		ports.WebSocketPort = p
-	}
-	if !GameSupportsOutOfBand("") { // empty string means we don't know the game yet
-		ports.OutOfBandPort = 0
-	} else if ports.OutOfBandPort == 0 {
-		p, err := GetFreePort()
-		if err != nil {
-			return ports, fmt.Errorf("auto-assign OutOfBandPort: %w", err)
-		}
-		ports.OutOfBandPort = p
-	}
-	return ports, nil
 }
 
 // AllocatePortsForGame allocates free ports for a specific game.
@@ -178,30 +133,6 @@ func ValidatePorts(ports PortConfig) error {
 		return fmt.Errorf("OutOfBandPort must be 0..65535")
 	}
 	return nil
-}
-
-// CheckPortsAvailable checks if the given ports are available for binding.
-func CheckPortsAvailable(ports PortConfig) error {
-	for _, port := range []int{ports.BsPort, ports.WebSocketPort} {
-		if port > 0 && !IsPortAvailable(port) {
-			return fmt.Errorf("port %d is already in use", port)
-		}
-	}
-	if ports.OutOfBandPort > 0 && !IsPortAvailable(ports.OutOfBandPort) {
-		return fmt.Errorf("out of band port %d is already in use", ports.OutOfBandPort)
-	}
-	return nil
-}
-
-// IsPortAvailable checks if a TCP port is available for binding.
-func IsPortAvailable(port int) bool {
-	address := net.JoinHostPort(netip.IPv4Unspecified().String(), strconv.Itoa(port))
-	l, err := net.Listen("tcp", address)
-	if err != nil {
-		return false
-	}
-	_ = l.Close()
-	return true
 }
 
 // ConfigBuilder helps build a battleServer.Config with common settings.

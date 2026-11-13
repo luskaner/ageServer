@@ -42,8 +42,8 @@ func FlagSetToArgs(fs *pflag.FlagSet, includeName bool) []string {
 				val := strings.TrimPrefix(valueStr, "[")
 				val = strings.TrimSuffix(val, "]")
 				if val != "" {
-					elements := strings.Split(val, ",")
-					for _, elem := range elements {
+					elements := strings.SplitSeq(val, ",")
+					for elem := range elements {
 						args = append(args, fmt.Sprintf("--%s=%s", f.Name, elem))
 					}
 				}

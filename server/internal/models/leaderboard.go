@@ -1,8 +1,9 @@
 package models
 
 import (
-	"sort"
-	"strconv"
+	"iter"
+	"maps"
+	"slices"
 
 	"github.com/luskaner/ageServer/common/game"
 	i "github.com/luskaner/ageServer/server/internal"
@@ -137,7 +138,7 @@ func (l *MainLeaderboardDefinitions) LadderIDs() []int32 {
 	for id := range l.ladders {
 		ids = append(ids, id)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	slices.Sort(ids)
 	return ids
 }
 
@@ -148,31 +149,19 @@ func (l *MainLeaderboardDefinitions) LadderIDs() []int32 {
 // each title with a capture.
 func DefaultLeaderboardFor(gameId string) int32 {
 	switch gameId {
-	case game.AoE1:
-		return 1
 	case game.AoE2:
 		return SoloRMRanked
-	case game.AoE3, game.AoE4, game.AoM:
+	case game.AoE1, game.AoE3, game.AoE4, game.AoM:
 		return 1
 	default:
 		return SoloRMRanked
 	}
 }
 
-// LadderName renders a ladder id for logs (the client always uses ids).
-func LadderName(definitions LeaderboardDefinitions, id int32) string {
-	if definitions == nil {
-		return strconv.Itoa(int(id))
-	}
-	if name, ok := definitions.LadderDefinitions()[id]; ok {
-		return name
-	}
-	return strconv.Itoa(int(id))
-}
-
 type AvatarStatDefinitions interface {
 	GetIdByName(name string) (id int32, ok bool)
 	GetNameById(id int32) (name string, ok bool)
+	Names() iter.Seq[string]
 }
 
 type MainAvatarStatDefinitions struct {
@@ -194,4 +183,8 @@ func (as *MainAvatarStatDefinitions) GetNameById(id int32) (name string, ok bool
 	}
 	name, ok = as.idToName[id]
 	return
+}
+
+func (as *MainAvatarStatDefinitions) Names() iter.Seq[string] {
+	return maps.Keys(as.nameToId)
 }
