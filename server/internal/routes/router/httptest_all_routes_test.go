@@ -113,6 +113,7 @@ func (f *fakeResources) ReturnSignedAsset(name string, w *http.ResponseWriter, r
 func (f *fakeResources) LoginData() []i.A                                 { return f.loginData }
 func (f *fakeResources) ChatChannels() map[string]*models.MainChatChannel { return f.chatChannels }
 func (f *fakeResources) News() []i.A                                      { return f.news }
+func (f *fakeResources) MenuBackgrounds() *models.MenuBackgrounds         { return nil }
 func (f *fakeResources) ArrayFiles() map[string]i.A                       { return f.arrayFiles }
 func (f *fakeResources) SignedAssets() map[string][]byte                  { return f.signedAssets }
 func (f *fakeResources) CloudFiles() *models.CloudFiles                   { return f.cloudFiles }

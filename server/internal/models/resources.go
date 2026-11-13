@@ -52,6 +52,7 @@ type Resources interface {
 	LoginData() []i.A
 	ChatChannels() map[string]*MainChatChannel
 	News() []i.A
+	MenuBackgrounds() *MenuBackgrounds
 	ArrayFiles() map[string]i.A
 	SignedAssets() map[string][]byte
 	CloudFiles() *CloudFiles
@@ -62,6 +63,7 @@ type MainResources struct {
 	chatChannels            map[string]*MainChatChannel
 	loginData               []i.A
 	news                    []i.A
+	menuBackgrounds         *MenuBackgrounds
 	arrayFiles              map[string]i.A
 	keyedFiles              map[string][]byte // The currently active version (signed or captured)
 	keyedFilesCaptured      map[string][]byte // The captured (unsigned) version
@@ -88,6 +90,7 @@ func (r *MainResources) Initialize(gameId string, opts *ResourcesOpts) {
 	r.initializeChatChannels(gameId)
 	r.initializeNews(gameId)
 	r.initializeResponses(gameId)
+	r.initializeMenuBackgrounds(gameId)
 	r.initializeCloud(gameId)
 }
 
@@ -101,6 +104,12 @@ func (r *MainResources) ChatChannels() map[string]*MainChatChannel {
 
 func (r *MainResources) News() []i.A {
 	return r.news
+}
+
+// MenuBackgrounds returns the parsed menu-background catalogue and schedule,
+// or nil when the game ships no catalogue.
+func (r *MainResources) MenuBackgrounds() *MenuBackgrounds {
+	return r.menuBackgrounds
 }
 
 func (r *MainResources) ArrayFiles() map[string]i.A {
@@ -297,6 +306,19 @@ func (r *MainResources) initializeResponses(gameId string) {
 			}
 		}
 	}
+}
+
+func (r *MainResources) initializeMenuBackgrounds(gameId string) {
+	catalog := ParseMenuBackgroundCatalog(r.arrayFiles["menuBackgrounds.json"])
+	if len(catalog) == 0 {
+		return
+	}
+	schedule, err := loadMenuBackgroundSchedule(
+		filepath.Join(paths.ConfigsPath, gameId, "menuBackgrounds.toml"), catalog)
+	if err != nil {
+		panic(err)
+	}
+	r.menuBackgrounds = &MenuBackgrounds{Images: catalog, Schedule: schedule}
 }
 
 func (r *MainResources) initializeCloud(gameId string) {
