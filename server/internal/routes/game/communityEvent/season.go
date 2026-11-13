@@ -74,7 +74,7 @@ func aoe4CommunityEvents(definitions i.A, now time.Time) i.A {
 				continue
 			}
 			name := fmt.Sprintf("Season %d - %s", season.Number, definition.name)
-			id := int32(1000 + baseIndex + index)
+			id := int32(models.RankedSeasonEventIDBase + baseIndex + index)
 			seasonIndex := baseIndex + index + 1
 			events = append(events, i.A{
 				name,

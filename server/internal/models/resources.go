@@ -309,16 +309,17 @@ func (r *MainResources) initializeResponses(gameId string) {
 }
 
 func (r *MainResources) initializeMenuBackgrounds(gameId string) {
+	path := filepath.Join(paths.ConfigsPath, gameId, "menuBackgrounds.toml")
 	catalog := ParseMenuBackgroundCatalog(r.arrayFiles["menuBackgrounds.json"])
 	if len(catalog) == 0 {
+		warnMenuBackgroundsWithoutCatalog(path)
 		return
 	}
-	schedule, err := loadMenuBackgroundSchedule(
-		filepath.Join(paths.ConfigsPath, gameId, "menuBackgrounds.toml"), catalog)
+	periods, err := loadMenuBackgroundSchedule(path, catalog)
 	if err != nil {
 		panic(err)
 	}
-	r.menuBackgrounds = &MenuBackgrounds{Images: catalog, Schedule: schedule}
+	r.menuBackgrounds = &MenuBackgrounds{Periods: periods}
 }
 
 func (r *MainResources) initializeCloud(gameId string) {

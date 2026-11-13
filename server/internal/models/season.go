@@ -16,6 +16,13 @@ const (
 	// visible rating is shown as a rank. It mirrors placementMatch in the
 	// season metadata served by getAvailableCommunityEvents.
 	PlacementMatches = 5
+
+	// RankedSeasonEventIDBase is the first id of the community-event id range
+	// the AoE4 route reserves for ranked season events: an event of that type
+	// gets Base + (season-1)*len(definitions) + index. Since it grows with the
+	// season number, every id from here upwards can eventually belong to a
+	// season, which is why no other community event may use that range.
+	RankedSeasonEventIDBase = 1000
 )
 
 // rankedSeasonAnchor is the start of the first official AoE4 ranked season

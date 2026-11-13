@@ -10,12 +10,22 @@ import (
 	"github.com/luskaner/ageServer/server/internal/models"
 )
 
-func testMenuBackgroundCatalog() []models.MenuBackgroundDefinition {
-	return []models.MenuBackgroundDefinition{
-		{ID: 100, Name: "First", FrontEndImagePath: `\Images\backgrounds\first.png`},
-		{ID: 101, Name: "Second", FrontEndImagePath: `\Images\backgrounds\second.png`},
-		{ID: 102, Name: "Third", FrontEndImagePath: `\Images\backgrounds\third.png`},
+func testMenuBackgroundPeriods() []models.MenuBackgroundPeriod {
+	return []models.MenuBackgroundPeriod{
+		{Event: 900100, Name: "First", CustomData: `{"frontEndImagePath":"\\Images\\first.png"}`},
+		{Event: 900101, Name: "Second", CustomData: `{"frontEndImagePath":"\\Images\\second.png"}`},
+		{Event: 900102, Name: "Third", CustomData: `{"frontEndImagePath":"\\Images\\third.png"}`},
 	}
+}
+
+// eventAt returns the positional event at index, failing the test if the shape
+// is not the 8-field array the client parses.
+func eventAt(events i.A, index int) i.A {
+	if index >= len(events) {
+		return nil
+	}
+	event, _ := events[index].(i.A)
+	return event
 }
 
 // TestScheduledMenuBackgroundsPublishesStartedPeriods covers the publish rules:
@@ -23,20 +33,20 @@ func testMenuBackgroundCatalog() []models.MenuBackgroundDefinition {
 // not, the active period comes first and the rest follow by event id.
 func TestScheduledMenuBackgroundsPublishesStartedPeriods(t *testing.T) {
 	now := time.Date(2026, time.November, 10, 12, 0, 0, 0, time.UTC)
-	schedule := []models.MenuBackgroundWindow{
-		{Image: 100, Event: 900100, Name: "Ended", Start: now.AddDate(0, 0, -40), End: now.AddDate(0, 0, -20)},
-		{Image: 101, Event: 5, Name: "Active", Start: now.Add(-time.Hour), End: now.Add(time.Hour)},
-		{Image: 102, Event: 7, Name: "Future", Start: now.Add(time.Hour), End: now.Add(2 * time.Hour)},
-	}
-	events := scheduledMenuBackgrounds(schedule, testMenuBackgroundCatalog(), now)
+	periods := testMenuBackgroundPeriods()
+	periods[0].Start, periods[0].End = now.AddDate(0, 0, -40), now.AddDate(0, 0, -20)
+	periods[1].Start, periods[1].End = now.Add(-time.Hour), now.Add(time.Hour)
+	periods[1].Event = 5
+	periods[2].Start, periods[2].End = now.Add(time.Hour), now.Add(2*time.Hour)
+	events := scheduledMenuBackgrounds(periods, now)
 	if len(events) != 2 {
 		t.Fatalf("events = %d, want the active and the ended period only", len(events))
 	}
-	if name, _ := events[0][0].(string); name != "Active" {
+	if name, _ := eventAt(events, 0)[0].(string); name != "Second" {
 		t.Fatalf("first event = %q, want the active period first", name)
 	}
-	if id, _ := events[1][4].(int32); id != 900100 {
-		t.Fatalf("second event id = %v, want the ended period", events[1][4])
+	if id, _ := eventAt(events, 1)[4].(int32); id != 900100 {
+		t.Fatalf("second event id = %v, want the ended period", eventAt(events, 1)[4])
 	}
 }
 
@@ -44,21 +54,22 @@ func TestScheduledMenuBackgroundsPublishesStartedPeriods(t *testing.T) {
 // non-active history is served ascending by event id, not in schedule order.
 func TestScheduledMenuBackgroundsOrdersTheHistoryByEventID(t *testing.T) {
 	now := time.Date(2026, time.November, 10, 12, 0, 0, 0, time.UTC)
-	schedule := []models.MenuBackgroundWindow{
-		{Image: 102, Event: 900102, Start: now.AddDate(0, 0, -10), End: now.AddDate(0, 0, -5)},
-		{Image: 100, Event: 900100, Start: now.AddDate(0, 0, -40), End: now.AddDate(0, 0, -20)},
-	}
-	events := scheduledMenuBackgrounds(schedule, testMenuBackgroundCatalog(), now)
+	periods := testMenuBackgroundPeriods()
+	periods[0].Start, periods[0].End = now.AddDate(0, 0, -10), now.AddDate(0, 0, -5)
+	periods[0].Event = 900102
+	periods[1].Start, periods[1].End = now.AddDate(0, 0, -40), now.AddDate(0, 0, -20)
+	periods[1].Event = 900100
+	events := scheduledMenuBackgrounds(periods[:2], now)
 	if len(events) != 2 {
 		t.Fatalf("events = %d, want 2", len(events))
 	}
-	if events[0][4] != int32(900100) || events[1][4] != int32(900102) {
-		t.Fatalf("event ids = %v, %v; want 900100, 900102", events[0][4], events[1][4])
+	if eventAt(events, 0)[4] != int32(900100) || eventAt(events, 1)[4] != int32(900102) {
+		t.Fatalf("event ids = %v, %v; want 900100, 900102", eventAt(events, 0)[4], eventAt(events, 1)[4])
 	}
 }
 
 func TestScheduledMenuBackgroundsEmptySchedulePublishesNothing(t *testing.T) {
-	if events := scheduledMenuBackgrounds(nil, testMenuBackgroundCatalog(), time.Now()); len(events) != 0 {
+	if events := scheduledMenuBackgrounds(nil, time.Now()); len(events) != 0 {
 		t.Fatalf("events = %#v, want none", events)
 	}
 }
@@ -68,30 +79,33 @@ func TestScheduledMenuBackgroundsEmptySchedulePublishesNothing(t *testing.T) {
 // path and the far-future expiry sentinel.
 func TestScheduledMenuBackgroundEventMatchesOfficialShape(t *testing.T) {
 	now := time.Date(2026, time.November, 10, 12, 0, 0, 0, time.UTC)
-	schedule := []models.MenuBackgroundWindow{
-		{Image: 100, Event: 290, Name: "Trade Secrets", Start: now.Add(-time.Hour), End: now.Add(time.Hour)},
+	period := models.MenuBackgroundPeriod{
+		Event:      290,
+		Name:       "Trade Secrets",
+		Start:      now.Add(-time.Hour),
+		End:        now.Add(time.Hour),
+		CustomData: `{"frontEndImagePath":"\\Images\\backgrounds\\first.png"}`,
 	}
-	events := scheduledMenuBackgrounds(schedule, testMenuBackgroundCatalog(), now)
+	events := scheduledMenuBackgrounds([]models.MenuBackgroundPeriod{period}, now)
 	if len(events) != 1 {
 		t.Fatalf("events = %d, want 1", len(events))
 	}
-	event := events[0]
 	want := i.A{
 		"Trade Secrets",
-		schedule[0].Start.Unix(),
-		schedule[0].End.Unix(),
+		period.Start.Unix(),
+		period.End.Unix(),
 		seasonEventFarFuture,
 		int32(290),
 		menuBackgroundEventType,
 		"",
 		`{"frontEndImagePath":"\\Images\\backgrounds\\first.png"}`,
 	}
-	if len(event) != len(want) {
-		t.Fatalf("event has %d fields, want %d", len(event), len(want))
+	if len(eventAt(events, 0)) != len(want) {
+		t.Fatalf("event has %d fields, want %d", len(eventAt(events, 0)), len(want))
 	}
 	for index := range want {
-		if event[index] != want[index] {
-			t.Fatalf("event field %d = %#v, want %#v", index, event[index], want[index])
+		if eventAt(events, 0)[index] != want[index] {
+			t.Fatalf("event field %d = %#v, want %#v", index, eventAt(events, 0)[index], want[index])
 		}
 	}
 }
@@ -102,12 +116,13 @@ func TestScheduledMenuBackgroundEventMatchesOfficialShape(t *testing.T) {
 func TestMenuBackgroundsKeepTheRankedSeason(t *testing.T) {
 	now := time.Date(2026, time.November, 7, 1, 0, 0, 0, time.UTC)
 	response := aoe4CommunityEvents(bundledSeasonDefinitions(t), now)
-	backgrounds := &models.MenuBackgrounds{
-		Images: testMenuBackgroundCatalog(),
-		Schedule: []models.MenuBackgroundWindow{
-			{Image: 100, Event: 290, Name: "Current", Start: now.Add(-time.Hour), End: now.Add(time.Hour)},
-		},
-	}
+	backgrounds := &models.MenuBackgrounds{Periods: []models.MenuBackgroundPeriod{{
+		Event:      290,
+		Name:       "Current",
+		Start:      now.Add(-time.Hour),
+		End:        now.Add(time.Hour),
+		CustomData: `{"frontEndImagePath":"\\Images\\backgrounds\\xp7_keyart.png"}`,
+	}}}
 	response = withMenuBackgrounds(response, backgrounds, now)
 	events, ok := response[1].([]any)
 	if !ok {
@@ -151,9 +166,9 @@ func TestWithMenuBackgroundsWithoutConfigurationChangesNothing(t *testing.T) {
 	want, _ := json.Marshal(unchanged)
 	cases := map[string]*models.MenuBackgrounds{
 		"no resources":   nil,
-		"empty schedule": {Images: testMenuBackgroundCatalog()},
-		"future schedule": {Images: testMenuBackgroundCatalog(), Schedule: []models.MenuBackgroundWindow{{
-			Image: 100, Event: 900100, Start: now.Add(time.Hour), End: now.Add(2 * time.Hour),
+		"empty schedule": {},
+		"future schedule": {Periods: []models.MenuBackgroundPeriod{{
+			Event: 900100, Start: now.Add(time.Hour), End: now.Add(2 * time.Hour),
 		}}},
 	}
 	for name, backgrounds := range cases {

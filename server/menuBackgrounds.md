@@ -57,7 +57,9 @@ end   = 2027-02-05T18:00:00Z
 ```
 
 `event` and `name` exist to mirror the official service exactly: it gives each period
-its own event id and a period-specific name, and reuses images across periods.
+its own event id and a period-specific name, and reuses images across periods. Because
+the default id is `900000 + image`, showing **the same image in two periods** needs an
+explicit `event` on at least one of them; the error tells you so.
 
 ## What gets published
 
@@ -89,17 +91,27 @@ listener binds.
 | `start` and `end` are present, `start < end` | a missing date cannot define a window |
 | no two windows overlap | overlap makes "which one" undefined; the official has none |
 | event ids are unique | no official response repeats one |
+| every key and table name is a known one | a typo would otherwise switch the feature off silently |
+| an explicit `event` is below `1000` or at least `900000` | the ids from `1000` upwards are the ranked season range; a background landing there would be read as a season and break ranked play |
 | the file parses as TOML | same as `news.toml` |
 
-An absent or empty file is not an error: it means the feature is off.
+An absent or empty file is not an error: it means the feature is off. If the file exists
+for a title that ships no `menuBackgrounds.json` catalogue the server logs a warning and
+shows nothing, rather than failing.
 
 ## Interaction with ranked
 
 Background events are community-event type `0`, and their default ids sit in the
 reserved `900000+` range, disjoint from the ranked season ids this server generates
 (`1000+`). They are prepended to the event list and never replace the type-6 season
-events, so ranked play is unaffected. If you set `event` yourself, keep it below
-`1000` or above the season range.
+events, so ranked play is unaffected. An explicit `event` must therefore stay below
+`1000` (where every id the official service uses lives) or at `900000` or above; the
+server refuses to start otherwise.
+
+One deliberate difference from the official service: it sorts the whole table with the
+active events first, so its background sits among the season events. This server leaves
+the season events in the order it already emits them and puts the background events in
+front of them. The client selects by window, so the result is the same.
 
 ## A worked year
 

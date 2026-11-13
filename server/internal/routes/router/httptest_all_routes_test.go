@@ -31,6 +31,9 @@ type fakeResources struct {
 	signedAssets map[string][]byte
 	signatures   map[string]string
 	cloudFiles   *models.CloudFiles
+	// menuBackgrounds is what the AoE4 menu-background tests inject; nil keeps
+	// the endpoint behaving as if the feature were off.
+	menuBackgrounds *models.MenuBackgrounds
 }
 
 func (f *fakeResources) Initialize(_ string, _ *models.ResourcesOpts) {
@@ -113,7 +116,7 @@ func (f *fakeResources) ReturnSignedAsset(name string, w *http.ResponseWriter, r
 func (f *fakeResources) LoginData() []i.A                                 { return f.loginData }
 func (f *fakeResources) ChatChannels() map[string]*models.MainChatChannel { return f.chatChannels }
 func (f *fakeResources) News() []i.A                                      { return f.news }
-func (f *fakeResources) MenuBackgrounds() *models.MenuBackgrounds         { return nil }
+func (f *fakeResources) MenuBackgrounds() *models.MenuBackgrounds         { return f.menuBackgrounds }
 func (f *fakeResources) ArrayFiles() map[string]i.A                       { return f.arrayFiles }
 func (f *fakeResources) SignedAssets() map[string][]byte                  { return f.signedAssets }
 func (f *fakeResources) CloudFiles() *models.CloudFiles                   { return f.cloudFiles }
