@@ -174,6 +174,7 @@ the [`responses`](resources/responses) base directory.
 - [`Item Locations`](resources/responses/age4/itemLocations.json): Locations of items.
 - [`Item Bundle Items`](resources/responses/age4/itemBundleItems.json): Grouping of items into bundles.
 - [`Level Rewards Table`](resources/responses/age4/levelRewardsTable.json): Level rewards table.
+- [`Menu Backgrounds`](resources/responses/age4/menuBackgrounds.json): Catalogue of the main-menu backgrounds the client can display.
 
 #### Age of Mythology: Retold
 
@@ -360,6 +361,17 @@ deployment this is the same exposure the game client already has.
 
 The implementation notes, field-by-field contracts and the reasoning behind each
 decision are in [`docs/community-api-implementation.md`](../docs/community-api-implementation.md).
+
+### Menu backgrounds (AoE IV)
+
+The AoE IV client reads its main-menu background from a type-0 community event, so the
+server can show a dated background to every player. The schedule lives in
+`resources/config/age4/menuBackgrounds.toml`, which is **not shipped**: without it the
+endpoint behaves exactly as before. The file is read at startup, and an invalid one
+stops the server with a message naming the offending entry.
+
+See [Menu backgrounds](./menuBackgrounds.md) for the catalogue, the file format and the
+publish rules.
 
 ## Ranked ladder
 
