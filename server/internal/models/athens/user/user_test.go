@@ -3,6 +3,7 @@ package user
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"testing"
 
 	"github.com/luskaner/ageServer/server/internal/models"
@@ -14,9 +15,7 @@ type mapStore struct {
 
 func (m *mapStore) Load() (map[string]models.StoredValue, error) {
 	loaded := make(map[string]models.StoredValue, len(m.values))
-	for key, value := range m.values {
-		loaded[key] = value
-	}
+	maps.Copy(loaded, m.values)
 	return loaded, nil
 }
 

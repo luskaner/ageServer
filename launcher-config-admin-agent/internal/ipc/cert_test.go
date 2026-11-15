@@ -14,7 +14,7 @@ import (
 // "not_valid" contains underscores which are invalid in IDNA/DNS.
 const invalidIDNACN = "not_valid"
 
-func validGameCert(gameId string) *x509.Certificate {
+func validGameCert(_ string) *x509.Certificate {
 	domains := make([]string, len(common.SelfSignedCertDomains))
 	copy(domains, common.SelfSignedCertDomains)
 	return &x509.Certificate{

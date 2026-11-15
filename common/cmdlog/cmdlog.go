@@ -18,18 +18,6 @@ import (
 	commonLogger "github.com/luskaner/ageServer/common/logger"
 )
 
-// prefix is the section name the file log files these messages under. It is set
-// once at start up by the program, because it is the program's own name and every
-// program has a different one.
-var prefix = "main"
-
-// SetPrefix names the file log section these messages go under.
-func SetPrefix(name string) {
-	if name != "" {
-		prefix = name
-	}
-}
-
 // Initialize resolves the terminal capability and points the file log at a buffer.
 //
 // The nil writer is the whole trick. commonLogger writes to whatever it is given,
@@ -80,19 +68,6 @@ func Detail(format string, a ...any) { dual(text(format, a...), detailStyle(form
 // Fault reports a subordinate line that belongs to a failure, in red.
 func Fault(format string, a ...any) { dual(text(format, a...), faultStyle(format, a...)) }
 
-// Println writes a message to both sinks untouched, for the text that is not one
-// of the levels above: data, a stack trace, a file's contents.
-func Println(a ...any) {
-	commonLogger.PrefixPrintln("main", a...)
-	_, _ = fmt.Fprintln(os.Stdout, fmt.Sprint(a...))
-}
-
-// Printf is Println for a format string.
-func Printf(format string, a ...any) {
-	commonLogger.PrefixPrintf("main", format, a...)
-	_, _ = fmt.Fprintf(os.Stdout, format+"\n", a...)
-}
-
 // Banner prints the program header.
 func Banner(program string, version string) {
 	line := fmt.Sprintf("=== %s %s ===", program, version)
@@ -105,88 +80,6 @@ func Section(title string) {
 	line := fmt.Sprintf("--- %s ---", title)
 	_, _ = fmt.Fprintln(os.Stdout, line)
 	commonLogger.PrefixPrintln("main", line)
-}
-
-// KV prints a key and its value as one sentence.
-func KV(indent int, key string, value string) {
-	line := fmt.Sprintf("%s%s: %s", indentString(indent), key, value)
-	_, _ = fmt.Fprintln(os.Stdout, line)
-	commonLogger.PrefixPrintln("main", line)
-}
-
-// Spinner animates a line in place where the console can do it, and prints one
-// plain line where it cannot.
-func Spinner(label string) *SpinnerHandle {
-	h := &SpinnerHandle{label: label, active: true}
-	_, _ = fmt.Fprintf(os.Stdout, "  %s... ", label)
-	return h
-}
-
-type SpinnerHandle struct {
-	label   string
-	active  bool
-	doneMsg string
-}
-
-func (h *SpinnerHandle) Done(format string, a ...any) {
-	if !h.active {
-		return
-	}
-	h.active = false
-	h.doneMsg = fmt.Sprintf(format, a...)
-	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, okStyle("%s", h.doneMsg))
-}
-
-func (h *SpinnerHandle) Fail(format string, a ...any) {
-	if !h.active {
-		return
-	}
-	h.active = false
-	h.doneMsg = fmt.Sprintf(format, a...)
-	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, failStyle("%s", h.doneMsg))
-}
-
-func (h *SpinnerHandle) Info(format string, a ...any) {
-	if !h.active {
-		return
-	}
-	h.active = false
-	h.doneMsg = fmt.Sprintf(format, a...)
-	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, infoStyle("%s", h.doneMsg))
-}
-
-func (h *SpinnerHandle) Stop() {
-	if !h.active {
-		return
-	}
-	h.active = false
-	_, _ = fmt.Fprintf(os.Stdout, "\r  %s... %s\n", h.label, warnStyle("stopped"))
-}
-
-// ProgressHandle is a simple progress indicator.
-type ProgressHandle struct {
-	total int
-}
-
-func BeginProgress() *ProgressHandle {
-	return &ProgressHandle{total: 100}
-}
-
-func (p *ProgressHandle) Set(percent int) {
-	// Simple progress - just print percentage
-	_, _ = fmt.Fprintf(os.Stdout, "\rProgress: %d%%", percent)
-}
-
-func (p *ProgressHandle) Done() {
-	_, _ = fmt.Fprintf(os.Stdout, "\rProgress: 100%% - Done\n")
-}
-
-func (p *ProgressHandle) Fail() {
-	_, _ = fmt.Fprintf(os.Stdout, "\rProgress: Failed\n")
-}
-
-func ClearProgress() {
-	_, _ = fmt.Fprint(os.Stdout, "\r                                    \r")
 }
 
 // --- Style helpers ---
@@ -217,11 +110,4 @@ func detailStyle(format string, a ...any) string {
 
 func faultStyle(format string, a ...any) string {
 	return "[FAULT] " + fmt.Sprintf(format, a...)
-}
-
-func indentString(indent int) string {
-	if indent <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("%*s", indent*2, "")
 }

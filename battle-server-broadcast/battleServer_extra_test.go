@@ -409,14 +409,14 @@ func TestCloneAnnouncementsLoop_ForwardsValidPackets(t *testing.T) {
 
 	readConn := &fakeReadConn{
 		packets: []fakePacket{
-			{data: validData, addr: &net.UDPAddr{IP: mostIP}},                         // should forward
-			{data: invalidHeader, addr: &net.UDPAddr{IP: mostIP}},                     // wrong header -> skip
-			{data: shortData, addr: &net.UDPAddr{IP: mostIP}},                         // too short -> skip (ValidData will reject because n < MinimumSize)
-			{data: validData, addr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1")}},         // wrong IP -> skip
-			{data: validData, addr: nil},                                              // nil addr -> skip
-			{data: validData, addr: &net.UDPAddr{IP: nil}},                            // nil IP -> skip
-			{data: validData, addr: &net.UDPAddr{IP: mostIP}},                         // should forward again
-			{err: errors.New("stop")},                                                // should return error
+			{data: validData, addr: &net.UDPAddr{IP: mostIP}},                  // should forward
+			{data: invalidHeader, addr: &net.UDPAddr{IP: mostIP}},              // wrong header -> skip
+			{data: shortData, addr: &net.UDPAddr{IP: mostIP}},                  // too short -> skip (ValidData will reject because n < MinimumSize)
+			{data: validData, addr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1")}}, // wrong IP -> skip
+			{data: validData, addr: nil},                                       // nil addr -> skip
+			{data: validData, addr: &net.UDPAddr{IP: nil}},                     // nil IP -> skip
+			{data: validData, addr: &net.UDPAddr{IP: mostIP}},                  // should forward again
+			{err: errors.New("stop")},                                          // should return error
 		},
 	}
 	write1 := &fakeWriteConn{}

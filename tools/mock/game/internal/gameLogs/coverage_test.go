@@ -15,7 +15,7 @@ func TestCreateLogsAllGames(t *testing.T) {
 			t.Fatalf("CreateLogs %s failed: %v", gid, err)
 		}
 		found := false
-		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() {
 				found = true
 				return filepath.SkipDir
@@ -30,7 +30,7 @@ func TestCreateLogsAllGames(t *testing.T) {
 	dir := t.TempDir()
 	// Create the expected path for age4: My Games/Age of Empires IV
 	age4Path := filepath.Join(dir, "My Games", "Age of Empires IV")
-	os.MkdirAll(age4Path, 0755)
+	_ = os.MkdirAll(age4Path, 0755)
 	if err := CreateLogs(game.AoE4, dir); err != nil {
 		t.Fatalf("CreateLogs age4 failed: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestCreateLogsInvalidGame(t *testing.T) {
 			t.Fatal("should panic for unknown game")
 		}
 	}()
-	CreateLogs("unknown", dir)
+	_ = CreateLogs("unknown", dir)
 }
 
 func TestCreateLogsWithFileBlocker(t *testing.T) {
@@ -53,7 +53,7 @@ func TestCreateLogsWithFileBlocker(t *testing.T) {
 	// Create a file where Logs directory should be, to make MkdirAll fail
 	// For age1, path is <dir>/Games/Age of Empires DE/Logs - we can make <dir>/Games a file
 	gamesPath := filepath.Join(dir, "Games")
-	os.WriteFile(gamesPath, []byte("blocker"), 0644)
+	_ = os.WriteFile(gamesPath, []byte("blocker"), 0644)
 	if err := CreateLogs(game.AoE1, dir); err == nil {
 		t.Fatal("should fail when Games is a file")
 	}

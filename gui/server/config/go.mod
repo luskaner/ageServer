@@ -1,6 +1,6 @@
 module changeme
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/pelletier/go-toml/v2 v2.4.3
@@ -16,6 +16,6 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/term v0.47.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/term v0.48.0 // indirect
 )

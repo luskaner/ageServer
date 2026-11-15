@@ -80,7 +80,7 @@ func TestHandleSetUpDecodeFailure(t *testing.T) {
 	resetIPCState(t)
 	// Create a decoder that will fail to decode SetupCommand (e.g., encode a string instead)
 	var buf bytes.Buffer
-	gob.NewEncoder(&buf).Encode("bad")
+	_ = gob.NewEncoder(&buf).Encode("bad")
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != internal.ErrDecode {
@@ -93,7 +93,7 @@ func TestHandleSetUpIPsAlreadyMapped(t *testing.T) {
 	mappedIps = true
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("127.0.0.2")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != internal.ErrIpsAlreadyMapped {
@@ -105,7 +105,7 @@ func TestHandleSetUpGameNotSupported(t *testing.T) {
 	resetIPCState(t)
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: "unknown", IP: net.ParseIP("1.1.1.1")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != internal.ErrGameNotSupported {
@@ -118,7 +118,7 @@ func TestHandleSetUpCertAlreadyAdded(t *testing.T) {
 	addedCert = true
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, Certificate: []byte("cert")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != internal.ErrCertAlreadyAdded {
@@ -131,7 +131,7 @@ func TestHandleSetUpCertParseFailure(t *testing.T) {
 	parseCertFn = func([]byte) (*x509.Certificate, error) { return nil, errors.New("parse fail") }
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, Certificate: []byte("bad")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != internal.ErrCertInvalid {
@@ -147,7 +147,7 @@ func TestHandleSetUpCertInvalid(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, Certificate: []byte("cert")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != internal.ErrCertInvalid {
@@ -161,7 +161,7 @@ func TestHandleSetUpBufferFailure(t *testing.T) {
 	bufferFn = func(string, func(writer io.Writer)) error { return errors.New("buffer fail") }
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, Certificate: []byte("cert")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != common.ErrFileLog {
@@ -177,7 +177,7 @@ func TestHandleSetUpSuccessWithCert(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, Certificate: []byte("cert")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != common.ErrSuccess {
@@ -195,7 +195,7 @@ func TestHandleSetUpSuccessWithIP(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("127.0.0.2")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != common.ErrSuccess {
@@ -213,7 +213,7 @@ func TestHandleSetUpResultFailure(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("1.1.1.1")}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != 1 {
@@ -234,7 +234,7 @@ func TestHandleSetUpForwardsCanUseInternet(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	cmd := ipc.SetupCommand{GameId: game.AoE2, CanUseInternet: true}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleSetUp("", dec)
 	if code != common.ErrSuccess {
@@ -252,7 +252,7 @@ func TestHandleSetUpForwardsCanUseInternet(t *testing.T) {
 func TestHandleRevertDecodeFailure(t *testing.T) {
 	resetIPCState(t)
 	var buf bytes.Buffer
-	gob.NewEncoder(&buf).Encode("bad")
+	_ = gob.NewEncoder(&buf).Encode("bad")
 	dec := gob.NewDecoder(&buf)
 	code := handleRevert("", dec)
 	if code != internal.ErrDecode {
@@ -265,7 +265,7 @@ func TestHandleRevertAlreadyReverted(t *testing.T) {
 	// Neither mappedIps nor addedCert set, so any revert should be already reverted
 	var buf bytes.Buffer
 	cmd := ipc.RevertCommand{IPs: true, Certificate: true}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleRevert("", dec)
 	if code != common.ErrSuccess {
@@ -280,7 +280,7 @@ func TestHandleRevertBufferFailure(t *testing.T) {
 	bufferFn = func(string, func(writer io.Writer)) error { return errors.New("buffer fail") }
 	var buf bytes.Buffer
 	cmd := ipc.RevertCommand{IPs: true, Certificate: true}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleRevert("", dec)
 	if code != common.ErrFileLog {
@@ -297,7 +297,7 @@ func TestHandleRevertSuccess(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	cmd := ipc.RevertCommand{IPs: true, Certificate: false}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleRevert("", dec)
 	if code != common.ErrSuccess {
@@ -320,7 +320,7 @@ func TestHandleRevertSuccessBoth(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	cmd := ipc.RevertCommand{IPs: true, Certificate: true}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleRevert("", dec)
 	if code != common.ErrSuccess {
@@ -339,7 +339,7 @@ func TestHandleRevertFailureKeepsState(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	cmd := ipc.RevertCommand{IPs: true}
-	gob.NewEncoder(&buf).Encode(cmd)
+	_ = gob.NewEncoder(&buf).Encode(cmd)
 	dec := gob.NewDecoder(&buf)
 	code := handleRevert("", dec)
 	if code != 5 {
@@ -362,7 +362,7 @@ func TestHandleClientSetupSuccess(t *testing.T) {
 	parseCertFn = func([]byte) (*x509.Certificate, error) { return makeValidCert(game.AoE2), nil }
 
 	client, server := net.Pipe()
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	done := make(chan bool, 1)
 	go func() {
 		handleClient("", server)
@@ -398,7 +398,7 @@ func TestHandleClientSetupSuccess(t *testing.T) {
 	}
 	// handleClient will encode final exit code before returning, but our client may have closed server side? For Exit, it closes connection and encodes.
 	// Instead just close and wait
-	client.Close()
+	_ = client.Close()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -421,21 +421,21 @@ func TestHandleClientRevertSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ack int
-	dec.Decode(&ack)
+	_ = dec.Decode(&ack)
 	if ack != common.ErrSuccess {
 		t.Fatalf("ack=%d", ack)
 	}
 	cmd := ipc.RevertCommand{IPs: true}
-	enc.Encode(cmd)
+	_ = enc.Encode(cmd)
 	var code int
-	dec.Decode(&code)
+	_ = dec.Decode(&code)
 	if code != common.ErrSuccess {
 		t.Fatalf("code=%d", code)
 	}
 	// Send Exit: the server now acknowledges before closing the connection so
 	// a non-elevated client can tell "still shutting down" from "never got the
 	// command". Drain that ack, then wait for it to return.
-	enc.Encode(ipc.Exit)
+	_ = enc.Encode(ipc.Exit)
 	var exitAck int
 	if err := dec.Decode(&exitAck); err != nil {
 		t.Fatal(err)
@@ -490,7 +490,7 @@ func TestHandleClientUnknownAction(t *testing.T) {
 	enc := gob.NewEncoder(client)
 	dec := gob.NewDecoder(client)
 	// Send unknown action 99
-	enc.Encode(byte(99))
+	_ = enc.Encode(byte(99))
 	var ack int
 	// It will not encode ack for unknown? Actually code does: for !exit loop, it decodes action, then switch, default does nothing, then encodes exitCode (ErrNonExistingAction)
 	// So we should get that
@@ -500,7 +500,7 @@ func TestHandleClientUnknownAction(t *testing.T) {
 	if ack != internal.ErrNonExistingAction {
 		t.Fatalf("ack=%d want ErrNonExistingAction", ack)
 	}
-	client.Close()
+	_ = client.Close()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -513,7 +513,7 @@ func TestHandleClientEncodeFailureOnAck(t *testing.T) {
 	// Use a conn that fails on write for encoder
 	client, server := net.Pipe()
 	// Close client immediately to cause server's Encode to fail
-	client.Close()
+	_ = client.Close()
 	done := make(chan bool, 1)
 	go func() { handleClient("", server); done <- true }()
 	// Server will try to decode action, get EOF and exit
@@ -564,10 +564,10 @@ func TestStartServerAcceptAndExit(t *testing.T) {
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		enc := gob.NewEncoder(client)
-		enc.Encode(ipc.Exit)
+		_ = enc.Encode(ipc.Exit)
 		var code int
-		gob.NewDecoder(client).Decode(&code)
-		client.Close()
+		_ = gob.NewDecoder(client).Decode(&code)
+		_ = client.Close()
 	}()
 	code := StartServer("")
 	if code != common.ErrSuccess {

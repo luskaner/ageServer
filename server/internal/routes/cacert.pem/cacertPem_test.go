@@ -52,12 +52,12 @@ func TestCacertPemServesFileWhenExists(t *testing.T) {
 	if folder == "" {
 		t.Skip("could not determine folder")
 	}
-	os.MkdirAll(folder, 0755)
+	_ = os.MkdirAll(folder, 0755)
 	for _, name := range []string{common.CACert, common.SelfSignedCert} {
 		path := filepath.Join(folder, name)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			os.WriteFile(path, []byte("dummy"), 0644)
-			defer os.Remove(path)
+			_ = os.WriteFile(path, []byte("dummy"), 0644)
+			t.Cleanup(func() { _ = os.Remove(path) })
 		}
 	}
 	req := httptest.NewRequest("GET", "/cacert.pem", nil)

@@ -115,8 +115,10 @@ func removeStale(dst, src string, preserve []string) error {
 }
 
 func firstPathSegment(rel string) string {
-	if idx := strings.IndexByte(rel, os.PathSeparator); idx >= 0 {
-		return rel[:idx]
+	// Cut on os.PathSeparator rather than a literal: this tool also runs on
+	// the Linux CI runners, where the separator is '/'.
+	if before, _, ok := strings.Cut(rel, string(os.PathSeparator)); ok {
+		return before
 	}
 	return rel
 }

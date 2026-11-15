@@ -107,7 +107,7 @@ func iterateContext(userStore bool, storeName string, contextGetter func(store w
 		}
 		certBytes := make([]byte, certContext.Length)
 		for i := range certBytes {
-			certBytes[i] = *(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(certContext.EncodedCert)) + uintptr(i)))
+			certBytes[i] = *(*byte)(unsafe.Add(unsafe.Pointer(certContext.EncodedCert), i))
 		}
 		var cert *x509.Certificate
 		cert, err = x509.ParseCertificate(certBytes)

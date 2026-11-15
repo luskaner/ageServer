@@ -34,12 +34,12 @@ func TestNativeMacOsGameOnNonDarwin(t *testing.T) {
 
 func TestGamePathToGameCertPathOnNonDarwin(t *testing.T) {
 	c := &Config{}
-	var exec base.Executor
-	got := c.GamePathToGameCertPath(exec, "/some/path/cert.pem")
+	var executor base.Executor
+	got := c.GamePathToGameCertPath(executor, "/some/path/cert.pem")
 	if got != "/some/path/cert.pem" {
 		t.Errorf("GamePathToGameCertPath should return path unchanged, got %q", got)
 	}
-	got = c.GamePathToGameCertPath(exec, "")
+	got = c.GamePathToGameCertPath(executor, "")
 	if got != "" {
 		t.Errorf("GamePathToGameCertPath should return empty string, got %q", got)
 	}
@@ -47,16 +47,16 @@ func TestGamePathToGameCertPathOnNonDarwin(t *testing.T) {
 
 func TestBattleServerRequiredOnNonDarwin(t *testing.T) {
 	c := &Config{gameId: "age2"}
-	var exec base.Executor
-	if c.BattleServerRequired(exec) {
+	var executor base.Executor
+	if c.BattleServerRequired(executor) {
 		t.Error("BattleServerRequired should be false for AoE2")
 	}
 	c.gameId = "athens"
-	if !c.BattleServerRequired(exec) {
+	if !c.BattleServerRequired(executor) {
 		t.Error("BattleServerRequired should be true for AoM")
 	}
 	c.gameId = "age4"
-	if !c.BattleServerRequired(exec) {
+	if !c.BattleServerRequired(executor) {
 		t.Error("BattleServerRequired should be true for AoE4")
 	}
 }

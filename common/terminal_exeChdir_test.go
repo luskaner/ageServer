@@ -10,9 +10,9 @@ type mockTerminal struct {
 	isTerminal bool
 }
 
-func (m *mockTerminal) IsTerminal(fd int) bool { return m.isTerminal }
-func (m *mockTerminal) StdinFd() uintptr       { return 1 }
-func (m *mockTerminal) StdoutFd() uintptr      { return 2 }
+func (m *mockTerminal) IsTerminal(_ int) bool { return m.isTerminal }
+func (m *mockTerminal) StdinFd() uintptr      { return 1 }
+func (m *mockTerminal) StdoutFd() uintptr     { return 2 }
 
 func TestInteractiveBothTerminals(t *testing.T) {
 	defer SetTerminal(&mockTerminal{isTerminal: true})()

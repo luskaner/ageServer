@@ -115,10 +115,10 @@ func TestBackupProfilesAge2Numeric(t *testing.T) {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		os.WriteFile(filepath.Join(dir, "file.txt"), []byte("x"), 0644)
+		_ = os.WriteFile(filepath.Join(dir, "file.txt"), []byte("x"), 0644)
 	}
 	// Non-numeric should be ignored
-	os.MkdirAll(filepath.Join(baseDir, "notNumeric"), 0755)
+	_ = os.MkdirAll(filepath.Join(baseDir, "notNumeric"), 0755)
 
 	if !BackupProfiles(p) {
 		t.Fatal("BackupProfiles for age2 should succeed")
@@ -141,8 +141,8 @@ func TestSetProfileDataFailure(t *testing.T) {
 	p := commonUserData.NewPath(base, "age1")
 	usersFile := filepath.Join(p.String(), "Users")
 	// Ensure parent exists
-	os.MkdirAll(p.String(), 0755)
-	os.WriteFile(usersFile, []byte("blocker"), 0644)
+	_ = os.MkdirAll(p.String(), 0755)
+	_ = os.WriteFile(usersFile, []byte("blocker"), 0644)
 	// Now Profiles will try to ReadDir on a file, should error
 	if setProfileData(p) {
 		t.Fatal("setProfileData should fail when Users is file")
@@ -159,17 +159,17 @@ func TestRunProfileMethodWithFailureAndRollback(t *testing.T) {
 	base := t.TempDir()
 	p := commonUserData.NewPath(base, "age1")
 	usersDir := filepath.Join(p.String(), "Users")
-	os.MkdirAll(usersDir, 0755)
+	_ = os.MkdirAll(usersDir, 0755)
 	// Create two profiles
 	for _, name := range []string{"a", "b"} {
 		dir := filepath.Join(usersDir, name)
-		os.MkdirAll(dir, 0755)
-		os.WriteFile(filepath.Join(dir, "data.txt"), []byte("orig"), 0644)
+		_ = os.MkdirAll(dir, 0755)
+		_ = os.WriteFile(filepath.Join(dir, "data.txt"), []byte("orig"), 0644)
 	}
 	// Pre-create .bak for second profile to make its Backup fail (since backup already exists)
 	// Data.Backup checks if .bak exists and returns false without doing anything
 	bAlreadyBak := filepath.Join(usersDir, "b.bak")
-	os.MkdirAll(bAlreadyBak, 0755)
+	_ = os.MkdirAll(bAlreadyBak, 0755)
 	// Now BackupProfiles should attempt to backup "a" succeeds, then "b" fails, and since stopOnFailed true, it should rollback "a" (Restore it)
 	// Note: profiles order is map iteration random, but mapset may iterate in arbitrary order; we need to ensure deterministic test
 	// So we create scenario where at least one fails and we check that BackupProfiles returns false
@@ -188,9 +188,9 @@ func TestRunProfileMethodStopOnFailedFalseContinues(t *testing.T) {
 	base := t.TempDir()
 	p := commonUserData.NewPath(base, "age2")
 	baseDir := p.String()
-	os.MkdirAll(baseDir, 0755)
+	_ = os.MkdirAll(baseDir, 0755)
 	for _, name := range []string{"10", "20"} {
-		os.MkdirAll(filepath.Join(baseDir, name), 0755)
+		_ = os.MkdirAll(filepath.Join(baseDir, name), 0755)
 	}
 	// First do Backup so that active -> .bak, leaving active empty
 	if !BackupProfiles(p) {
@@ -220,9 +220,9 @@ func TestRunProfileMethodStopOnFailedFalseContinues(t *testing.T) {
 	base2 := t.TempDir()
 	p2 := commonUserData.NewPath(base2, "age1")
 	usersDir2 := filepath.Join(p2.String(), "Users")
-	os.MkdirAll(usersDir2, 0755)
-	os.MkdirAll(filepath.Join(usersDir2, "p1"), 0755)
-	os.MkdirAll(filepath.Join(usersDir2, "p2"), 0755)
+	_ = os.MkdirAll(usersDir2, 0755)
+	_ = os.MkdirAll(filepath.Join(usersDir2, "p1"), 0755)
+	_ = os.MkdirAll(filepath.Join(usersDir2, "p2"), 0755)
 	result := runProfileMethod(p2, mainMethod, cleanMethod, false)
 	if !result {
 		t.Fatal("runProfileMethod with stopOnFailed false should return true even when one fails")
@@ -250,8 +250,8 @@ func TestBackupProfileAndRestoreProfileDirect(t *testing.T) {
 	base := t.TempDir()
 	active := filepath.Join(base, "profileX")
 	d := Data{Path: active}
-	os.MkdirAll(active, 0755)
-	os.WriteFile(filepath.Join(active, "f.txt"), []byte("hi"), 0644)
+	_ = os.MkdirAll(active, 0755)
+	_ = os.WriteFile(filepath.Join(active, "f.txt"), []byte("hi"), 0644)
 	if !backupProfile(d) {
 		t.Fatal("backupProfile failed")
 	}

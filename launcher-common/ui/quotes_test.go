@@ -25,7 +25,6 @@ import (
 func TestNoQuotesAroundValuesTheRendererAlreadyMarks(t *testing.T) {
 	root := repoRoot(t)
 	for _, module := range styledModules {
-		module := module
 		t.Run(module, func(t *testing.T) {
 
 			entries, err := os.ReadDir(filepath.Join(root, module))

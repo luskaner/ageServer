@@ -27,7 +27,7 @@ func TestGenerateSelfSignedCertificateFileBlocker(t *testing.T) {
 func TestGenerateCertificatePairsFileBlocker(t *testing.T) {
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "blocker")
-	os.WriteFile(blocker, []byte("x"), 0644)
+	_ = os.WriteFile(blocker, []byte("x"), 0644)
 	// This will make os.Create fail for cert file
 	if ok, _ := generateCertificatePairs(blocker, "cert.pem", "key.pem", nil, nil); ok {
 		t.Error("should fail")
@@ -68,7 +68,7 @@ func TestGenerateCertificatePairsInvalidFolder(t *testing.T) {
 	// Use an invalid folder path with null byte or too long? On Windows, use a file as folder
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "file")
-	os.WriteFile(blocker, []byte("x"), 0644)
+	_ = os.WriteFile(blocker, []byte("x"), 0644)
 	if GenerateCertificatePairs(blocker) {
 		t.Error("should fail with file as folder")
 	}
@@ -86,7 +86,7 @@ func TestGenerateCertificatePairsWithExistingCAAndInvalidServerPath(t *testing.T
 	}
 	// Try to generate server cert with invalid folder (file)
 	blocker := filepath.Join(dir, "blocker2")
-	os.WriteFile(blocker, []byte("x"), 0644)
+	_ = os.WriteFile(blocker, []byte("x"), 0644)
 	if ok, _ := generateCertificatePairs(blocker, "server.pem", "server.key", nil, nil); ok {
 		t.Error("should fail")
 	}

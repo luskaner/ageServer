@@ -118,8 +118,8 @@ func TestLoadKoanfLayersParseErrorWrapped(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected wrapped parse error")
 	}
-	fileErr, ok := err.(*KoanfFileLoadError)
-	if !ok {
+	var fileErr *KoanfFileLoadError
+	if !errors.As(err, &fileErr) {
 		t.Fatalf("error type = %T, want *KoanfFileLoadError", err)
 	}
 	if fileErr.Path != bad || fileErr.Err == nil {
@@ -130,7 +130,7 @@ func TestLoadKoanfLayersParseErrorWrapped(t *testing.T) {
 func TestKoanfFileLoadErrorUnwrap(t *testing.T) {
 	inner := errors.New("inner error")
 	err := &KoanfFileLoadError{Path: "/x", Err: inner}
-	if err.Unwrap() != inner {
+	if !errors.Is(err, inner) {
 		t.Errorf("Unwrap() = %v, want %v", err.Unwrap(), inner)
 	}
 }
@@ -280,7 +280,7 @@ func TestLoadKoanfLayersMultipleFileCandidates(t *testing.T) {
 	file1 := filepath.Join(dir, "first.json")
 	file2 := filepath.Join(dir, "second.json")
 	// first.json does not exist → silently skipped; second.json is valid
-	os.WriteFile(file2, []byte(`{"Key":"from-second"}`), 0644)
+	_ = os.WriteFile(file2, []byte(`{"Key":"from-second"}`), 0644)
 
 	k := koanf.New(".")
 	used, err := LoadKoanfLayers(k, nil, []string{file1, file2}, jsonParser{}, pflag.NewFlagSet("t", pflag.ContinueOnError), nil, "unittest")

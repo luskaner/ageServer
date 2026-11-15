@@ -15,12 +15,12 @@ import (
 // platform with no notification area at all.
 type panickingIcon struct{}
 
-func (panickingIcon) SetIcon([]byte)        { panic("no shell") }
-func (panickingIcon) SetTooltip(string)      { panic("no shell") }
-func (panickingIcon) SetMenu(trayMenu)       { panic("no shell") }
-func (panickingIcon) Show()                  { panic("no shell") }
-func (panickingIcon) Run() error             { panic("no shell") }
-func (panickingIcon) Remove()                { panic("no shell") }
+func (panickingIcon) SetIcon([]byte)    { panic("no shell") }
+func (panickingIcon) SetTooltip(string) { panic("no shell") }
+func (panickingIcon) SetMenu(trayMenu)  { panic("no shell") }
+func (panickingIcon) Show()             { panic("no shell") }
+func (panickingIcon) Run() error        { panic("no shell") }
+func (panickingIcon) Remove()           { panic("no shell") }
 
 func bytesReader(data []byte) *bytes.Reader { return bytes.NewReader(data) }
 
@@ -414,5 +414,3 @@ func TestTrayMethodsAreSafeWhenNoIcon(t *testing.T) {
 		t.Error("an icon that was never shown was removed")
 	}
 }
-
-

@@ -64,7 +64,7 @@ func TestReturnSignedAsset_MissingArrayAsset(t *testing.T) {
 	resources := &MainResources{
 		keyedFiles:      map[string][]byte{},
 		nameToSignature: map[string]string{},
-		arrayFiles:      map[string]i.A{"achievements.json": i.A{}},
+		arrayFiles:      map[string]i.A{"achievements.json": {}},
 	}
 	w := httptest.NewRecorder()
 	resources.ReturnSignedAsset("never-loaded.json", writer(w), signedAssetRequest(""), false)

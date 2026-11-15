@@ -55,7 +55,7 @@ func TestMatchHistoryCreatesSchemaAndReopens(t *testing.T) {
 	_ = store.Close()
 
 	reopened := NewMatchHistoryStore(dir)
-	defer reopened.Close()
+	defer func() { _ = reopened.Close() }()
 	if reopened.db == nil {
 		t.Fatal("expected to reopen the database")
 	}
@@ -103,7 +103,7 @@ func TestMatchHistoryAddsReportColumnsToExistingDatabase(t *testing.T) {
 	if store.db == nil {
 		t.Fatal("expected legacy database to open after migration")
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	rows, err := store.db.Query(`SELECT player_order, counters, custom_updates FROM match_players`)
 	if err != nil {
 		t.Fatalf("report columns were not migrated: %v", err)

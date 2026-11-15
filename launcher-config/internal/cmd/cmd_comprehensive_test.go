@@ -27,9 +27,9 @@ type mockCACert struct {
 	appendErr    error
 }
 
-func (m *mockCACert) Backup() error                          { return m.backupErr }
-func (m *mockCACert) Restore() (error, []*x509.Certificate)  { return m.restoreErr, m.restoreCerts }
-func (m *mockCACert) Append(certs []*x509.Certificate) error { return m.appendErr }
+func (m *mockCACert) Backup() error                         { return m.backupErr }
+func (m *mockCACert) Restore() (error, []*x509.Certificate) { return m.restoreErr, m.restoreCerts }
+func (m *mockCACert) Append(_ []*x509.Certificate) error    { return m.appendErr }
 
 type mockFileInfo struct{ isDir bool }
 
@@ -38,7 +38,7 @@ func (m mockFileInfo) Size() int64        { return 0 }
 func (m mockFileInfo) Mode() os.FileMode  { return 0755 }
 func (m mockFileInfo) ModTime() time.Time { return time.Time{} }
 func (m mockFileInfo) IsDir() bool        { return m.isDir }
-func (m mockFileInfo) Sys() interface{}   { return nil }
+func (m mockFileInfo) Sys() any           { return nil }
 
 // saveCmdDeps saves all DI vars and restores on cleanup.
 func saveCmdDeps(t *testing.T) {
@@ -97,8 +97,6 @@ func saveCmdDeps(t *testing.T) {
 	})
 }
 
-// successResult returns an exec.Result that passes Success().
-func successResult() *exec.Result { return &exec.Result{ExitCode: common.ErrSuccess} }
 func failureResult() *exec.Result {
 	return &exec.Result{Err: errors.New("exec failed"), ExitCode: 1}
 }

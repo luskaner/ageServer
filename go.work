@@ -1,4 +1,4 @@
-go 1.27.3
+go 1.27.4
 
 godebug (
 	// Always use native DNS resolver, otherwise unexpected IPs may be returned

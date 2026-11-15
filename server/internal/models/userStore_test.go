@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -275,9 +276,7 @@ type memoryUserStore struct {
 func (m *memoryUserStore) Load() (map[string]StoredValue, error) {
 	m.loads++
 	loaded := make(map[string]StoredValue, len(m.values))
-	for key, value := range m.values {
-		loaded[key] = value
-	}
+	maps.Copy(loaded, m.values)
 	return loaded, nil
 }
 
@@ -1209,9 +1208,7 @@ type failingUserStore struct {
 
 func (m *failingUserStore) Load() (map[string]StoredValue, error) {
 	loaded := make(map[string]StoredValue, len(m.values))
-	for key, value := range m.values {
-		loaded[key] = value
-	}
+	maps.Copy(loaded, m.values)
 	return loaded, nil
 }
 

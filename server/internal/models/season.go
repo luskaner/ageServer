@@ -35,10 +35,7 @@ type RankedSeason struct {
 // contiguous: each one starts where the previous ended, so there is always
 // exactly one active season.
 func CurrentRankedSeason(now time.Time) RankedSeason {
-	elapsed := now.Sub(rankedSeasonAnchor)
-	if elapsed < 0 {
-		elapsed = 0
-	}
+	elapsed := max(now.Sub(rankedSeasonAnchor), 0)
 	index := int(elapsed / RankedSeasonDuration)
 	start := rankedSeasonAnchor.Add(time.Duration(index) * RankedSeasonDuration)
 	return RankedSeason{

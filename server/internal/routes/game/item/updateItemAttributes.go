@@ -17,21 +17,13 @@ type updateItemAttributesRequest struct {
 
 func UpdateItemAttributes(w http.ResponseWriter, r *http.Request) {
 	var req updateItemAttributesRequest
-	err := i.Bind(r, &req)
-	if err != nil {
-		i.JSON(&w, i.A{2, i.A{}, i.A{}})
+	_, u, ok := bindAndResolveUser(w, r, &req, i.A{2, i.A{}, i.A{}})
+	if !ok {
 		return
 	}
 	minLength := min(len(req.Keys.Data), len(req.Values.Data), len(req.ItemIds.Data), len(req.XpGains.Data))
 	maxLength := max(len(req.Keys.Data), len(req.Values.Data), len(req.ItemIds.Data), len(req.XpGains.Data))
 	if minLength == 0 || maxLength == 0 || minLength != maxLength {
-		i.JSON(&w, i.A{2, i.A{}, i.A{}})
-		return
-	}
-	game := models.G(r)
-	sess := models.SessionOrPanic(r)
-	u, ok := game.Users().GetUserById(sess.GetUserId())
-	if !ok {
 		i.JSON(&w, i.A{2, i.A{}, i.A{}})
 		return
 	}
@@ -64,7 +56,7 @@ func UpdateItemAttributes(w http.ResponseWriter, r *http.Request) {
 				}
 				item.IncrementVersion()
 				itemIdErrorCodes = i.A{0, slices.Repeat(i.A{0}, len(attributeKeys))}
-				itemsEncoded[j] = item.Encode(sess.GetUserId())
+				itemsEncoded[j] = item.Encode(u.GetId())
 			}
 			errorCodes[j] = itemIdErrorCodes
 		}

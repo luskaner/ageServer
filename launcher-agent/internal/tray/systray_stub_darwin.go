@@ -50,7 +50,7 @@ func (s *systrayMenu) AddSeparator()               {}
 
 type systrayItem struct{}
 
-func (s *systrayItem) SetLabel(string) {}
+func (s *systrayItem) SetLabel(string)  {}
 func (s *systrayItem) SetDisabled(bool) {}
 
 var (

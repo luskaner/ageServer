@@ -83,7 +83,7 @@ func calculateBroadcastIp(ip net.IP, mask net.IPMask) net.IP {
 	if len(mask) != len(ip4) {
 		// Normalize mask length: net.IPMask may be 4 or 16; try to get 4-byte form
 		if len(mask) == net.IPv6len {
-			mask = net.IPMask(mask[12:16])
+			mask = mask[12:16]
 		}
 		if len(mask) != len(ip4) {
 			return nil

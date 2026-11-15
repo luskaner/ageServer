@@ -40,7 +40,7 @@ func (d Data) originalPath() string {
 func renameWithRetry(from string, to string) error {
 	const attempts = 5
 	var err error
-	for attempt := 0; attempt < attempts; attempt++ {
+	for attempt := range attempts {
 		if err = os.Rename(from, to); err == nil {
 			return nil
 		}

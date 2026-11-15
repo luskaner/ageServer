@@ -80,7 +80,7 @@ func TestRunRemove_SuccessNoConfigs(t *testing.T) {
 	}
 	// Test with valid config and Remove returns false
 	battleServerConfigsFn = func(string, bool, bool) ([]battleServer.Config, error) {
-		return []battleServer.Config{{Base: battleServer.Base{Region: "eu"}}}, nil
+		return []battleServer.Config{{Region: "eu"}}, nil
 	}
 	removeFn = func(string, []battleServer.Config, bool) bool { return false }
 	_, code = runRemove([]string{"--games", "age2", "--region", "eu"})
@@ -153,12 +153,3 @@ type fakeLocker struct {
 
 func (f *fakeLocker) Lock() error   { return f.lockErr }
 func (f *fakeLocker) Unlock() error { return f.unlockErr }
-
-type mockRootFlagSet struct {
-	executeFn func(string) (error, int)
-}
-
-func (m *mockRootFlagSet) Execute(version string) (error, int) {
-	return m.executeFn(version)
-}
-func (m *mockRootFlagSet) RegisterCommand(name string, fn func([]string) (error, int)) {}

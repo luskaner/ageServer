@@ -111,11 +111,11 @@ func TestConfigsReadFilePermissionError(t *testing.T) {
 	// Also test with a symlink pointing to a deleted file for actual ReadFile error.
 	gameId := "unit-file-err"
 	dir := Folder(gameId)
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	// Test symlink to nonexistent target → ReadFile error
 	badLink := filepath.Join(dir, Name(99))
@@ -144,7 +144,7 @@ func TestConfigsValidOnlyWithDialSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	addr := ln.Addr().(*net.TCPAddr)
 
 	gameId := "unit-valid-only"
@@ -152,7 +152,7 @@ func TestConfigsValidOnlyWithDialSuccess(t *testing.T) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	toml := fmt.Sprintf(`Region = "eu"
 Name = "test"

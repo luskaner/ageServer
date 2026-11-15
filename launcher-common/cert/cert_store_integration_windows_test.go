@@ -11,6 +11,7 @@ import (
 	"errors"
 	"math/big"
 	"os"
+	"slices"
 	"testing"
 	"time"
 	"unsafe"
@@ -240,7 +241,6 @@ func TestIterateContextOpenFailure(t *testing.T) {
 
 var (
 	fakeStores                      = map[windows.Handle][]*x509.Certificate{}
-	fakeHandleByName                = map[string]windows.Handle{}
 	fakeNextHandle   windows.Handle = 100
 	fakeContextBytes                = map[*windows.CertContext][]byte{}
 	fakeEnumCursor                  = map[windows.Handle]int{}
@@ -261,7 +261,6 @@ func installFakeStore(t *testing.T) func() {
 
 	// Reset fake state
 	fakeStores = map[windows.Handle][]*x509.Certificate{}
-	fakeHandleByName = map[string]windows.Handle{}
 	fakeNextHandle = 100
 	fakeContextBytes = map[*windows.CertContext][]byte{}
 	fakeEnumCursor = map[windows.Handle]int{}
@@ -371,15 +370,13 @@ func installFakeStore(t *testing.T) func() {
 		}
 		for i := start; i < len(list); i++ {
 			c := list[i]
-			for _, org := range c.Subject.Organization {
-				if org == search {
-					b := make([]byte, len(c.Raw))
-					copy(b, c.Raw)
-					ctx := &windows.CertContext{EncodedCert: &b[0], Length: uint32(len(b))}
-					fakeContextBytes[ctx] = b
-					fakeFindCursor[store] = i + 1
-					return ctx, nil
-				}
+			if slices.Contains(c.Subject.Organization, search) {
+				b := make([]byte, len(c.Raw))
+				copy(b, c.Raw)
+				ctx := &windows.CertContext{EncodedCert: &b[0], Length: uint32(len(b))}
+				fakeContextBytes[ctx] = b
+				fakeFindCursor[store] = i + 1
+				return ctx, nil
 			}
 		}
 		delete(fakeFindCursor, store)
@@ -424,7 +421,6 @@ func installFakeStore(t *testing.T) func() {
 		certFreeCertificateContextFn = origFree
 		// Clear fake state
 		fakeStores = map[windows.Handle][]*x509.Certificate{}
-		fakeHandleByName = map[string]windows.Handle{}
 		fakeContextBytes = map[*windows.CertContext][]byte{}
 	}
 }

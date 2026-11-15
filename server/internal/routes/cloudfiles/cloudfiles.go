@@ -98,7 +98,7 @@ func download(w http.ResponseWriter, r *http.Request, store *models.CloudFiles, 
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	seeker, ok := reader.(io.ReadSeeker)
 	if !ok {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

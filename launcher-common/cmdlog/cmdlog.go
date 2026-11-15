@@ -27,13 +27,6 @@ import (
 // program has a different one.
 var prefix = "main"
 
-// SetPrefix names the file log section these messages go under.
-func SetPrefix(name string) {
-	if name != "" {
-		prefix = name
-	}
-}
-
 // Initialize resolves the terminal capability and points the file log at a buffer.
 //
 // The nil writer is the whole trick. commonLogger writes to whatever it is given,
@@ -101,19 +94,3 @@ func Printf(format string, a ...any) {
 // Banner prints the program header. It prints nothing when the console width is
 // unknown, so a redirected run never gets one.
 func Banner(program string, version string) { ui.Banner(program, version) }
-
-// Section starts a phase.
-func Section(title string) { ui.Section(title) }
-
-// KV prints a key and its value as one sentence.
-func KV(indent int, key string, value string) { ui.KV(indent, key, value) }
-
-// Spinner animates a line in place where the console can do it, and prints one
-// plain line where it cannot.
-func Spinner(label string) *ui.Spinner { return ui.Start(label) }
-
-// BeginProgress takes the terminal's own progress indicator for a bounded task.
-func BeginProgress() *ui.Progress { return ui.BeginProgress() }
-
-// ClearProgress removes that indicator, which every exit path needs.
-func ClearProgress() { ui.ClearProgress() }

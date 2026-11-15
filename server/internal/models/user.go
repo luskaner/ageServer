@@ -44,7 +44,7 @@ type User interface {
 	GetAuth() *PersistentJsonData[*time.Time]
 	EncodeStats() i.A
 	EncodePresence(definitions PresenceDefinitions) i.A
-	// GetRating/SetRating expose the cached 1v1 random map rating that is
+	// GetRating and SetRating expose the cached 1v1 random map rating that is
 	// embedded in the extra profile info sent to the game client.
 	GetRating() int32
 	SetRating(rating int32)
@@ -88,6 +88,13 @@ type Users interface {
 	GetOrCreateUser(gameId string, itemDefinitions Items, avatarStatsDefinitions AvatarStatDefinitions, remoteAddr string, remoteMacAddress string, isXbox bool, platformUserId uint64, alias string) User
 	GetUserByStatGroupID(statGroupID int32) (User, bool)
 	GetUserById(id int32) (User, bool)
+	// GetUserByProfileId returns the user with the given profile ID, which is
+	// how the routes that take a profile_id identify a profile.
+	GetUserByProfileId(profileId int32) (User, bool)
+	// GetUserByAlias resolves a connected user by alias. GetUserIds only
+	// yields ids, so a lookup by alias would otherwise be O(n) calls to
+	// GetUserById on top of an O(n) scan (community API, §3.2).
+	GetUserByAlias(alias string) (User, bool)
 	GetUserIds() func(func(int32) bool)
 	EncodeProfileInfo(definitions PresenceDefinitions, matches func(user User) bool, clientLibVersion uint16) []i.A
 	GetUserByPlatformUserId(xbox bool, id uint64) (User, bool)
@@ -202,8 +209,9 @@ func (users *MainUsers) Generate(gameId string, persistentData *PersistentString
 		if challengeProgress != nil {
 			// Reconcile the saved progress with the challenges of the current
 			// resources on every user load: definitions added by a resource
-			// update are included and IDs stay sequential, while the progress
-			// the client already reported is kept.
+			// update are included, IDs stay sequential, and any challenge a
+			// profile still had pending is unlocked, so profiles created by an
+			// older build end up completed too.
 			upgrader := NewChallengeProgressUpgradableDefaultData(users.challengesData, users.challengesFormat)
 			if err := challengeProgress.WithReadWrite(func(data *[]ChallengeProgress) error {
 				*data = reconcileChallengeProgress(*data, upgrader)
@@ -349,8 +357,21 @@ func (users *MainUsers) GetUserById(id int32) (User, bool) {
 	return users.getFirst(func(u User) bool { return u.GetId() == id })
 }
 
+// GetUserByProfileId returns the user with the given profile ID. The client
+// identifies profiles by this ID in the routes that take a profile_id.
+func (users *MainUsers) GetUserByProfileId(profileId int32) (User, bool) {
+	return users.getFirst(func(u User) bool { return u.GetProfileId() == profileId })
+}
+
 func (users *MainUsers) GetUserByPlatformUserId(xbox bool, id uint64) (User, bool) {
 	return users.getFirst(func(u User) bool { return u.GetXbox() == xbox && u.GetPlatformUserID() == id })
+}
+
+func (users *MainUsers) GetUserByAlias(alias string) (User, bool) {
+	if alias == "" {
+		return nil, false
+	}
+	return users.getFirst(func(u User) bool { return u.GetAlias() == alias })
 }
 
 func (users *MainUsers) getFirst(fn func(u User) bool) (User, bool) {
@@ -519,7 +540,7 @@ func EncodeLeaderboardStatFor(statGroupID int32, fallbackRating int32, r *Player
 // expects. AoE1's older client library ends the row with ["{}","{}", lastMatch]
 // and has 16 fields; the newer titles use the 19-field row above.
 func EncodeLeaderboardStatForGame(gameID string, statGroupID int32, fallbackRating int32, r *PlayerRating) i.A {
-	leaderboardID := int32(SoloRMRanked)
+	leaderboardID := SoloRMRanked
 	rating := fallbackRating
 	if rating <= 0 {
 		rating = DefaultRating
@@ -653,6 +674,16 @@ func PlaceholderProfile(profileID int32, statGroupID int32) *StoredProfile {
 		PlatformUserID: uint64(profileID),
 		Level:          1,
 	}
+}
+
+// StoredProfilePlatformPath renders the /steam/<id> or /xboxlive/<id> name of a
+// stored profile. It is the stored-identity twin of User.GetPlatformPath and
+// exists so callers outside this package do not have to rebuild the format.
+func StoredProfilePlatformPath(p *StoredProfile) string {
+	if p == nil {
+		return ""
+	}
+	return getPlatformPath(p.IsXbox, p.PlatformUserID)
 }
 
 // EncodeStoredProfileInfo builds the same profileInfo for a player that is not

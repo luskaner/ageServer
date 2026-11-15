@@ -321,7 +321,7 @@ func TestMatchContentTLSContract(t *testing.T) {
 	g := newMatchContentGame(t, game.AoE2, nil)
 	for _, apiHost := range []bool{false, true} {
 		t.Run(strconv.FormatBool(apiHost), func(t *testing.T) {
-			var h http.Handler = gameHandler(game.AoE2)
+			h := gameHandler(game.AoE2)
 			if apiHost {
 				h = NewApiAgeOfEmpires().InitializeRoutes(game.AoE2, http.NotFoundHandler())
 			}
@@ -339,7 +339,7 @@ func TestMatchContentTLSContract(t *testing.T) {
 			}
 			var upload map[string]any
 			err = json.NewDecoder(response.Body).Decode(&upload)
-			response.Body.Close()
+			_ = response.Body.Close()
 			if response.StatusCode != 200 || err != nil || upload["isError"] != false {
 				t.Fatalf("upload: %d %+v %v", response.StatusCode, upload, err)
 			}
@@ -349,7 +349,7 @@ func TestMatchContentTLSContract(t *testing.T) {
 			}
 			var metadata matchManifest
 			err = json.NewDecoder(response.Body).Decode(&metadata)
-			response.Body.Close()
+			_ = response.Body.Close()
 			if response.StatusCode != 200 || err != nil || metadata.IsError || len(metadata.Files) != 1 {
 				t.Fatalf("metadata: %d %+v %v", response.StatusCode, metadata, err)
 			}
@@ -365,7 +365,7 @@ func TestMatchContentTLSContract(t *testing.T) {
 				t.Fatal(err)
 			}
 			downloaded, err := io.ReadAll(response.Body)
-			response.Body.Close()
+			_ = response.Body.Close()
 			if err != nil || response.StatusCode != 200 || !bytes.Equal(downloaded, content) {
 				t.Fatalf("payload: %d %q %v", response.StatusCode, downloaded, err)
 			}
@@ -381,12 +381,12 @@ func TestMatchContentTLSContract(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			response.Body.Close()
+			_ = response.Body.Close()
 			response, err = client.Get(f.Path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			response.Body.Close()
+			_ = response.Body.Close()
 			if response.StatusCode != http.StatusNotFound {
 				t.Fatalf("stale URL: %d", response.StatusCode)
 			}

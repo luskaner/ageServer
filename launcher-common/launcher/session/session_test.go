@@ -48,7 +48,7 @@ type fakeExecutor struct {
 	path string
 }
 
-func (f fakeExecutor) Do(args []string, optionsFn func(commonExecutor.Options)) *commonExecutor.Result {
+func (f fakeExecutor) Do(_ []string, _ func(commonExecutor.Options)) *commonExecutor.Result {
 	return &commonExecutor.Result{}
 }
 func (f fakeExecutor) GameProcesses() (bool, bool, bool) { return false, false, false }
@@ -1653,19 +1653,19 @@ func TestRunRootTeardownRunsOnceUnderSignal(t *testing.T) {
 // countingLocker records Unlock calls.
 type countingLocker struct {
 	fakePidLocker
-	calls32  int32
+	calls32  atomic.Int32
 	onUnlock func()
 }
 
 func (c *countingLocker) Unlock() error {
-	atomic.AddInt32(&c.calls32, 1)
+	c.calls32.Add(1)
 	if c.onUnlock != nil {
 		c.onUnlock()
 	}
 	return nil
 }
 
-func (c *countingLocker) calls() int32 { return atomic.LoadInt32(&c.calls32) }
+func (c *countingLocker) calls() int32 { return c.calls32.Load() }
 
 // A "true" mode on a system without graphical dialogs must warn and continue on
 // the console, never abort.

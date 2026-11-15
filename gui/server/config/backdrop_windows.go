@@ -92,7 +92,7 @@ func applyAcrylicBackdrop(window *application.WebviewWindow) {
 		data:       unsafe.Pointer(&policy),
 		sizeOfData: unsafe.Sizeof(policy),
 	}
-	procSetWindowCompositionAttribute.Call(hwnd, uintptr(unsafe.Pointer(&data)))
+	_, _, _ = procSetWindowCompositionAttribute.Call(hwnd, uintptr(unsafe.Pointer(&data)))
 }
 
 // supportsSystemBackdrop reports whether the window understands

@@ -28,7 +28,7 @@ func countOccurrences(s, substr string) int {
 // writer.
 func countLinesContaining(s, substr string) int {
 	count := 0
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if strings.Contains(line, substr) {
 			count++
 		}
@@ -347,7 +347,7 @@ func TestCommentedAvoidLineHasSpaceBeforeMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	mappings := HostMappings{}
 	rest, err := missingIpMappings(&mappings, f)
 	if err != nil {
@@ -376,7 +376,7 @@ func TestMissingIpMappingsDropsStaleOwnedComment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	mappings := HostMappings{"game.example.com": net.ParseIP("10.0.0.9")}
 	rest, err := missingIpMappings(&mappings, f)
 	if err != nil {
@@ -400,7 +400,7 @@ func TestMissingIpMappingsKeepsForeignCommentUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	mappings := HostMappings{"game.example.com": net.ParseIP("10.0.0.9")}
 	rest, err := missingIpMappings(&mappings, f)
 	if err != nil {
@@ -438,7 +438,7 @@ func TestOverLimitOwnedLinePreservesAllHosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	mappings := HostMappings{"game.example.com": net.ParseIP("10.0.0.9")}
 	rest, err := missingIpMappings(&mappings, f)
 	if err != nil {
@@ -458,7 +458,7 @@ func TestOverLimitOwnedLinePreservesAllHosts(t *testing.T) {
 			t.Fatalf("preserved %d hosts, want %d (%q)", len(reparsed.Hosts()), len(userHosts), inner)
 		}
 		for _, host := range reparsed.Hosts() {
-			if host == Host("game.example.com") {
+			if host == "game.example.com" {
 				t.Fatalf("preserved copy reactivates our host: %q", inner)
 			}
 		}

@@ -57,8 +57,8 @@ func downscale(src image.Image, width, height int) *image.RGBA {
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 	dst := image.NewRGBA(image.Rect(0, 0, width, height))
-	for dy := 0; dy < height; dy++ {
-		for dx := 0; dx < width; dx++ {
+	for dy := range height {
+		for dx := range width {
 			x0 := dx * srcW / width
 			x1 := (dx + 1) * srcW / width
 			y0 := dy * srcH / height

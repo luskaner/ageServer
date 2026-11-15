@@ -13,10 +13,8 @@ func newFixture(t *testing.T, host string, port string) *Request {
 	t.Helper()
 	u := &url.URL{Scheme: "https", Host: host + ":" + port, Path: "/some/endpoint"}
 	return NewRequest(request.Read{
-		In: request.In{
-			Url:    u,
-			Method: "GET",
-		},
+		Url:    u,
+		Method: "GET",
 	})
 }
 
@@ -137,10 +135,8 @@ func TestDelHeaderMultipleValues(t *testing.T) {
 func TestRequestMethodAndURL(t *testing.T) {
 	u := &url.URL{Scheme: "https", Host: "example.com:443", Path: "/api/test"}
 	r := NewRequest(request.Read{
-		In: request.In{
-			Url:    u,
-			Method: "POST",
-		},
+		Url:    u,
+		Method: "POST",
 	})
 	got := r.String()
 	want := "POST https://example.com:443/api/test"

@@ -104,21 +104,13 @@ func parseMessage(sessions models.Sessions, message i.H, currentSession models.S
 	return op, sess
 }
 
-// writeMessage marshals and sends a JSON message over the WebSocket.
-func writeMessage(socket *gws.Conn, v any) bool {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return false
-	}
-	return socket.WriteMessage(gws.OpcodeText, data) == nil
-}
-
 func Handle(w http.ResponseWriter, r *http.Request) {
 	sessions := models.G(r).Sessions()
 
+	// WriteBufferSize is deprecated since gws v1.4.5 and has no effect, so it
+	// is not set: the writer uses its own default.
 	option := &gws.ServerOption{
 		ReadBufferSize:   1024,
-		WriteBufferSize:  1024,
 		CheckUtf8Enabled: true,
 	}
 	upgrader := gws.NewUpgrader(&gws.BuiltinEventHandler{}, option)
@@ -132,7 +124,7 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 	remoteAddr := socket.RemoteAddr().String()
 	logConnection(remoteAddr, localAddr)
 
-	socket.SetReadDeadline(time.Now().Add(time.Minute))
+	_ = socket.SetReadDeadline(time.Now().Add(time.Minute))
 
 	msg, err := socket.ReadMessage()
 	if err != nil {
@@ -184,7 +176,7 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 
 	var op uint32
 	for {
-		socket.SetReadDeadline(time.Now().Add(time.Minute))
+		_ = socket.SetReadDeadline(time.Now().Add(time.Minute))
 		msg, err := socket.ReadMessage()
 		if err != nil {
 			break

@@ -89,6 +89,40 @@ func (as *AvatarStats) Encode(profileId int32) i.A {
 	return result
 }
 
+// EncodeCommunity returns the avatar statistics as the objects the public
+// /community API uses: {profile_id, avatarstat_id, value, lastupdated}.
+//
+// It is a separate encoder on purpose. Encode is the positional 5-field row the
+// game client parses, and it includes the metadata blob, which the official
+// public API does not return (§2.c, C2). Keeping both in this type is what lets
+// the encoder reach the unexported values without exposing the map.
+// CommunityAvatarStat is one entry of the public API's avatarStatsForProfile
+// array. It lives here, next to the stored stat, because the public route cannot
+// be referenced from this package; the json tags are the wire contract.
+//
+// AvatarStatID and LastUpdated are spelled the way the live service spells them
+// (C2), and the metadata blob the stored stat carries is deliberately absent.
+type CommunityAvatarStat struct {
+	ProfileID    int32 `json:"profile_id"`
+	AvatarStatID int32 `json:"avatarstat_id"`
+	Value        int64 `json:"value"`
+	LastUpdated  int64 `json:"lastupdated"`
+}
+
+// EncodeCommunity renders the stats of one profile for the public API.
+func (as *AvatarStats) EncodeCommunity(profileID int32) []CommunityAvatarStat {
+	result := make([]CommunityAvatarStat, 0, as.values.Len())
+	for val := range as.values.Values() {
+		result = append(result, CommunityAvatarStat{
+			ProfileID:    profileID,
+			AvatarStatID: val.StatID,
+			Value:        val.Value,
+			LastUpdated:  val.LastUpdated.Unix(),
+		})
+	}
+	return result
+}
+
 func newAvatarStats(values map[int32]int64) *AvatarStats {
 	avatarStats := &AvatarStats{
 		values: i.NewSafeMap[int32, AvatarStat](),

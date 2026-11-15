@@ -15,12 +15,12 @@ type mockResolverIP struct {
 	err        error
 }
 
-func (m *mockResolverIP) HostToIPs(host string) []net.IP { return nil }
-func (m *mockResolverIP) IPToHosts(ip string) []string   { return nil }
-func (m *mockResolverIP) DirectHostToIP(host string) (string, error) {
+func (m *mockResolverIP) HostToIPs(_ string) []net.IP { return nil }
+func (m *mockResolverIP) IPToHosts(_ string) []string { return nil }
+func (m *mockResolverIP) DirectHostToIP(_ string) (string, error) {
 	return "", nil
 }
-func (m *mockResolverIP) DialTCP(network, address string, timeout time.Duration) (net.Conn, error) {
+func (m *mockResolverIP) DialTCP(_, _ string, _ time.Duration) (net.Conn, error) {
 	return nil, nil
 }
 func (m *mockResolverIP) NetInterfaces() ([]net.Interface, error) { return nil, nil }
@@ -47,7 +47,7 @@ func TestQueryConnectionsNoMulticast(t *testing.T) {
 		t.Fatal("expected at least one conn")
 	}
 	for _, c := range conns {
-		c.Close()
+		_ = c.Close()
 	}
 	// Test with unspecified IP
 	addr2 := netip.IPv4Unspecified()
@@ -56,7 +56,7 @@ func TestQueryConnectionsNoMulticast(t *testing.T) {
 		t.Fatalf("unspecified failed: %v", err)
 	}
 	for _, c := range conns2 {
-		c.Close()
+		_ = c.Close()
 	}
 }
 
@@ -121,7 +121,7 @@ func TestQueryConnectionsWithMulticast(t *testing.T) {
 		t.Fatalf("multicast failed: %v", err)
 	}
 	for _, c := range conns {
-		c.Close()
+		_ = c.Close()
 	}
 }
 
@@ -177,6 +177,6 @@ func TestQueryConnectionsNoMulticastFlagSkipped(t *testing.T) {
 	}
 	// Should still get a conn, but multicast group join should be skipped (no multicastIfs)
 	for _, c := range conns {
-		c.Close()
+		_ = c.Close()
 	}
 }

@@ -37,6 +37,14 @@ type MatchHistory interface {
 	GetRecentForProfiles(profileIDs []int32, limit int) []MatchResult
 	GetLeaderboard(limit int) []*PlayerRating
 	GetLeaderboardPage(leaderboardID int32, start, count int) ([]*PlayerRating, int64)
+	// GetLeaderboardPageBy is GetLeaderboardPage with an explicit sort: sortBy
+	// 0 orders by wins, anything else by rating. The /community API is the only
+	// caller (docs/community-api-implementation.md §2.a, C12).
+	GetLeaderboardPageBy(leaderboardID int32, start, count int, sortBy int) ([]*PlayerRating, int64)
+	// GetAllRatingsForProfiles returns every ladder row of the given profiles
+	// in the active season, keyed by profile. GetRatingsForLeaderboard only
+	// covers a single ladder, which is not enough for GetPersonalStat (§2.b, C4).
+	GetAllRatingsForProfiles(profileIDs []int32) map[int32][]*PlayerRating
 	EnsureRating(profileID int32, statID int32) *PlayerRating
 	GetDefaultRating() int32
 	// UpsertProfile stores the identity of a profile (alias, platform user id,
@@ -44,6 +52,10 @@ type MatchHistory interface {
 	UpsertProfile(p StoredProfile)
 	// GetProfiles returns the stored identity of the requested profiles.
 	GetProfiles(profileIDs []int32) map[int32]*StoredProfile
+	// GetProfileByPlatformUserID resolves the stored identity of a platform
+	// account. It is the inverse lookup the public /community API needs to turn
+	// /steam/<id> into a profile id (§3.2).
+	GetProfileByPlatformUserID(platformUserID uint64, isXbox bool) (*StoredProfile, bool)
 	// RecordPendingMatch stores the pairing (map, queue, players) as soon as the
 	// match is created, so the result can still be attributed after the
 	// matchmaking entry has been removed.
@@ -52,6 +64,10 @@ type MatchHistory interface {
 	// report route uses it to recover the queue type and ladder that the
 	// client does not send back.
 	GetMatch(matchID int64) (MatchResult, bool)
+	// GetMatchWithPlayers is GetMatch plus the per-player rows. The public
+	// /community getMatchHistory endpoint needs the members and report results,
+	// which GetMatch deliberately omits (§2.e).
+	GetMatchWithPlayers(matchID int64) (MatchResult, bool)
 	// ApplyResult stores a reported result and returns the updated ratings and
 	// whether this call moved them.
 	ApplyResult(m MatchResult) (map[int32]*PlayerRating, bool)
@@ -62,12 +78,18 @@ type MatchHistory interface {
 	ResolveSinglePlayerMatch(matchKey string) (int64, bool)
 }
 
+// GameContextKey is the request-context key the active Game travels under. It
+// is shared by everything that puts a game in a request so a handler always
+// reads it back through models.G, whether TitleMiddleware resolved it from the
+// listener or CommunityGameMiddleware resolved it from the title parameter.
+const GameContextKey = "game"
+
 func G(r *http.Request) Game {
 	return Gg[Game](r)
 }
 
 func Gg[T Game](r *http.Request) T {
-	return r.Context().Value("game").(T)
+	return r.Context().Value(GameContextKey).(T)
 }
 
 type MainGame struct {
@@ -156,7 +178,7 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 	game.resources.Initialize(gameId, opts.Resources)
 	// Extract challenges.json from resources for games with challenge progress
 	if mainUsers, ok := game.users.(*MainUsers); ok && mainUsers != nil {
-		if challengesData, ok := game.resources.SignedAssets()["challenges.json"]; ok {
+		if challengesData := ChallengeDefinitionsData(game.resources); challengesData != nil {
 			mainUsers.challengesData = challengesData
 			// Tell the upgrader which JSON format this game uses
 			mainUsers.challengesFormat = getChallengeFormat(gameId)
@@ -211,7 +233,7 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 	if game.matchHistory != nil {
 		userDataDir := ""
 		if game.resources != nil {
-			if rd, ok := interface{}(game.resources).(interface{ ResourcesFolder() string }); ok {
+			if rd, ok := any(game.resources).(interface{ ResourcesFolder() string }); ok {
 				if r := rd.ResourcesFolder(); r != "" {
 					userDataDir = r + "\\userData\\" + gameId
 				}
@@ -305,10 +327,19 @@ func (g *MainGame) CustomFiles() CustomFiles {
 
 // getChallengeFormat returns the JSON format used by a game's challenges.json.
 func getChallengeFormat(gameId string) ChallengeFormat {
+	return ChallengeFormatForGame(gameId)
+}
+
+// ChallengeFormatForGame returns the JSON format used by a game's
+// challenges.json.
+func ChallengeFormatForGame(gameId string) ChallengeFormat {
 	switch gameId {
 	case "age4":
 		return FormatAoE4
-	case "age2", "athens": // AoE II and AoM (Athens) use flat array format
+	case "age2", "athens":
+		// Historical flat-array layout. Current resources wrap the definitions
+		// like AoE IV, and decodeChallengeRows accepts both; this only selects
+		// which layout is tried first.
 		return FormatFlatArray
 	default:
 		return FormatAoE4 // default to AoE4 format

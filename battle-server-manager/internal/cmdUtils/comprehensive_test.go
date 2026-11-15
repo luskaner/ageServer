@@ -65,22 +65,20 @@ func TestWaitForBattleServerInit_ImmediateSuccess(t *testing.T) {
 	if err != nil {
 		t.Skip("cannot bind")
 	}
-	defer ln1.Close()
+	defer func() { _ = ln1.Close() }()
 	ln2, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
 	if err != nil {
 		t.Skip("cannot bind")
 	}
-	defer ln2.Close()
+	defer func() { _ = ln2.Close() }()
 
 	cfg := battleServer.Config{
-		Base: battleServer.Base{
-			Region:        "r",
-			Name:          "n",
-			IPv4:          "127.0.0.1",
-			BsPort:        ln1.Addr().(*net.TCPAddr).Port,
-			WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
-		},
-		PID: uint32(os.Getpid()),
+		Region:        "r",
+		Name:          "n",
+		IPv4:          "127.0.0.1",
+		BsPort:        ln1.Addr().(*net.TCPAddr).Port,
+		WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
+		PID:           uint32(os.Getpid()),
 	}
 	// Should return quickly (no sleep needed)
 	start := time.Now()
@@ -100,10 +98,8 @@ func TestWaitForBattleServerInit_Timeout(t *testing.T) {
 
 	// Invalid config (bad ports, PID 0) will never validate, should timeout
 	cfg := battleServer.Config{
-		Base: battleServer.Base{
-			Region: "r", Name: "n", IPv4: "127.0.0.1",
-			BsPort: 1, WebSocketPort: 2,
-		},
+		Region: "r", Name: "n", IPv4: "127.0.0.1",
+		BsPort: 1, WebSocketPort: 2,
 		PID: 0,
 	}
 	start := time.Now()
@@ -147,16 +143,16 @@ func TestWriteConfig_MaxIndexUnsorted(t *testing.T) {
 	if ln1 == nil {
 		t.Skip("cannot bind")
 	}
-	defer ln1.Close()
+	defer func() { _ = ln1.Close() }()
 	ln2, _ := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4zero})
 	if ln2 == nil {
 		t.Skip("cannot bind")
 	}
-	defer ln2.Close()
+	defer func() { _ = ln2.Close() }()
 
 	cfg := battleServer.Config{
-		Base: battleServer.Base{Region: "r", Name: "n", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port},
-		PID:  uint32(os.Getpid()),
+		Region: "r", Name: "n", IPv4: "127.0.0.1", BsPort: ln1.Addr().(*net.TCPAddr).Port, WebSocketPort: ln2.Addr().(*net.TCPAddr).Port,
+		PID: uint32(os.Getpid()),
 	}
 	if err := WriteConfig(gameId, cfg); err != nil {
 		t.Fatal(err)
@@ -182,8 +178,8 @@ func TestRemove_ReturnsFalseWhenFileMissing(t *testing.T) {
 
 	// Create a config with index 0 but don't create file, then try to remove
 	cfg := battleServer.Config{
-		Base: battleServer.Base{Region: "missing", Name: "n", IPv4: "1.2.3.4", BsPort: 1, WebSocketPort: 2},
-		PID:  4000000000,
+		Region: "missing", Name: "n", IPv4: "1.2.3.4", BsPort: 1, WebSocketPort: 2,
+		PID: 4000000000,
 	}
 	// Ensure config.Path() is 0.toml
 	if cfg.Path() != "0.toml" {
@@ -380,7 +376,7 @@ func TestRemoveAll_Mocked(t *testing.T) {
 
 	// Success with configs and Remove returns false -> logs No configuration
 	battleServerConfigsFn = func(string, bool, bool) ([]battleServer.Config, error) {
-		return []battleServer.Config{{Base: battleServer.Base{Region: "eu"}}}, nil
+		return []battleServer.Config{{Region: "eu"}}, nil
 	}
 	removeFnRemoveAll = func(string, []battleServer.Config, bool) bool { return false }
 	_, code = RemoveAll(false)
@@ -409,8 +405,8 @@ func TestWriteConfig_MarshalError(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Remove(dir) })
 	cfg := battleServer.Config{
-		Base: battleServer.Base{Region: "r", Name: "n", IPv4: "127.0.0.1", BsPort: 1, WebSocketPort: 2},
-		PID:  1,
+		Region: "r", Name: "n", IPv4: "127.0.0.1", BsPort: 1, WebSocketPort: 2,
+		PID: 1,
 	}
 	err := WriteConfig(gameId, cfg)
 	if err == nil {

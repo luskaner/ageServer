@@ -12,20 +12,16 @@ import (
 func TestNewWrite(t *testing.T) {
 	u, _ := url.Parse("https://example.com/test")
 	in := In{
-		Base: Base{
-			Body:    serverCommunication.Body{Body: []byte("hello")},
-			Headers: http.Header{"Content-Type": {"application/json"}},
-		},
-		Uptime: serverCommunication.Uptime{Uptime: 5 * time.Second},
-		Sender: serverCommunication.Sender{Sender: "127.0.0.1:1234"},
-		Url:    u,
-		Method: "POST",
+		Body:    serverCommunication.Body{Body: []byte("hello")},
+		Headers: http.Header{"Content-Type": {"application/json"}},
+		Uptime:  serverCommunication.Uptime{Uptime: 5 * time.Second},
+		Sender:  serverCommunication.Sender{Sender: "127.0.0.1:1234"},
+		Url:     u,
+		Method:  "POST",
 	}
 	out := Out{
-		Base: Base{
-			Body:    serverCommunication.Body{Body: []byte("response")},
-			Headers: http.Header{"X-Test": {"val"}},
-		},
+		Body:       serverCommunication.Body{Body: []byte("response")},
+		Headers:    http.Header{"X-Test": {"val"}},
 		BodyHash:   serverCommunication.BodyHash{BodyHash: [64]byte{1, 2, 3}},
 		StatusCode: 200,
 		Latency:    10 * time.Millisecond,

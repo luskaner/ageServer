@@ -143,17 +143,9 @@ const announceRounds = 3
 // It is called from several goroutines at once.
 type Progress func(round, rounds, found int)
 
-// QueryServers fills servers with every 'server' that answers the announce.
-func QueryServers(
-	multicastGroups mapset.Set[netip.Addr],
-	targetPorts mapset.Set[uint16],
-	servers map[uuid.UUID]*AnnounceMessage,
-) {
-	QueryServersWithProgress(multicastGroups, targetPorts, servers, nil)
-}
-
-// QueryServersWithProgress is QueryServers with a progress callback. The callback
-// may be called from several goroutines at once.
+// QueryServersWithProgress fills servers with every 'server' that answers the
+// announce. The callback may be called from several goroutines at once; nil
+// disables it.
 func QueryServersWithProgress(
 	multicastGroups mapset.Set[netip.Addr],
 	targetPorts mapset.Set[uint16],

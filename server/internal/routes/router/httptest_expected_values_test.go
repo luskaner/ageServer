@@ -552,8 +552,8 @@ func TestRutaPorRuta_TodasLasRutas_Httptest(t *testing.T) {
 
 // helpers para contexto game (evita importar TitleMiddleware)
 func cachContextWithGame(ctx context.Context, g models.Game) context.Context {
-	// context.WithValue con key "game" como hace TitleMiddleware
-	return context.WithValue(ctx, "game", g)
+	// La misma clave que TitleMiddleware y CommunityGameMiddleware: models.GameContextKey.
+	return context.WithValue(ctx, models.GameContextKey, g)
 }
 
 func httptestDirectServerStatus(t *testing.T, rr *httptest.ResponseRecorder, req *http.Request, gid string) {

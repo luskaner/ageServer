@@ -29,10 +29,10 @@ func TestUpdateItemAttributes_NestedArrays(t *testing.T) {
 	if !ok || len(errorCodes) != 2 {
 		t.Fatalf("errorCodes = %#v; want 2 items", arr[1])
 	}
-	for i, item := range errorCodes {
+	for idx, item := range errorCodes {
 		code, _ := item.([]any)
 		if len(code) != 2 || code[0] != float64(2) {
-			t.Fatalf("item %d error = %#v; want [2, [2]]", i, item)
+			t.Fatalf("item %d error = %#v; want [2, [2]]", idx, item)
 		}
 	}
 	itemsEncoded, _ := arr[2].([]any)

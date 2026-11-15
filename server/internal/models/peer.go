@@ -14,6 +14,7 @@ type MainPeerMutable struct {
 type Peer interface {
 	GetUserId() int32
 	GetParty() int32
+	GetStatGroupID() int32
 	Encode() i.A
 	Invite(user User) bool
 	Uninvite(user User) bool
@@ -50,6 +51,12 @@ func (peer *MainPeer) GetUserId() int32 {
 
 func (peer *MainPeer) GetParty() int32 {
 	return peer.party
+}
+
+// GetStatGroupID is the stat group the member plays under, which the public API
+// reports next to the profile so clients can join it to a ladder row.
+func (peer *MainPeer) GetStatGroupID() int32 {
+	return peer.statGroupID
 }
 
 func (peer *MainPeer) GetMutable() *MainPeerMutable {

@@ -148,8 +148,8 @@ func TestConnectAgentDialFailure(t *testing.T) {
 func TestConnectAgentDialSuccess(t *testing.T) {
 	a := newTestAdmin(t)
 	c1, c2 := net.Pipe()
-	defer c1.Close()
-	defer c2.Close()
+	defer func() { _ = c1.Close() }()
+	defer func() { _ = c2.Close() }()
 	a.deps.dialIPC = func() (net.Conn, error) { return c1, nil }
 	if err := a.ConnectAgentIfNeeded(); err != nil {
 		t.Fatalf("expected nil, got %v", err)
@@ -227,8 +227,8 @@ func TestStartAgentFailure(t *testing.T) {
 func TestConnectWithRetriesSuccess(t *testing.T) {
 	a := newTestAdmin(t)
 	c1, c2 := net.Pipe()
-	defer c1.Close()
-	defer c2.Close()
+	defer func() { _ = c1.Close() }()
+	defer func() { _ = c2.Close() }()
 	a.deps.dialIPC = func() (net.Conn, error) { return c1, nil }
 	if !a.ConnectAgentIfNeededWithRetries() {
 		t.Fatal("expected true")
@@ -246,7 +246,7 @@ func TestConnectWithRetriesFailure(t *testing.T) {
 func TestClearIPCState(t *testing.T) {
 	a := newTestAdmin(t)
 	c1, c2 := net.Pipe()
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 	a.ipc = c1
 	a.enc = nil
 	a.dec = nil
@@ -262,6 +262,6 @@ type mockConn struct{ net.Conn }
 func (m *mockConn) Close() error                       { return nil }
 func (m *mockConn) LocalAddr() net.Addr                { return nil }
 func (m *mockConn) RemoteAddr() net.Addr               { return nil }
-func (m *mockConn) SetDeadline(t time.Time) error      { return nil }
-func (m *mockConn) SetReadDeadline(t time.Time) error  { return nil }
-func (m *mockConn) SetWriteDeadline(t time.Time) error { return nil }
+func (m *mockConn) SetDeadline(_ time.Time) error      { return nil }
+func (m *mockConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (m *mockConn) SetWriteDeadline(_ time.Time) error { return nil }

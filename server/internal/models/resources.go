@@ -111,6 +111,30 @@ func (r *MainResources) SignedAssets() map[string][]byte {
 	return r.keyedFiles
 }
 
+// ChallengeDefinitionsData returns the challenges.json served by the resources.
+//
+// challenges.json is not a keyed asset, so the regular loader decodes it into
+// ArrayFiles. A keyed copy is preferred when present (tests or a future
+// resource change); the decoded form is re-encoded to the JSON the challenge
+// upgrader expects.
+func ChallengeDefinitionsData(resources Resources) []byte {
+	if resources == nil {
+		return nil
+	}
+	if data, ok := resources.SignedAssets()["challenges.json"]; ok && len(data) > 0 {
+		return data
+	}
+	data, ok := resources.ArrayFiles()["challenges.json"]
+	if !ok || len(data) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
 func (r *MainResources) CloudFiles() *CloudFiles {
 	return r.cloudFiles
 }

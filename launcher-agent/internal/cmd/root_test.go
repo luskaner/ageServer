@@ -27,7 +27,7 @@ func (fakeLocker) Unlock() error { return nil }
 // outcome instead of waiting a minute for a process that never starts.
 func overrides(t *testing.T, gameID string, exitCode int) (announced func() (string, int, int)) {
 	t.Helper()
-origValues, origLock, origChdir := values, createLockFn, chdirToExeFn
+	origValues, origLock, origChdir := values, createLockFn, chdirToExeFn
 	origInit, origWatch, origNotify := initializeFn, watchFn, signalNotifyFn
 	origAnnounce := announce
 	origTray := startTrayFn

@@ -325,7 +325,7 @@ func TestNewCustomGamePathTransformEmpty(t *testing.T) {
 func TestOpenLibraryFolderNonexistent(t *testing.T) {
 	f, err := openLibraryFolder("nonexistent")
 	if err == nil {
-		f.Close()
+		_ = f.Close()
 		t.Error("expected error for nonexistent path")
 	}
 }

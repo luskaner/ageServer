@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -146,16 +145,12 @@ func (c *automatchQueueCatalog) Order() []int32 {
 	return append([]int32(nil), c.order...)
 }
 
-// LoadQueueCatalog builds the catalog from automatchMaps.json grouped by its
+// loadQueueCatalog builds the catalog from automatchMaps.json grouped by its
 // fifth field and overlays automatchQueues.json on top. A missing pool is not
 // an error: it simply means that title has no Quick Match. A malformed pool or
 // overlay is an error, because silently pairing the wrong mode is worse than
 // not pairing at all.
-func LoadQueueCatalog(gameID string, resources Resources, definitions LeaderboardDefinitions) (*automatchQueueCatalog, error) {
-	return loadQueueCatalogForGame(gameID, resources, definitions)
-}
-
-func loadQueueCatalogForGame(gameID string, resources Resources, definitions LeaderboardDefinitions) (*automatchQueueCatalog, error) {
+func loadQueueCatalog(gameID string, resources Resources, definitions LeaderboardDefinitions) (*automatchQueueCatalog, error) {
 	catalog := newEmptyQueueCatalog(gameID)
 	if resources == nil {
 		return catalog, nil
@@ -183,7 +178,7 @@ func (c *automatchQueueCatalog) sort() {
 	for id := range c.queues {
 		c.order = append(c.order, id)
 	}
-	sort.Slice(c.order, func(i, j int) bool { return c.order[i] < c.order[j] })
+	slices.Sort(c.order)
 }
 
 func parseAutomatchPool(gameID string, raw i.A, catalog *automatchQueueCatalog) error {

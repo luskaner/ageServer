@@ -172,7 +172,7 @@ func TestCertificatePairs_MissingCert(t *testing.T) {
 	dir := t.TempDir()
 	// Only create key, ca, ssCert, ssKey — skip cert.pem
 	for _, name := range []string{Key, CACert, SelfSignedCert, SelfSignedKey} {
-		os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
 	}
 	ok, _, _, _, _, _ := CertificatePairs(dir)
 	if ok {
@@ -183,7 +183,7 @@ func TestCertificatePairs_MissingCert(t *testing.T) {
 func TestCertificatePairs_MissingKey(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{Cert, CACert, SelfSignedCert, SelfSignedKey} {
-		os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
 	}
 	ok, _, _, _, _, _ := CertificatePairs(dir)
 	if ok {
@@ -194,7 +194,7 @@ func TestCertificatePairs_MissingKey(t *testing.T) {
 func TestCertificatePairs_MissingCACert(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{Cert, Key, SelfSignedCert, SelfSignedKey} {
-		os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
 	}
 	ok, _, _, _, _, _ := CertificatePairs(dir)
 	if ok {
@@ -205,7 +205,7 @@ func TestCertificatePairs_MissingCACert(t *testing.T) {
 func TestCertificatePairs_MissingSelfSignedCert(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{Cert, Key, CACert, SelfSignedKey} {
-		os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
 	}
 	ok, _, _, _, _, _ := CertificatePairs(dir)
 	if ok {
@@ -216,7 +216,7 @@ func TestCertificatePairs_MissingSelfSignedCert(t *testing.T) {
 func TestCertificatePairs_MissingSelfSignedKey(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{Cert, Key, CACert, SelfSignedCert} {
-		os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
+		_ = os.WriteFile(filepath.Join(dir, name), []byte("data"), 0644)
 	}
 	ok, _, _, _, _, _ := CertificatePairs(dir)
 	if ok {

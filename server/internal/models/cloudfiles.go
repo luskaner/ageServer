@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -534,8 +535,8 @@ func (m *CloudFiles) purgeStale() {
 		}
 		return nil
 	})
-	for idx := len(dirs) - 1; idx >= 0; idx-- {
-		_ = m.root.Remove(dirs[idx])
+	for _, dir := range slices.Backward(dirs) {
+		_ = m.root.Remove(dir)
 	}
 }
 
@@ -649,13 +650,7 @@ func (m *CloudFiles) sweepInterval() time.Duration {
 	if expiry <= 0 {
 		return partTTL / 4
 	}
-	interval := expiry / 4
-	if interval < time.Second {
-		interval = time.Second
-	}
-	if interval > time.Minute {
-		interval = time.Minute
-	}
+	interval := min(max(expiry/4, time.Second), time.Minute)
 	return interval
 }
 
@@ -675,7 +670,7 @@ func isReplayPath(name string) bool {
 	if !strings.HasPrefix(name, replaysSubfolder+"/") {
 		return false
 	}
-	for _, part := range strings.Split(name, "/") {
+	for part := range strings.SplitSeq(name, "/") {
 		if part == ".." || part == "" {
 			return false
 		}

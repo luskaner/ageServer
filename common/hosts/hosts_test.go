@@ -100,12 +100,12 @@ func TestGetAllLines(t *testing.T) {
 	content := "127.0.0.1 localhost\n10.0.0.1 example.com\n# comment\n"
 	dir := t.TempDir()
 	f := filepath.Join(dir, "hosts")
-	os.WriteFile(f, []byte(content), 0644)
+	_ = os.WriteFile(f, []byte(content), 0644)
 	file, err := os.Open(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	err, _, lines := GetAllLines(file)
 	if err != nil {
 		t.Fatalf("GetAllLines: %v", err)
@@ -119,12 +119,12 @@ func TestGetAllLinesDeduplicatesHosts(t *testing.T) {
 	content := "10.0.0.1 dup.com\n10.0.0.2 dup.com\n"
 	dir := t.TempDir()
 	f := filepath.Join(dir, "hosts")
-	os.WriteFile(f, []byte(content), 0644)
+	_ = os.WriteFile(f, []byte(content), 0644)
 	file, err := os.Open(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	_, _, lines := GetAllLines(file)
 	for _, l := range lines {
 		for _, h := range l.Hosts() {
@@ -174,7 +174,7 @@ func TestOpenMainAndGetAllLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, _, lines := GetAllLines(f)
 	if len(lines) != 1 {
 		t.Errorf("expected 1 line, got %d", len(lines))
@@ -192,7 +192,7 @@ func TestMissingIpMappings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	mappings := HostMappings{"new.example.com": net.ParseIP("10.0.0.2")}
 	rest, err := missingIpMappings(&mappings, f)
 	if err != nil {
@@ -338,7 +338,7 @@ func TestGetAllLinesDecodeError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	err, _, _ = GetAllLines(f)
 	if err == nil {
 		t.Error("GetAllLines should error on invalid encoding")
@@ -353,7 +353,7 @@ func TestDecodeAndGetScannerError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	err, _, _ = decodeAndGetScanner(f)
 	if err == nil {
 		t.Error("decodeAndGetScanner should error on invalid encoding")
@@ -368,7 +368,7 @@ func TestMissingIpMappingsDecodeError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	m := HostMappings{}
 	_, err = missingIpMappings(&m, f)
 	if err == nil {

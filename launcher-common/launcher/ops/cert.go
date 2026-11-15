@@ -20,6 +20,11 @@ import (
 	"github.com/luskaner/ageServer/launcher-common/launcher/server"
 )
 
+// runCertSetupFn performs the config setup that writes the certificate file. It
+// is a variable so a test can see what would be written without running the
+// config binary, the same reason AddSigKey takes its setup as a variable.
+var runCertSetupFn = func(options *executor.ConfigSetupOptions) *exec.Result { return options.RunSetUp() }
+
 func checkCertMatch(r launcher.Reporter, serverId uuid.UUID, gameId string, serverCertificate *x509.Certificate, hosts []string, rootCAs *x509.CertPool, fixable bool) (requiresFixing bool, exitCode int) {
 	for _, host := range hosts {
 		if err := server2.CheckConnectionFromServer(host, false, rootCAs); err != nil {
@@ -116,7 +121,7 @@ func (c *Config) AddCert(gameId string, serverId uuid.UUID, serverCertificate *x
 		cfgSetupOpts.AddLocalCertData = addLocalCertData
 		cfgSetupOpts.CertFilePath = c.certFilePath
 		cfgSetupOpts.AgentEndOnError = !c.RequiresConfigRevert()
-		if result := cfgSetupOpts.RunSetUp(); !result.Success() {
+		if result := runCertSetupFn(cfgSetupOpts); !result.Success() {
 			if customCertFile {
 				c.report().Fail("Failed to save certificate to file")
 			} else {

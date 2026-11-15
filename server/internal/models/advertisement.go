@@ -65,6 +65,12 @@ type Advertisement interface {
 	UnsafeUpdateTags(integer map[string]int32, text map[string]string)
 	UnsafeMatchesTags(integer map[string]int32, text map[string]string) bool
 	UnsafeEncode(gameId string, clientLibVersion uint16, battleServers BattleServers) i.A
+	// EncodeCommunity returns the object-shaped lobby of the public /community
+	// API, plus the profile ids of its members. It is a separate encoder from
+	// UnsafeEncode on purpose: that one is positional and its layout changes per
+	// title and client library version, so it has no stable indices to map.
+	// Requires advertisement read lock.
+	EncodeCommunity() (CommunityMatch, []int32)
 	UnsafeUpdate(advFrom *shared.AdvertisementUpdateRequest)
 	UnsafeUpdateMatchmaking(advFrom *shared.AdvertisementUpdateRequest)
 	GetId() int32
@@ -134,6 +140,9 @@ type Advertisements interface {
 	UnsafeDelete(adv Advertisement)
 	UnsafeFirstAdvertisement(matches func(adv Advertisement) bool) Advertisement
 	LockedFindAdvertisementsEncoded(gameId string, clientLibVersion uint16, length int, offset int, preMatchesLocking bool, matches func(adv Advertisement) bool) i.A
+	// LockedForEach visits every advertisement under its read lock. The public
+	// API uses it because it needs the object encoder, not the positional one.
+	LockedForEach(fn func(adv Advertisement))
 	GetUserAdvertisement(userId int32) Advertisement
 }
 
@@ -649,6 +658,132 @@ func (adv *MainAdvertisement) UnsafeEncode(gameId string, clientLibVersion uint1
 		}
 	}
 	return response
+}
+
+// EncodeCommunity returns the object the public /community/findAdvertisements
+// endpoint lists, plus the profile ids of its members. Requires advertisement
+// read lock.
+//
+// The fields are the ones the live service returns (22 of them, C16). Two of them
+// are security-relevant:
+//
+//   - passwordprotected is a boolean, never adv.password.value;
+//   - hasobserverpassword is a boolean, never the observer password itself.
+//
+// The member list comes from EncodePeers and drops position 6 (the internal
+// advertisement IP): the official service does not expose the internal topology
+// and neither does this encoder, even though the game's positional encoder does.
+// CommunityMatchMember is one entry of the public API's matchmembers[] array.
+//
+// CivilizationID is the renamed RaceID: the public API uses civilization_id
+// where the game protocol uses race_id (C16). The peer's IP, which the
+// positional encoding carries, is deliberately absent: it is internal topology
+// and the official service does not expose it either.
+type CommunityMatchMember struct {
+	MatchID        int32 `json:"match_id"`
+	ProfileID      int32 `json:"profile_id"`
+	Ranking        int32 `json:"ranking"`
+	StatGroupID    int32 `json:"statgroup_id"`
+	CivilizationID int32 `json:"civilization_id"`
+	TeamID         int32 `json:"teamid"`
+}
+
+// CommunityMatch is one entry of the public API's matches[] array. Its json tags
+// are the wire contract, so it lives next to the advertisement it describes and
+// the route only wraps it (§4.a).
+//
+// The four flags are 0/1 numbers, not JSON booleans: that is what the live
+// service sends and what the game protocol uses everywhere else.
+type CommunityMatch struct {
+	ID                  int32 `json:"id"`
+	SteamLobbyID        int64 `json:"steamlobbyid"`
+	GoodOldGamesLobbyID int64 `json:"goodoldgameslobbyid"`
+	// XboxSessionID is "0" for LAN lobbies and a JSON blob for the Xbox session
+	// of the titles that have one, so it is a string either way.
+	XboxSessionID       string                 `json:"xboxsessionid"`
+	HostProfileID       int32                  `json:"host_profile_id"`
+	State               int8                   `json:"state"`
+	Description         string                 `json:"description"`
+	Visible             uint8                  `json:"visible"`
+	MapName             string                 `json:"mapname"`
+	Options             string                 `json:"options"`
+	PasswordProtected   uint8                  `json:"passwordprotected"`
+	MaxPlayers          uint8                  `json:"maxplayers"`
+	SlotInfo            string                 `json:"slotinfo"`
+	MatchTypeID         uint16                 `json:"matchtype_id"`
+	MatchMembers        []CommunityMatchMember `json:"matchmembers"`
+	ObserverNum         int                    `json:"observernum"`
+	ObserverMax         int32                  `json:"observermax"`
+	IsObservable        uint8                  `json:"isobservable"`
+	ObserverDelay       uint32                 `json:"observerdelay"`
+	HasObserverPassword uint8                  `json:"hasobserverpassword"`
+	ServiceType         int32                  `json:"servicetype"`
+	RelayServerRegion   string                 `json:"relayserver_region"`
+}
+
+// EncodeCommunity renders the advertisement for the public API and returns the
+// ids of its members so the caller can build the avatars[] lookup in the same
+// pass. It needs the advertisement read lock, like every other Unsafe* access.
+func (adv *MainAdvertisement) EncodeCommunity() (CommunityMatch, []int32) {
+	peersLen, peers := adv.peers.Values()
+	members := make([]CommunityMatchMember, 0, peersLen)
+	memberIDs := make([]int32, 0, peersLen)
+	for peer := range peers {
+		mutable := peer.GetMutable()
+		members = append(members, CommunityMatchMember{
+			MatchID:        adv.id,
+			ProfileID:      peer.GetUserId(),
+			Ranking:        -1,
+			StatGroupID:    peer.GetStatGroupID(),
+			CivilizationID: mutable.RaceID,
+			TeamID:         mutable.TeamID,
+		})
+		memberIDs = append(memberIDs, peer.GetUserId())
+	}
+	return CommunityMatch{
+		ID: adv.id,
+		// The server has no Steam or GoG lobby: 0 is what the game's own encoder
+		// already reserves for those slots.
+		SteamLobbyID:        0,
+		GoodOldGamesLobbyID: 0,
+		XboxSessionID:       adv.GetXboxSessionId(),
+		HostProfileID:       adv.hostId,
+		State:               adv.state,
+		Description:         adv.description,
+		Visible:             i.BoolToNumber(adv.visible),
+		MapName:             adv.mapName,
+		Options:             adv.options,
+		PasswordProtected:   i.BoolToNumber(adv.password.enabled),
+		MaxPlayers:          adv.maxPlayers,
+		SlotInfo:            adv.slotInfo,
+		MatchTypeID:         adv.matchType,
+		MatchMembers:        members,
+		ObserverNum:         adv.observers.userIds.Len(),
+		ObserverMax:         0,
+		IsObservable:        i.BoolToNumber(adv.observers.enabled),
+		ObserverDelay:       adv.observers.delay,
+		HasObserverPassword: i.BoolToNumber(adv.observers.password != ""),
+		// The official service reports the service type of the lobby; this
+		// server only hosts LAN lobbies through the game client, and 0 is the
+		// value it sends.
+		ServiceType:       0,
+		RelayServerRegion: adv.relayRegion,
+	}, memberIDs
+}
+
+// LockedForEach calls fn with every advertisement under its read lock, in a
+// single pass and with no pagination. It exists so the public API can encode
+// lobbies without importing the positional encoder used by the game routes.
+func (advs *MainAdvertisements) LockedForEach(fn func(adv Advertisement)) {
+	_, iter := advs.store.Values()
+	for adv := range iter {
+		advId := adv.GetId()
+		advs.locks.RLock(advId)
+		if fn != nil {
+			fn(adv)
+		}
+		advs.locks.RUnlock(advId)
+	}
 }
 
 // UnsafeFirstAdvertisement requires advertisement read lock unless only safe advertisement properties are checked

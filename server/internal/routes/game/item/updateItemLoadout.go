@@ -15,17 +15,8 @@ type updateItemLoadoutRequest struct {
 
 func UpdateItemLoadout(w http.ResponseWriter, r *http.Request) {
 	var req updateItemLoadoutRequest
-	err := i.Bind(r, &req)
-	if err != nil {
-		i.JSON(&w, i.A{2, i.A{}})
-		return
-	}
-	game := models.G(r)
-	sess := models.SessionOrPanic(r)
-	userId := sess.GetUserId()
-	u, ok := game.Users().GetUserById(userId)
+	_, u, ok := bindAndResolveUser(w, r, &req, i.A{2, i.A{}})
 	if !ok {
-		i.JSON(&w, i.A{2, i.A{}})
 		return
 	}
 	var itemLoadoutEncoded i.A
@@ -37,7 +28,7 @@ func UpdateItemLoadout(w http.ResponseWriter, r *http.Request) {
 	_ = loadouts.WithReadWrite(func(data *models.MainItemLoadouts) error {
 		if item := data.Get(req.Id); item != nil {
 			item.Update(req.Name, req.Type, mapset.NewThreadUnsafeSet(req.ItemOrLocIDs...))
-			itemLoadoutEncoded = item.Encode(userId)
+			itemLoadoutEncoded = item.Encode(u.GetId())
 		}
 		return nil
 	})

@@ -46,16 +46,6 @@ func (e *ExitError) Error() string {
 
 func (e *ExitError) Unwrap() error { return e.Err }
 
-// ExitCode returns the exit code an ExitError carries, and false for any other
-// error. A caller that only wants the code can ignore the message and let the
-// frontend decide how to say it.
-func ExitCode(err error) (int, bool) {
-	if ee, ok := errors.AsType[*ExitError](err); ok {
-		return ee.Code, true
-	}
-	return 0, false
-}
-
 // Loaded records where a run's configuration came from.
 //
 // The files are part of the answer rather than a side effect: a run that behaves

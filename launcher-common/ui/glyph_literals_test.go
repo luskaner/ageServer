@@ -44,7 +44,6 @@ func repoRoot(t *testing.T) string {
 func TestNoLiteralGlyphsOutsideTheCatalogue(t *testing.T) {
 	root := repoRoot(t)
 	for _, module := range inScopeModules {
-		module := module
 		t.Run(module, func(t *testing.T) {
 			if module == "launcher-common" {
 				t.Skip("the catalogue itself lives here")
@@ -102,9 +101,7 @@ func checkNoLiteralGlyphs(t *testing.T, path string) {
 			if r < 0x80 || unicode.IsLetter(r) && r < 0x2000 {
 				continue
 			}
-			switch {
-			case r == '\t':
-			case isMarkerGlyph(r):
+			if isMarkerGlyph(r) {
 				t.Errorf("%s:%d: the literal %q must go through the glyph catalogue", path, lineNo+1, r)
 			}
 		}

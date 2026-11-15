@@ -275,7 +275,7 @@ func TestGameResultNotificationMatchesOfficialShape(t *testing.T) {
 		t.Fatalf("leaderboard stats = %#v", got[1])
 	}
 	stat, ok := stats[0].([]any)
-	if !ok || len(stat) != 19 || stat[0] != int32(13436792) || stat[1] != int32(models.SoloRMRanked) || stat[12] != int32(732) {
+	if !ok || len(stat) != 19 || stat[0] != int32(13436792) || stat[1] != models.SoloRMRanked || stat[12] != int32(732) {
 		t.Fatalf("leaderboard stat row = %#v", stats[0])
 	}
 }

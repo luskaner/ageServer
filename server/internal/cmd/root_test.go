@@ -300,7 +300,7 @@ func TestRunRootSigningKeyPairPresent(t *testing.T) {
 		return nil
 	}
 	values.Id = "00000000-0000-0000-0000-000000000000"
-	runRoot(nil)
+	_, _ = runRoot(nil)
 	if !called {
 		t.Fatal("startup never checked the signing key pair")
 	}
@@ -316,7 +316,7 @@ func TestRunRootSigningKeyPairUncheckedWhenNotSigning(t *testing.T) {
 		return nil
 	}
 	values.Id = "00000000-0000-0000-0000-000000000000"
-	runRoot(nil)
+	_, _ = runRoot(nil)
 	if internal.SignConfigRuntime.Enabled {
 		t.Fatal("Sign should stay off when the config leaves it off")
 	}

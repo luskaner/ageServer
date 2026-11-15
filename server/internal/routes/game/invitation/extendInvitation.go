@@ -19,8 +19,7 @@ func ExtendInvitation(w http.ResponseWriter, r *http.Request) {
 		i.JSON(&w, i.A{2})
 		return
 	}
-	game := models.G(r)
-	advertisements := game.Advertisements()
+	advertisements := models.G(r).Advertisements()
 	adv, ok := advertisements.GetAdvertisement(q.AdvertisementId)
 	if ok {
 		var password string
@@ -33,33 +32,20 @@ func ExtendInvitation(w http.ResponseWriter, r *http.Request) {
 		i.JSON(&w, i.A{2})
 		return
 	}
-	peers := adv.GetPeers()
-	var peer models.Peer
-	sess := models.SessionOrPanic(r)
-	u, _ := game.Users().GetUserById(sess.GetUserId())
-	peer, ok = peers.Load(u.GetId())
+	inviter, peer, invitee, inviteeSession, ok := resolveInvitee(w, r, adv, q.UserId)
 	if !ok {
-		i.JSON(&w, i.A{2})
-		return
-	}
-	var invitee models.User
-	invitee, ok = game.Users().GetUserById(q.UserId)
-	if !ok {
-		i.JSON(&w, i.A{2})
 		return
 	}
 	if !peer.Invite(invitee) {
 		i.JSON(&w, i.A{0})
 		return
 	}
-	var inviteeSession models.Session
-	inviteeSession, ok = game.Sessions().GetByUserId(invitee.GetId())
-	if ok {
+	if inviteeSession != nil {
 		wss.SendOrStoreMessage(
 			inviteeSession,
 			"ExtendInvitationMessage",
 			i.A{
-				u.EncodeProfileInfo(inviteeSession.GetClientLibVersion()),
+				inviter.EncodeProfileInfo(inviteeSession.GetClientLibVersion()),
 				q.AdvertisementId,
 				q.AdvertisementPassword,
 			},

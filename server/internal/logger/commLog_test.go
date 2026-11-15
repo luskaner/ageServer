@@ -48,7 +48,7 @@ func TestBufferCloseFlushError(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := NewBuffer(tmp)
-	tmp.Close() // close underlying file to make flush fail
+	_ = tmp.Close() // close underlying file to make flush fail
 	if err := buf.Close(); err == nil {
 		// May error or not, but should not panic
 	}

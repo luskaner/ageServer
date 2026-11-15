@@ -6,13 +6,6 @@ import (
 	"github.com/luskaner/ageServer/common/logger/serverCommunication/wss"
 )
 
-func mkData(expected string, actual string) *Data {
-	d := &Data{}
-	d.data.Body.Body = []byte(expected)
-	d.messageResponse.body = []byte(actual)
-	return d
-}
-
 // Regression: CheckResponse compared the actual response against itself
 // (d.body IS messageResponse.body), so every WSS entry reported OK regardless
 // of what the server returned.

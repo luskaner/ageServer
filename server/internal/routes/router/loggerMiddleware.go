@@ -107,9 +107,11 @@ func NewLoggingMiddleware(next http.Handler) http.Handler {
 		}
 		requestLatency := time.Since(requestStart)
 		responseBody := wWrapper.Body.Bytes()
-		var hash [64]byte
+		// bodyHashBytes is a digest, not the hash package: the name must not
+		// shadow the import that types the writer above.
+		var bodyHashBytes [64]byte
 		if r.Method != http.MethodHead && len(responseBody) > 0 {
-			copy(hash[:], wWrapper.bodyHash.Sum(nil))
+			copy(bodyHashBytes[:], wWrapper.bodyHash.Sum(nil))
 		}
 		if len(requestBody) > maxLoggedBodyBytes {
 			requestBody = nil
@@ -140,7 +142,7 @@ func NewLoggingMiddleware(next http.Handler) http.Handler {
 					Body:    serverCommunication.Body{Body: responseBody},
 					Headers: wWrapper.Header(),
 				},
-				BodyHash:   serverCommunication.BodyHash{BodyHash: hash},
+				BodyHash:   serverCommunication.BodyHash{BodyHash: bodyHashBytes},
 				StatusCode: wWrapper.StatusCode,
 				Latency:    requestLatency,
 			},

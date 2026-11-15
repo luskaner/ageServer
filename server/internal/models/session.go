@@ -148,6 +148,16 @@ func (s *MainSessions) ResetExpiry(id string) {
 	s.baseSessions.ResetExpiryTimer(id)
 }
 
+// SessionOf returns the session attached to the request, if any.
+//
+// It is the non-panicking counterpart of SessionOrPanic and exists for the
+// public /community API, which is served without SessionMiddleware: those
+// handlers must never assume a session is present (docs/community-api-implementation.md
+// §D3). It cannot be called Session because that name is the type itself.
+func SessionOf(r *http.Request) (Session, bool) {
+	return session(r)
+}
+
 func SessionOrPanic(r *http.Request) Session {
 	sessAny, ok := session(r)
 	if !ok {

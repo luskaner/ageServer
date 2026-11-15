@@ -21,21 +21,13 @@ type moveItemRequest struct {
 
 func MoveItem(w http.ResponseWriter, r *http.Request) {
 	var req moveItemRequest
-	err := i.Bind(r, &req)
-	if err != nil {
-		i.JSON(&w, i.A{2, i.A{}, i.A{}})
+	_, u, ok := bindAndResolveUser(w, r, &req, i.A{2, i.A{}, i.A{}})
+	if !ok {
 		return
 	}
 	minLength := min(len(req.ItemIds.Data), len(req.LocationIds.Data), len(req.PositionIds.Data), len(req.SlotIds.Data))
 	maxLength := max(len(req.ItemIds.Data), len(req.LocationIds.Data), len(req.PositionIds.Data), len(req.SlotIds.Data))
 	if minLength == 0 || maxLength == 0 || minLength != maxLength {
-		i.JSON(&w, i.A{2, i.A{}, i.A{}})
-		return
-	}
-	game := models.G(r)
-	sess := models.SessionOrPanic(r)
-	u, ok := game.Users().GetUserById(sess.GetUserId())
-	if !ok {
 		i.JSON(&w, i.A{2, i.A{}, i.A{}})
 		return
 	}
@@ -61,7 +53,7 @@ func MoveItem(w http.ResponseWriter, r *http.Request) {
 					item.GetMetadata().UpdateOther("eslot", strconv.FormatInt(int64(slotID), 10))
 				}
 				item.IncrementVersion()
-				itemsEncoded[j] = item.Encode(sess.GetUserId())
+				itemsEncoded[j] = item.Encode(u.GetId())
 			}
 		}
 		return nil

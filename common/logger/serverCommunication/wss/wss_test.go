@@ -61,7 +61,7 @@ func TestNewWriteData(t *testing.T) {
 
 func TestNewWriteControl(t *testing.T) {
 	c := Control{
-		Data:        Data{Body: serverCommunication.Body{Body: []byte{}}},
+		Body:        serverCommunication.Body{Body: []byte{}},
 		MessageType: 42,
 	}
 	w := NewWrite(

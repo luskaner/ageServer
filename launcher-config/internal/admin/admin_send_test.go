@@ -17,21 +17,21 @@ import (
 // failingWriter fails on every Write.
 type failingWriter struct{}
 
-func (f *failingWriter) Write(p []byte) (int, error) { return 0, errors.New("write fail") }
+func (f *failingWriter) Write(_ []byte) (int, error) { return 0, errors.New("write fail") }
 
 // failingReader fails on Read and trivially satisfies net.Conn.
 type failingReader struct{}
 
-func (f *failingReader) Read(p []byte) (int, error) { return 0, errors.New("read fail") }
+func (f *failingReader) Read(_ []byte) (int, error) { return 0, errors.New("read fail") }
 func (f *failingReader) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 func (f *failingReader) Close() error                       { return nil }
 func (f *failingReader) LocalAddr() net.Addr                { return nil }
 func (f *failingReader) RemoteAddr() net.Addr               { return nil }
-func (f *failingReader) SetDeadline(t time.Time) error      { return nil }
-func (f *failingReader) SetReadDeadline(t time.Time) error  { return nil }
-func (f *failingReader) SetWriteDeadline(t time.Time) error { return nil }
+func (f *failingReader) SetDeadline(_ time.Time) error      { return nil }
+func (f *failingReader) SetReadDeadline(_ time.Time) error  { return nil }
+func (f *failingReader) SetWriteDeadline(_ time.Time) error { return nil }
 
 // statefulFailWriter fails on the failure-th Write call.
 type statefulFailWriter struct {
@@ -202,7 +202,7 @@ func TestSendAgentFirstDecodeNonSuccessExit(t *testing.T) {
 		if err := dec.Decode(&typ); err != nil {
 			return err
 		}
-		return enc.Encode(int(1)) // non-success exit code
+		return enc.Encode(1) // non-success exit code
 	})
 
 	_, code := ac.a.runSetUpAgent("age2", nil, false, true, nil)
@@ -293,8 +293,8 @@ func TestRunSetUpAgentViaSendAgentSuccess(t *testing.T) {
 func TestStopAgentIfNeededWithIPC(t *testing.T) {
 	a := newTestAdmin(t)
 	local, remote := net.Pipe()
-	defer local.Close()
-	defer remote.Close()
+	defer func() { _ = local.Close() }()
+	defer func() { _ = remote.Close() }()
 	a.ipc = local
 	a.enc = gob.NewEncoder(local)
 	a.dec = gob.NewDecoder(local)
@@ -326,8 +326,8 @@ func TestStopAgentIfNeededWithIPC(t *testing.T) {
 func TestStopAgentIfNeededReportsMissingAck(t *testing.T) {
 	a := newTestAdmin(t)
 	local, remote := net.Pipe()
-	defer local.Close()
-	defer remote.Close()
+	defer func() { _ = local.Close() }()
+	defer func() { _ = remote.Close() }()
 	a.ipc = local
 	a.enc = gob.NewEncoder(local)
 	a.dec = gob.NewDecoder(local)
@@ -361,8 +361,8 @@ func TestStopAgentIfNeededReportsMissingAck(t *testing.T) {
 func TestStopAgentIfNeededWaitsForSlowAgent(t *testing.T) {
 	a := newTestAdmin(t)
 	local, remote := net.Pipe()
-	defer local.Close()
-	defer remote.Close()
+	defer func() { _ = local.Close() }()
+	defer func() { _ = remote.Close() }()
 	a.ipc = local
 	a.enc = gob.NewEncoder(local)
 	a.dec = gob.NewDecoder(local)

@@ -37,7 +37,7 @@ func TestOpenMainFileLogEnabledFailure(t *testing.T) {
 	// Make a file where directory should be, to cause MkdirAll failure
 	tmp := t.TempDir()
 	blocker := filepath.Join(tmp, "blocker")
-	os.WriteFile(blocker, []byte("x"), 0644)
+	_ = os.WriteFile(blocker, []byte("x"), 0644)
 	badRoot := filepath.Join(blocker, "logs")
 	commonLogger.FileLogger = nil
 	t.Cleanup(func() { commonLogger.FileLogger = nil })
@@ -56,10 +56,10 @@ func TestPrintFileWithLogger(t *testing.T) {
 	dir := t.TempDir()
 	commonLogger.FileLogger = nil
 	t.Cleanup(func() { commonLogger.FileLogger = nil; commonLogger.CloseFileLog() })
-	OpenMainFileLog(dir, true)
+	_ = OpenMainFileLog(dir, true)
 	// Create a temp file to print
 	tmpFile := filepath.Join(dir, "sample.txt")
-	os.WriteFile(tmpFile, []byte("hello"), 0644)
+	_ = os.WriteFile(tmpFile, []byte("hello"), 0644)
 	PrintFile("sample", tmpFile)
 	// Should not panic, and should have logged
 }

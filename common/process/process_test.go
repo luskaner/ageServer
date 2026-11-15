@@ -148,7 +148,7 @@ func TestKillPidProcStatError(t *testing.T) {
 func TestKillPidProcRemovesFile(t *testing.T) {
 	// Verify the remove path by creating a real file and removing it.
 	f := filepath.Join(t.TempDir(), "kill.pid")
-	os.WriteFile(f, []byte("data"), 0644)
+	_ = os.WriteFile(f, []byte("data"), 0644)
 	if err := osRemoveFn(f); err != nil {
 		t.Fatalf("osRemoveFn: %v", err)
 	}

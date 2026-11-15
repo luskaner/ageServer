@@ -123,7 +123,7 @@ func (l Line) WithOwnMarking() Line {
 // Any previous own marking is replaced, so the line comes out as exactly one
 // preserved marking.
 func (l Line) WithPreservedMarking() Line {
-	l = l.WithoutOwnMarking()
-	l.comments = slices.Clone(append(l.comments, preservedMarking))
-	return l
+	preserved := l.WithoutOwnMarking()
+	preserved.comments = slices.Clone(append(preserved.comments, preservedMarking))
+	return preserved
 }

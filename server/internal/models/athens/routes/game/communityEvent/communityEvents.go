@@ -84,6 +84,9 @@ func generateMonthlyEvents() (events []CommunityEvent) {
 			ExpiryTime: expiryTime,
 			CustomData: "",
 			EventState: 2,
+			// A monthly pantheon event is a type-3 event in the official AoM
+			// catalogue (the daily challenge below is type 2).
+			EventType: 3,
 		}
 		for s := 1; s < 17; s++ {
 			event.Leaderboards = append(
@@ -129,6 +132,9 @@ func generateDailyChallengeEvents() (events []CommunityEvent) {
 			ExpiryTime: expiryTime,
 			CustomData: eventMetadata,
 			EventState: 2,
+			// The daily celestial challenge is a type-2 event in the official
+			// AoM catalogue.
+			EventType: 2,
 			Leaderboards: []EventLeaderBoard{
 				{
 					Id:          id,
@@ -150,9 +156,16 @@ func generateDailyChallengeEvents() (events []CommunityEvent) {
 	return
 }
 
-func CommunityEventsEncoded() i.A {
+// Events returns the events of the current window. It exists so the public
+// /community API can build its objects from the typed values instead of parsing
+// the positional encoding, which is reserved for the game client.
+func Events() []CommunityEvent {
 	events := generateDailyChallengeEvents()
-	events = append(events, generateMonthlyEvents()...)
+	return append(events, generateMonthlyEvents()...)
+}
+
+func CommunityEventsEncoded() i.A {
+	events := Events()
 	eventsEncoded := i.A{}
 	leaderboardsEncoded := i.A{}
 	leaderboardMapsEncoded := i.A{}

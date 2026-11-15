@@ -4,7 +4,6 @@ package server
 
 import (
 	"net"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -103,10 +102,6 @@ func TestAnnounceIdLength(t *testing.T) {
 	if AnnounceIdLength != 36 {
 		t.Fatalf("AnnounceIdLength = %d, want 36 (text UUID)", AnnounceIdLength)
 	}
-}
-
-func itoa(v int) string {
-	return strconv.Itoa(v)
 }
 
 // Progress is reported from several goroutines at once, so it has to be safe to

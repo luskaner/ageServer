@@ -66,7 +66,7 @@ func TestPrintEveryTierKeepsTheMessage(t *testing.T) {
 			if tier == TierASCII && !AllASCII(got) {
 				t.Errorf("tier ASCII columns %d emitted a non ASCII byte: %q", columns, got)
 			}
-			for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+			for line := range strings.SplitSeq(strings.TrimSuffix(got, "\n"), "\n") {
 				if columns > 0 && lineWidth(line) > columns {
 					t.Errorf("tier %d columns %d produced a %d cell line: %q", tier, columns, lineWidth(line), line)
 				}
