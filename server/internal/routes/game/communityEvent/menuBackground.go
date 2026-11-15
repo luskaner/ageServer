@@ -1,6 +1,7 @@
 package communityEvent
 
 import (
+	"slices"
 	"sort"
 	"time"
 
@@ -73,9 +74,9 @@ func withMenuBackgrounds(response i.A, backgrounds *models.MenuBackgrounds, now 
 	if !ok {
 		return response
 	}
-	merged := make(i.A, 0, len(events)+len(existing))
-	merged = append(merged, events...)
-	merged = append(merged, existing...)
-	response[1] = merged
+	// existing is sized by whatever the caller put in the response, so adding
+	// len(events)+len(existing) for the capacity is an allocation CodeQL reads
+	// as overflow-prone. slices.Concat concatenates without that arithmetic.
+	response[1] = slices.Concat(events, existing)
 	return response
 }
