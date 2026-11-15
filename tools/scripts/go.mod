@@ -1,6 +1,6 @@
 module scripts
 
-go 1.27.3
+go 1.27.4
 
 tool (
 	scripts/cmd/copyBattleServerManagerResources
@@ -14,12 +14,12 @@ tool (
 
 require (
 	github.com/deckarep/golang-set/v3 v3.0.0
-	github.com/goreleaser/goreleaser/v2 v2.20.0
+	github.com/goreleaser/goreleaser/v2 v2.20.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	charm.land/lipgloss/v2 v2.0.6 // indirect
+	charm.land/lipgloss/v2 v2.1.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/AlekSi/pointer v1.2.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
@@ -47,13 +47,14 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/goreleaser/chglog v0.7.4 // indirect
+	github.com/goreleaser/chglog v0.7.5 // indirect
 	github.com/goreleaser/fileglob v1.4.1 // indirect
-	github.com/goreleaser/nfpm/v2 v2.48.0 // indirect
+	github.com/goreleaser/nfpm/v2 v2.49.0 // indirect
 	github.com/huandu/xstrings v1.6.3 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
+	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.31 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
@@ -73,10 +74,10 @@ require (
 	gitlab.com/digitalxero/go-conventional-commit v1.0.7 // indirect
 	go.mozilla.org/pkcs7 v0.10.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
-	golang.org/x/crypto v0.58.0 // indirect
+	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/net v0.62.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	software.sslmate.com/src/go-pkcs12 v0.7.4 // indirect
 )

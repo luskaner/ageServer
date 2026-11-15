@@ -32,9 +32,12 @@ type Event struct {
 	ActualEndTime       int64  `json:"actualendtime"`
 	// CustomData travels verbatim as the JSON string the resource carries; it is
 	// never re-serialised, because clients parse it a second time.
-	CustomData    any    `json:"customdata"`
-	EventState    int    `json:"eventstate"`
-	EventType     int    `json:"eventtype"`
+	CustomData any `json:"customdata"`
+	EventState int `json:"eventstate"`
+	// EventType is read from a positional slot, which is an int64, so it keeps
+	// that width: narrowing it to int would only fit a 64-bit platform. The
+	// wire format is a JSON number either way.
+	EventType     int64  `json:"eventtype"`
 	LocalizedName string `json:"localizedName,omitempty"`
 }
 
@@ -133,7 +136,7 @@ func seasonEvents(game models.Game) []Event {
 			ActualEndTime:       end,
 			CustomData:          shared.At(entry, 7),
 			EventState:          2,
-			EventType:           int(eventType),
+			EventType:           eventType,
 			// AoE4 publishes a localizedName; AoM does not (§5).
 			LocalizedName: shared.StringAt(entry, 0),
 		})
@@ -167,7 +170,7 @@ func aomCommunityEvents() ([]Event, []Leaderboard, []LeaderboardMap) {
 			ActualEndTime:       event.End.Unix(),
 			CustomData:          encodeCustomData(event.CustomData),
 			EventState:          event.EventState,
-			EventType:           event.EventType,
+			EventType:           int64(event.EventType),
 		})
 		for _, leaderboard := range event.Leaderboards {
 			leaderboards = append(leaderboards, Leaderboard{
