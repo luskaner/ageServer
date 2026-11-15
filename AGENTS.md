@@ -19,7 +19,7 @@ checklist that must be satisfied before a change is considered done.
   `battle-server-manager` and `tools/scripts`, it runs `go vet ./...` and
   `go test ./... -count=1`, plus `-race` for `common` and `server`. Everything
   below is what those jobs do, so run it locally first.
-- CI pins Go 1.27.3, the same version as `go.work` and every `go.mod`.
+- CI pins Go 1.27.4, the same version as `go.work` and every `go.mod`.
 
 ## After every change
 

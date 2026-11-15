@@ -1,6 +1,6 @@
 module github.com/luskaner/ageServer/launcher-agent
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/gogpu/systray v0.3.0
@@ -18,6 +18,6 @@ require (
 	github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
-	golang.org/x/image v0.47.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/image v0.48.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
