@@ -1607,6 +1607,12 @@ func (s *MatchHistoryStore) GetProfiles(profileIDs []int32) map[int32]*StoredPro
 // recreated from a fresh user data folder gets new ids), so the most recently
 // updated row wins.
 func (s *MatchHistoryStore) GetProfileByPlatformUserID(platformUserID uint64, isXbox bool) (*StoredProfile, bool) {
+	// platform_user_id is stored as an int64 (BackfillProfiles refuses anything
+	// above math.MaxInt64), so an id that does not fit cannot match any row.
+	// Bounding it before the conversion keeps the lookup total.
+	if platformUserID > math.MaxInt64 {
+		return nil, false
+	}
 	if platformUserID == 0 {
 		return nil, false
 	}

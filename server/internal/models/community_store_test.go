@@ -1,6 +1,7 @@
 package models
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -156,6 +157,15 @@ func TestGetProfileByPlatformUserID(t *testing.T) {
 	}
 	if _, found := store.GetProfileByPlatformUserID(0, false); found {
 		t.Fatal("id 0 resolved to a profile")
+	}
+	// platform_user_id is stored as an int64, so an id above math.MaxInt64 cannot
+	// exist in the table and must not wrap into a negative value that matches a
+	// row (go/incorrect-integer-conversion).
+	if _, found := store.GetProfileByPlatformUserID(math.MaxUint64, false); found {
+		t.Fatal("an id above math.MaxInt64 resolved to a profile")
+	}
+	if _, found := store.GetProfileByPlatformUserID(math.MaxInt64+1, false); found {
+		t.Fatal("math.MaxInt64+1 resolved to a profile")
 	}
 }
 
