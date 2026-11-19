@@ -26,6 +26,7 @@ import { useDebouncedValue, useDisclosure, useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications';
 import {
     IconAlertTriangle,
+    IconApi,
     IconBroadcast,
     IconChevronDown,
     IconCircleCheck,
@@ -98,16 +99,27 @@ function toServiceConfiguration(config: AppConfig): Configuration {
             MaxTotalSize: '1GB',
             Expiry: '-1s',
         },
+        Mods: config.Mods ?? {
+            Enabled: true,
+            DBPath: 'resources/mods/mods.db',
+            UploadDir: 'resources/mods/uploads',
+            MaxUploadSize: '256MB',
+            RequireAuthForRead: false,
+        },
     };
 }
 type GameSectionKey = `game:${string}`;
-type StaticSectionKey = 'general' | 'internet' | 'announcement' | 'customFiles' | 'replays' | 'sign';
+type StaticSectionKey = 'general' | 'internet' | 'announcement' | 'customFiles' | 'mods' | 'replays' | 'sign';
 type SectionKey = StaticSectionKey | GameSectionKey;
 const SECTION_LABELS: Record<StaticSectionKey, { title: string; subtitle: string }> = {
     general: { title: 'General', subtitle: 'Basic server configuration options.' },
     internet: { title: 'Internet', subtitle: 'Internet access and the address the server announces.' },
     announcement: { title: 'Announcement', subtitle: 'Configure LAN discovery and announcement settings.' },
-    customFiles: { title: 'Custom files', subtitle: 'Storage of the savegames and replays uploaded by the game.' },
+    customFiles: {
+        title: 'Custom files',
+        subtitle: 'Match content endpoints (/api/MatchContent/): savegames and replays uploaded by the game.',
+    },
+    mods: { title: 'Mods API', subtitle: 'Mods served by this server instead of being proxied upstream.' },
     replays: { title: 'Replays', subtitle: 'Uploads of the replays the game records after a match.' },
     sign: { title: 'Sign', subtitle: 'Configure catalogue signing and platform user exceptions.' },
 };
@@ -158,6 +170,7 @@ const AUTH_OPTIONS = [
     if (field.startsWith('Internet.')) return 'internet';
     if (field.startsWith('Announcement.')) return 'announcement';
     if (field.startsWith('CustomFiles.')) return 'customFiles';
+    if (field.startsWith('Mods.')) return 'mods';
     if (field.startsWith('Replays.')) return 'replays';
     if (field.startsWith('Sign.')) return 'sign';
     return 'general';
@@ -448,6 +461,7 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
         { key: 'internet', label: 'Internet', icon: <IconWorld size={18} stroke={1.6} /> },
         { key: 'announcement', label: 'Announcement', icon: <IconSpeakerphone size={18} stroke={1.6} /> },
         { key: 'customFiles', label: 'Custom files', icon: <IconFiles size={18} stroke={1.6} /> },
+        { key: 'mods', label: 'Mods', icon: <IconApi size={18} stroke={1.6} /> },
         { key: 'replays', label: 'Replays', icon: <IconMovie size={18} stroke={1.6} /> },
         { key: 'sign', label: 'Sign', icon: <IconSignature size={18} stroke={1.6} /> },
     ];
@@ -460,6 +474,8 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                 return { ...switchProps('Announcement.Enabled'), ariaLabel: 'LAN announcement' };
             case 'customFiles':
                 return { ...switchProps('CustomFiles.Enabled'), ariaLabel: 'Custom files' };
+            case 'mods':
+                return { ...switchProps('Mods.Enabled'), ariaLabel: 'Mods API' };
             case 'replays':
                 return { ...switchProps('Replays.Enabled'), ariaLabel: 'Replay uploads' };
             default:
@@ -848,10 +864,15 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                     {/* SECTION 5: CUSTOM FILES */}
                     {activeSection === 'customFiles' && (
                         <Stack gap="sm">
+                            <InfoBar severity="info">
+                                <Text size="sm">
+                                    These settings configure the /api/MatchContent/ endpoints of the mods API.
+                                </Text>
+                            </InfoBar>
                             <AutoManualCard
                                 icon={<IconFolder size={20} stroke={1.6} />}
                                 title="Storage folder"
-                                description="Folder where the files are stored. Automatic uses the system temporary folder."
+                                description="Folder where the files are stored. Defaults to resources/custom-files, relative to the server directory."
                                 error={allErrors['CustomFiles.Folder']}
                                 value={config.CustomFiles.Folder}
                                 onChange={(value) => form.setFieldValue('CustomFiles.Folder', value)}
@@ -913,7 +934,87 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             />
                         </Stack>
                     )}
-                    {/* SECTION 6: REPLAYS */}
+                    {/* SECTION 6: MODS */}
+                    {activeSection === 'mods' && (
+                        <Stack gap="sm">
+                            <InfoBar severity="info">
+                                <Text size="sm">
+                                    The same instance serves the /api/MatchContent/ endpoints; their storage
+                                    settings stay on the Custom files page. The API runs while either feature is
+                                    enabled.
+                                </Text>
+                            </InfoBar>
+                            <AutoManualCard
+                                icon={<IconDatabase size={20} stroke={1.6} />}
+                                title="Database file"
+                                description="SQLite database of the mods API. Defaults to resources/mods/mods.db, relative to the server directory."
+                                error={allErrors['Mods.DBPath']}
+                                value={config.Mods.DBPath}
+                                onChange={(value) => form.setFieldValue('Mods.DBPath', value)}
+                                onCommit={requestValidation}
+                                disabled={!config.Mods.Enabled}
+                            >
+                                {(manual) => (
+                                    <FolderPickerInput
+                                        {...manual}
+                                        onSelect={requestValidation}
+                                        picker={() => ConfigService.SelectModsDatabasePath()}
+                                        ariaLabel="Mods database file"
+                                        placeholder="No database file selected"
+                                        failureTitle="Database file not selected"
+                                    />
+                                )}
+                            </AutoManualCard>
+                            <AutoManualCard
+                                icon={<IconFolder size={20} stroke={1.6} />}
+                                title="Upload folder"
+                                description="Folder for the archives and screenshots uploaded to Publish. Defaults to resources/mods/uploads, relative to the server directory."
+                                error={allErrors['Mods.UploadDir']}
+                                value={config.Mods.UploadDir}
+                                onChange={(value) => form.setFieldValue('Mods.UploadDir', value)}
+                                onCommit={requestValidation}
+                                disabled={!config.Mods.Enabled}
+                            >
+                                {(manual) => (
+                                    <FolderPickerInput
+                                        {...manual}
+                                        onSelect={requestValidation}
+                                        picker={() => ConfigService.SelectModsUploadFolder()}
+                                        ariaLabel="Mods upload folder"
+                                        placeholder="No folder selected"
+                                        failureTitle="Upload folder not selected"
+                                    />
+                                )}
+                            </AutoManualCard>
+                            <SettingCard
+                                icon={<IconFile size={20} stroke={1.6} />}
+                                title="Maximum request size"
+                                description="Largest single mods request, in megabytes or gigabytes. It also raises the body cap the server applies (default: 256MB)."
+                                error={allErrors['Mods.MaxUploadSize']}
+                                disabled={!config.Mods.Enabled}
+                                control={
+                                    <UnitInput
+                                        value={config.Mods.MaxUploadSize}
+                                        onChange={(value) => form.setFieldValue('Mods.MaxUploadSize', value)}
+                                        units={SIZE_UNITS}
+                                        ariaLabel="Maximum mods request size"
+                                        onCommit={requestValidation}
+                                        disabled={!config.Mods.Enabled}
+                                    />
+                                }
+                            />
+                            <SwitchSettingCard
+                                icon={<IconShield size={20} stroke={1.6} />}
+                                title="Require authentication to read"
+                                description="Reject read requests without credentials. Off keeps the endpoints the specification declares anonymous."
+                                error={allErrors['Mods.RequireAuthForRead']}
+                                ariaLabel="Require authentication to read"
+                                {...switchProps('Mods.RequireAuthForRead')}
+                                disabled={!config.Mods.Enabled}
+                            />
+                        </Stack>
+                    )}
+                    {/* SECTION 7: REPLAYS */}
                     {activeSection === 'replays' && (
                         <Stack gap="sm">
                             <SettingCard
@@ -969,7 +1070,7 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             />
                         </Stack>
                     )}
-                    {/* SECTION 7: SIGN */}
+                    {/* SECTION 8: SIGN */}
                     {activeSection === 'sign' && (
                         <Stack gap="sm">
                             <SwitchSettingCard

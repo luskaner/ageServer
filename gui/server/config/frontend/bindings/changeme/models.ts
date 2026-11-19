@@ -18,19 +18,6 @@ export interface BattleServerConfig {
 }
 
 /**
- * ReplaysConfiguration configures the replays the game uploads after a match.
- * They are always stored under <resources>/responses/cloud/<game>/replays, so
- * there is no folder setting. Sizes and the TTL are kept as strings and
- * validated once at startup.
- */
-export interface ReplaysConfiguration {
-    "Enabled": boolean;
-    "MaxFileSize": string;
-    "MaxTotalSize": string;
-    "Expiry": string;
-}
-
-/**
  * ConfigFile is the bridge between Go and the React editor.
  */
 export interface ConfigFile {
@@ -50,6 +37,7 @@ export interface Configuration {
     "Announcement": AnnouncementConfig;
     "CustomFiles": CustomFilesConfiguration;
     "Replays": ReplaysConfiguration;
+    "Mods": ModsConfiguration;
 }
 
 /**
@@ -112,6 +100,34 @@ export interface GamesConfiguration {
 export interface InternetConfiguration {
     "Enabled": boolean;
     "IP": string;
+}
+
+/**
+ * ModsConfiguration configures the mods API served on the Age of Empires
+ * hosts. The same ageAPIServer instance serves the /api/MatchContent/ endpoints
+ * with the [CustomFiles] settings, so the two sections are independent switches
+ * over one process. Sizes are kept as strings and validated here, like
+ * CustomFiles.
+ */
+export interface ModsConfiguration {
+    "Enabled": boolean;
+    "DBPath": string;
+    "UploadDir": string;
+    "MaxUploadSize": string;
+    "RequireAuthForRead": boolean;
+}
+
+/**
+ * ReplaysConfiguration configures the replays the game uploads after a match.
+ * They are always stored under <resources>/responses/cloud/<game>/replays, so
+ * there is no folder setting. Sizes and the TTL are kept as strings and
+ * validated once at startup.
+ */
+export interface ReplaysConfiguration {
+    "Enabled": boolean;
+    "MaxFileSize": string;
+    "MaxTotalSize": string;
+    "Expiry": string;
 }
 
 export interface SignConfig {

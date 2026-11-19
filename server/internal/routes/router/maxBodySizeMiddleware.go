@@ -15,7 +15,9 @@ import (
 // replay over 1 MiB: the logging middleware buffers the body with io.ReadAll
 // and discards the MaxBytesError, so the handler saw a clean EOF and published
 // a half-written file.
-var raisedBodySizePrefixes = []string{"/api/MatchContent/", "/cloudfiles/"}
+// /api/v4/ carries the mods Publish, whose archive is measured in megabytes:
+// the mods API mounted on that prefix enforces its own [Mods] MaxUploadSize.
+var raisedBodySizePrefixes = []string{"/api/MatchContent/", "/cloudfiles/", "/api/v4/"}
 
 // raisedBodySizePath matches against the cleaned path, because this runs before
 // ServeMux normalises it: a raw "/api/MatchContent/../game/..." would otherwise

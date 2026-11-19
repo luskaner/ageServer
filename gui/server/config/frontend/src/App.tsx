@@ -65,6 +65,13 @@ function toEditorConfig(config: Configuration): AppConfig {
             MaxTotalSize: '1GB',
             Expiry: '-1s',
         },
+        Mods: {
+            Enabled: config.Mods?.Enabled ?? true,
+            DBPath: config.Mods?.DBPath ?? 'resources/mods/mods.db',
+            UploadDir: config.Mods?.UploadDir ?? 'resources/mods/uploads',
+            MaxUploadSize: toEditorSize(config.Mods?.MaxUploadSize ?? '256MB'),
+            RequireAuthForRead: config.Mods?.RequireAuthForRead ?? false,
+        },
     };
 }
 

@@ -54,3 +54,22 @@ func TestWaitForMessagesDrainsChannel(t *testing.T) {
 		t.Fatalf("ackNum = %d, want 1 (one batch read)", ackNum)
 	}
 }
+
+func TestSessionOfficial(t *testing.T) {
+	sessions := &MainSessions{}
+	sessions.Initialize()
+
+	sid := sessions.Create(1, 200)
+	sess, ok := sessions.GetById(sid)
+	if !ok {
+		t.Fatal("session not found")
+	}
+	if sess.Official() {
+		t.Fatal("official should default to false")
+	}
+
+	sess.SetOfficial(true)
+	if !sess.Official() {
+		t.Fatal("official was not stored in the session")
+	}
+}

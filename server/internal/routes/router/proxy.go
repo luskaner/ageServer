@@ -52,6 +52,16 @@ func (p *Proxy) Name() string {
 	return fmt.Sprintf("proxy %s", p.host)
 }
 
+// Upstream returns the reverse proxy to the official service. It is nil when
+// there is no internet, so a caller that can serve locally has to keep a
+// fallback instead of handing every request to it.
+func (p *Proxy) Upstream() http.Handler {
+	if p.proxy == nil {
+		return nil
+	}
+	return p.proxy
+}
+
 func (p *Proxy) Check(r *http.Request) bool {
 	host := r.Host
 	if newHost, _, err := net.SplitHostPort(r.Host); err == nil {

@@ -19,6 +19,7 @@ export type {
     GameConfig,
     GamesConfiguration,
     InternetConfiguration,
+    ModsConfiguration,
     ReplaysConfiguration,
     SignConfig,
     ValidationError

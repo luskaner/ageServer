@@ -73,6 +73,14 @@ export interface ReplaysConfig {
   Expiry: string;
 }
 
+export interface ModsConfig {
+  Enabled: boolean;
+  DBPath: string;
+  UploadDir: string;
+  MaxUploadSize: string;
+  RequireAuthForRead: boolean;
+}
+
 export interface AppConfig {
   Log: boolean;
   GeneratePlatformUserId: boolean;
@@ -83,6 +91,7 @@ export interface AppConfig {
   Announcement: AnnouncementConfig;
   CustomFiles: CustomFilesConfig;
   Replays: ReplaysConfig;
+  Mods: ModsConfig;
 }
 
 export interface ValidationErrors {
@@ -124,6 +133,11 @@ export function fieldLabel(field: string): string {
   if (field === 'Replays.MaxFileSize') return 'Maximum replay size';
   if (field === 'Replays.MaxTotalSize') return 'Replay total size limit';
   if (field === 'Replays.Expiry') return 'Replay expiry';
+  if (field === 'Mods.Enabled') return 'Mods API';
+  if (field === 'Mods.DBPath') return 'Mods database file';
+  if (field === 'Mods.UploadDir') return 'Mods upload folder';
+  if (field === 'Mods.MaxUploadSize') return 'Maximum mods request size';
+  if (field === 'Mods.RequireAuthForRead') return 'Authentication for reads';
   if (field.startsWith('Games.Enabled')) return 'Enabled games';
   if (field.startsWith('Sign.PlatformUserIdExceptions')) return 'Platform user ID exceptions';
 

@@ -22,7 +22,8 @@ The model in `models.go` mirrors `server/internal/config.go`. Do not invent keys
 | `[Games.<game>] Hosts` | IPv4 addresses the server binds for that game; must be unique among enabled games. |
 | `[[Games.<game>.BattleServers]]` | One table per battle server. See below. |
 | `[Announcement]` | `Enabled`, `Multicast`, `Port`, `MulticastGroup`. |
-| `[CustomFiles]` | `Enabled`, `Folder`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. |
+| `[CustomFiles]` | `Enabled`, `Folder`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. These are the `/api/MatchContent/` endpoints; `Folder` defaults to `resources/custom-files`, relative to the server directory. |
+| `[Mods]` | `Enabled`, `DBPath`, `UploadDir`, `MaxUploadSize`, `RequireAuthForRead`. The same library instance serves `/api/MatchContent/`, configured by `[CustomFiles]`; `DBPath` and `UploadDir` default under `resources/mods`. |
 | `[Replays]` | Replays uploaded by the game: `Enabled`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. They are always stored under `<resources>/responses/cloud/<game>/replays`, so there is no `Folder`. `Expiry` `<= 0` keeps replays forever. |
 
 ### Battle servers
@@ -68,6 +69,16 @@ the ports used in `server/BattleServers.md` for that game and is validated
 locally (region required and unique, IPv4 `auto` or valid, ports in range)
 before it reaches the form. The IPv4 field reuses the app's `AutoManualCard`:
 automatic (`auto`) by default, manual with the four-octet `IPv4Input`.
+
+### Mods page
+
+**Mods** edits `[Mods]`: the database file and the upload folder default to
+`resources/mods/mods.db` and `resources/mods/uploads` (relative paths) and take
+another path from the native picker, `MaxUploadSize` uses the size input, and
+`RequireAuthForRead` is a switch. The page says that the same
+instance serves the `/api/MatchContent/` endpoints, whose settings stay on the
+**Custom files** page, and that the library is built when either section is
+enabled.
 
 ### Game pages
 
@@ -139,9 +150,13 @@ settings must stay byte-identical.
 `serverDefaults()` replicates the defaults in `server/internal/cmd/root.go`:
 `Authentication = 'disabled'`, `Sign.Enabled = false`, `Internet.Enabled = true`,
 `Internet.IP = 'auto'`, `Announcement` enabled with port `31978` and group
-`239.31.97.8`, `CustomFiles` enabled with `auto`/`32MB`/`256MB`/`12h`, and
-`Hosts = ['0.0.0.0']` for every game. `Replays` defaults to enabled with
-`32MB`/`1GB`/`-1s`.
+`239.31.97.8`, `CustomFiles` enabled with
+`resources/custom-files`/`32MB`/`256MB`/`12h`, `Mods` enabled with
+`resources/mods/mods.db`/`resources/mods/uploads`/`256MB` and
+`RequireAuthForRead = false`, and `Hosts = ['0.0.0.0']` for every game.
+`Replays` defaults to enabled with `32MB`/`1GB`/`-1s`. The default folders are
+relative paths resolved against the server's working directory, where
+`resources` lives.
 
 ## Validation
 
@@ -166,7 +181,10 @@ do not. It mirrors what the server would do at startup:
   ports `0..65535` and `LogLevel` one of the six levels;
 - announcement port/group, custom file sizes/duration (sizes accept
   `B/KB/MB/GB`, durations are Go durations), and replay sizes/duration with the
-  same rules (`Expiry` may be `0` or negative to keep replays forever).
+  same rules (`Expiry` may be `0` or negative to keep replays forever);
+- the mods request size (`MaxUploadSize`) while `[Mods]` is enabled, with the
+  same size rules. A disabled `[Mods]` section is ignored by the server, so it
+  does not block saving.
 
 ## Look and feel
 
@@ -181,9 +199,9 @@ element always looks the same way:
   for a setting that belongs to another card: a card is never nested in a card.
 - A page whose feature has a single master switch keeps it in the header, next
   to the title, as a game page does with the game's switch; the page body only
-  lists what that switch turns on (Announcement, Custom files, Replays). Sign
-  and Internet are the exceptions: their switches stay on the page as cards of
-  their own.
+  lists what that switch turns on (Announcement, Custom files, Mods, Replays).
+  Sign and Internet are the exceptions: their switches stay on the page as cards
+  of their own.
 - A control that a master switch turns off is disabled **through its card**, not
   only through the input: `SettingCard` gets `disabled`, so the whole row dims
   the same way everywhere (the card cannot be opened either).

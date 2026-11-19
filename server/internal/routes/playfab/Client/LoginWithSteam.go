@@ -96,8 +96,21 @@ func LoginWithSteam(w http.ResponseWriter, r *http.Request) {
 			shared.RespondBadRequest(&w)
 			return nil
 		}
+		users := game.Users()
+		plaintext := playfab.IsPlaintextSteamTicket(req.SteamTicket)
+		if u, found := users.GetUserByPlatformUserId(false, steamId); found {
+			// Remember the ticket shape for the next platform login and fix
+			// the current session too: the game normally calls platformlogin
+			// before it sends the Steam ticket here, so the session already
+			// exists and must be corrected now. A plaintext ticket cannot
+			// come from Valve, so that session is not official.
+			u.SetSteamTicketPlaintext(plaintext)
+			if sess, ok := game.Sessions().GetByUserId(u.GetId()); ok {
+				sess.SetOfficial(u.GetXbox() || !plaintext)
+			}
+		}
 		sessions := game.PlayfabSessions()
-		return new(sessions.CreateWithSteamUserId(game.Users(), steamId))
+		return new(sessions.CreateWithSteamUserId(users, steamId))
 	}); response != nil {
 		shared.RespondOK(&w, response)
 	}

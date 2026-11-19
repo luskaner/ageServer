@@ -8,6 +8,7 @@ godebug (
 )
 
 use (
+	..\ageAPIServer
 	./config-helper
 	./tools/mock/game
 	./tools/mock/launcher

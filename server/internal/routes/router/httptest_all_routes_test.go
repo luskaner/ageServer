@@ -177,19 +177,9 @@ func newTestGameWithCloud(t *testing.T, gameId, cloudFolder string, setup ...fun
 	opts := &models.CreateMainGameOpts{
 		Instances: &models.InstanceOpts{
 			Resources: fake,
-			// Enable custom files on a per-test temp folder so the
-			// /api/MatchContent/ routes are reachable (they 404 when disabled).
-			CustomFilesOpts: &models.CustomFilesOpts{
-				Enabled:      true,
-				Folder:       t.TempDir(),
-				MaxFileSize:  1 << 20,
-				MaxTotalSize: 4 << 20,
-				Expiry:       time.Hour,
-			},
 		},
 	}
 	g := models.CreateMainGame(gameId, opts)
-	t.Cleanup(g.CustomFiles().Close)
 	return g
 }
 
@@ -589,8 +579,6 @@ func buildExpectedRoutes(gameId string) []routeCase {
 	add("GET", "/game/cloud/getTempCredentials")
 
 	add("GET", "/game/msstore/getStoreTokens")
-
-	add("POST", "/api/MatchContent/")
 
 	add("GET", "/wss/")
 

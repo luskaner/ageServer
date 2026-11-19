@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -319,5 +320,99 @@ func TestRunRootSigningKeyPairUncheckedWhenNotSigning(t *testing.T) {
 	_, _ = runRoot(nil)
 	if internal.SignConfigRuntime.Enabled {
 		t.Fatal("Sign should stay off when the config leaves it off")
+	}
+}
+
+// modsConfig is the default one with the mods API on and its storage pointed at
+// a temporary folder, so the test never writes into resources/mods.
+func modsConfig(t *testing.T, maxUploadSize string) func(*pflag.FlagSet) (*internal.Configuration, string) {
+	t.Helper()
+	dir := t.TempDir()
+	return func(*pflag.FlagSet) (*internal.Configuration, string) {
+		return &internal.Configuration{
+			Log: false, Internet: internal.Internet{Enabled: true}, Authentication: "disabled",
+			Games: internal.Games{
+				Enabled: []string{"age1"},
+				Age1:    internal.Game{Hosts: []string{"127.0.0.1"}},
+			},
+			Announcement: internal.Announcement{Enabled: false},
+			Mods: internal.Mods{
+				Enabled:       true,
+				DBPath:        filepath.Join(dir, "mods.db"),
+				UploadDir:     filepath.Join(dir, "uploads"),
+				MaxUploadSize: maxUploadSize,
+			},
+		}, ""
+	}
+}
+
+func TestRunRootModsServerFailure(t *testing.T) {
+	resetState(t)
+	certificatePairFolderFn = func(string) string { return t.TempDir() }
+	initConfigFn = modsConfig(t, "1MB")
+	oldNew := newModsServerFn
+	t.Cleanup(func() { newModsServerFn = oldNew })
+	newModsServerFn = func(internal.ModsConfiguration) (internal.ModsServer, error) {
+		return nil, errors.New("cannot open the mods database")
+	}
+	values.Id = "00000000-0000-0000-0000-000000000000"
+	_, code := runRoot(nil)
+	if code != internal.ErrMods {
+		t.Fatalf("code=%d, want %d", code, internal.ErrMods)
+	}
+}
+
+func TestRunRootModsInvalidUploadSize(t *testing.T) {
+	resetState(t)
+	certificatePairFolderFn = func(string) string { return t.TempDir() }
+	initConfigFn = modsConfig(t, "not-a-size")
+	oldNew := newModsServerFn
+	t.Cleanup(func() { newModsServerFn = oldNew })
+	newModsServerFn = func(internal.ModsConfiguration) (internal.ModsServer, error) {
+		t.Fatal("the mods API must not be built with an invalid size")
+		return nil, nil
+	}
+	values.Id = "00000000-0000-0000-0000-000000000000"
+	_, code := runRoot(nil)
+	if code != internal.ErrMods {
+		t.Fatalf("code=%d, want %d", code, internal.ErrMods)
+	}
+}
+
+// TestInitConfigDefaults pins the defaults of [CustomFiles] and [Mods] in
+// initConfig: the shipped template and the config editor repeat them, and a
+// silent change there (a renamed folder, a flipped switch) would only surface
+// at runtime.
+func TestInitConfigDefaults(t *testing.T) {
+	resetState(t)
+	cfgFile := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfgFile, []byte("# empty document: this test covers the defaults\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	values.CfgFile = cfgFile
+
+	cfg, usedFile := initConfig(pflag.NewFlagSet("test", pflag.ContinueOnError))
+	if usedFile != cfgFile {
+		t.Fatalf("usedFile = %q, want %q", usedFile, cfgFile)
+	}
+	wantCustomFiles := internal.CustomFiles{
+		Enabled:      true,
+		Folder:       "resources/custom-files",
+		MaxFileSize:  "32MB",
+		MaxTotalSize: "256MB",
+		Expiry:       "12h",
+	}
+	if cfg.CustomFiles != wantCustomFiles {
+		t.Fatalf("CustomFiles = %+v, want %+v", cfg.CustomFiles, wantCustomFiles)
+	}
+	wantMods := internal.Mods{
+		Enabled:            true,
+		DBPath:             "resources/mods/mods.db",
+		UploadDir:          "resources/mods/uploads",
+		MaxUploadSize:      "256MB",
+		RequireAuthForRead: false,
+	}
+	if cfg.Mods != wantMods {
+		t.Fatalf("Mods = %+v, want %+v", cfg.Mods, wantMods)
 	}
 }
