@@ -94,8 +94,9 @@ type Mods struct {
 	UploadDir string
 	// MaxUploadSize caps the body of one mods request (a mod archive).
 	MaxUploadSize string
-	// RequireAuthForRead makes the endpoints the spec declares anonymous
-	// reject requests without credentials. Off keeps the spec.
+	// RequireAuthForRead is kept for configuration compatibility: the
+	// embedded ageAPIServer library (since v1.0.1) always follows the spec's
+	// read-only visibility, so this setting no longer changes anything.
 	RequireAuthForRead bool
 }
 

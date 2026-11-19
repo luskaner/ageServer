@@ -70,10 +70,9 @@ var newModsServerFn = newModsServer
 // second line per request would duplicate it.
 func newModsServer(cfg internal.ModsConfiguration) (internal.ModsServer, error) {
 	server, err := ageAPIServer.New(ageAPIServer.Config{
-		DBPath:                 cfg.DBPath,
-		UploadDir:              cfg.UploadDir,
-		MaxBodySize:            cfg.MaxUploadSize,
-		RequireAuthForReadOnly: cfg.RequireAuthForRead,
+		DBPath:      cfg.DBPath,
+		UploadDir:   cfg.UploadDir,
+		MaxBodySize: cfg.MaxUploadSize,
 		MatchContent: ageAPIServer.MatchContentConfig{
 			Enabled:      cfg.MatchContent.Enabled,
 			Folder:       cfg.MatchContent.Folder,
