@@ -83,21 +83,35 @@ MulticastGroup = '239.31.97.8'
 # Serves the /api/MatchContent/ endpoints used by the game to upload and
 # download multiplayer savegames. Without it, restoring a saved
 # multiplayer game fails with "Failed to upload/download custom files".
+# They are served by the embedded ageAPIServer library, the same instance as
+# the mods API, so this section configures that store.
 [CustomFiles]
 
-# Whether to enable the endpoints. When disabled the routes answer 404.
+# Whether to enable the endpoints locally. On the Age of Empires hosts every
+# request follows the official-client condition of [Mods]: an official client
+# with internet is proxied upstream, everything else gets the local answer this
+# section controls, and without internet nothing is proxied:
+#   CustomFiles  official client + internet  emulated client / no internet
+#   on           upstream proxy              local library
+#   off          upstream proxy              local 404
+# The library is built when either this section or [Mods] is enabled; when both
+# are disabled there is no instance and the host handler answers the request
+# (upstream proxy on api.ageofempires.com with internet, 404 without it).
 Enabled = true
 
-# Folder where the files are stored. If 'auto', uses the system temp folder:
-# <TEMP>\ageServer\custom-files\<game>\ (Unix: /tmp/ageServer/...).
-Folder = 'auto'
+# Folder where the files are stored, relative to the server directory. 'auto'
+# resolves to the same folder.
+Folder = 'resources/custom-files'
+
+# Every enabled game shares this folder and the match ids: a file is addressed
+# by the numeric match id alone and the request carries no game marker, so two
+# titles playing at the same time can pick the same id and replace each other.
 
 # Maximum size of a single file. Long matches and custom content can make a
 # .aoe2mpgame several MB. Accepts B/KB/MB/GB suffixes.
 MaxFileSize = '32MB'
 
-# Maximum accumulated size per game. When exceeded, the oldest files are
-# evicted first.
+# Maximum accumulated size. When exceeded, the oldest files are evicted first.
 MaxTotalSize = '256MB'
 
 # How long a custom file is kept since its upload. Accepts Go durations
@@ -149,3 +163,43 @@ MaxTotalSize = '1GB'
 # (e.g. 12h, 30m, 1h30m). Files are also purged at startup if older than this.
 # Set to 0 or a negative value (e.g. -1) to keep replays forever.
 Expiry = '-1s'
+
+# CONFIGURING THE MODS API
+# Serves /api/v4/Mods/..., /api/v1/Mods/... and /Poll/... on the Age of Empires
+# hosts with the embedded ageAPIServer library and its own SQLite database,
+# instead of forwarding them to the official service. Without internet those
+# paths used to answer 404; with it they keep working as before.
+#
+# Mods are shared by every enabled game: the API selects them by gameTitleId.
+# The Steam ticket is not verified cryptographically, so an install reachable
+# from outside the LAN trusts whatever well-formed ticket a client sends.
+[Mods]
+
+# Whether to serve the mods API. When disabled the paths keep their previous
+# behaviour: the host proxy forwards them upstream when there is internet.
+# When enabled, the upstream is used only with internet and an official
+# client; otherwise the local answer wins. A client is official unless its
+# Steam1.0 ticket can be decoded (gbe_fork emits plaintext tickets while a
+# real Steam ticket is opaque). A request without that header is treated as
+# official, so with internet it is forwarded upstream. The same condition
+# governs the /api/MatchContent/ endpoints: an official client keeps the
+# official savegame exchange too.
+# The same instance serves the /api/MatchContent/ endpoints; their settings
+# are in [CustomFiles] and it is built when either section is enabled.
+Enabled = true
+
+# SQLite file of the mods API, relative to the server directory. 'auto'
+# resolves to the same path.
+DBPath = 'resources/mods/mods.db'
+
+# Folder for the archives and screenshots uploaded to Publish, relative to the
+# server directory. 'auto' resolves to the same folder.
+UploadDir = 'resources/mods/uploads'
+
+# Maximum size of a single mods request. A mod archive is measured in megabytes,
+# so this also raises the body cap the HTTP server applies. Accepts B/KB/MB/GB.
+# MaxUploadSize = '256MB'
+
+# Whether the endpoints the specification declares anonymous reject requests
+# without credentials. Off keeps the specification.
+# RequireAuthForRead = false

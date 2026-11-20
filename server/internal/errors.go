@@ -19,4 +19,5 @@ const (
 	ErrCustomFiles
 	ErrEmbeddedBattleServer
 	ErrReplays
+	ErrMods
 )

@@ -24,7 +24,7 @@ const LatencyMeasurementCount = 3
 var (
 	tlsDialFn       = tls.Dial
 	serverPort      = "443"
-	serverPath      = "test"
+	serverPath      = common.AnnouncePath
 	newHTTPClientFn = func(serverName string, insecureSkipVerify bool, rootCAs *x509.CertPool) *http.Client {
 		tr := &http.Transport{TLSClientConfig: TlsConfig(serverName, insecureSkipVerify, rootCAs)}
 		return &http.Client{Transport: tr, Timeout: 1 * time.Second}

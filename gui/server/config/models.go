@@ -28,6 +28,7 @@ type Configuration struct {
 	Announcement           AnnouncementConfig       `toml:"Announcement" json:"Announcement"`
 	CustomFiles            CustomFilesConfiguration `toml:"CustomFiles" json:"CustomFiles"`
 	Replays                ReplaysConfiguration     `toml:"Replays" json:"Replays"`
+	Mods                   ModsConfiguration        `toml:"Mods" json:"Mods"`
 }
 
 type GamesConfiguration struct {
@@ -92,6 +93,19 @@ type ReplaysConfiguration struct {
 	MaxFileSize  string `toml:"MaxFileSize" json:"MaxFileSize"`
 	MaxTotalSize string `toml:"MaxTotalSize" json:"MaxTotalSize"`
 	Expiry       string `toml:"Expiry" json:"Expiry"`
+}
+
+// ModsConfiguration configures the mods API served on the Age of Empires
+// hosts. The same ageAPIServer instance serves the /api/MatchContent/ endpoints
+// with the [CustomFiles] settings, so the two sections are independent switches
+// over one process. Sizes are kept as strings and validated here, like
+// CustomFiles.
+type ModsConfiguration struct {
+	Enabled            bool   `toml:"Enabled" json:"Enabled"`
+	DBPath             string `toml:"DBPath" json:"DBPath"`
+	UploadDir          string `toml:"UploadDir" json:"UploadDir"`
+	MaxUploadSize      string `toml:"MaxUploadSize" json:"MaxUploadSize"`
+	RequireAuthForRead bool   `toml:"RequireAuthForRead" json:"RequireAuthForRead"`
 }
 
 // Severities carried by a ValidationError: an error blocks saving, a warning

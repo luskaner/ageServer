@@ -6,19 +6,32 @@ import { ConfigService } from '../../bindings/changeme';
 import { ManualValueProps } from './AutoManualCard';
 
 export interface FolderPickerInputProps extends ManualValueProps {
-    /** Called once a folder was picked, so the new value can be validated. */
+    /** Called once a path was picked, so the new value can be validated. */
     onSelect?: () => void;
+    /** Native picker to open; the custom files folder by default. */
+    picker?: () => Promise<string>;
+    /** Accessible name of the path field. */
+    ariaLabel?: string;
+    /** Text shown while no path was picked. */
+    placeholder?: string;
+    /** Title of the notification shown when the picker fails. */
+    failureTitle?: string;
 }
 
 /**
- * Path shown read-only next to the button that opens the platform's folder
- * picker: the folder is chosen in the native dialog, never typed by hand.
+ * Path shown read-only next to the button that opens a platform picker: the
+ * path is chosen in the native dialog, never typed by hand. With the default
+ * picker it selects the custom files folder; the mods page passes its own.
  */
 export const FolderPickerInput: React.FC<FolderPickerInputProps> = ({
     value,
     onChange,
     disabled = false,
     onSelect,
+    picker = () => ConfigService.SelectCustomFilesFolder(),
+    ariaLabel = 'Custom files folder',
+    placeholder = 'No folder selected',
+    failureTitle = 'Folder not selected',
 }) => {
     // The native picker is modal, so the button has no busy state to show: it
     // looks the same while the dialog is open. The flag only keeps a second
@@ -46,14 +59,14 @@ export const FolderPickerInput: React.FC<FolderPickerInputProps> = ({
         try {
             // Closing the picker answers with an empty path, which keeps the
             // folder that is already set.
-            const folder = await ConfigService.SelectCustomFilesFolder();
+            const folder = await picker();
             if (!folder) return;
             onChange(folder);
             onSelect?.();
         } catch (error) {
             notifications.show({
                 color: 'red',
-                title: 'Folder not selected',
+                title: failureTitle,
                 message: error instanceof Error ? error.message : String(error),
             });
         } finally {
@@ -68,8 +81,8 @@ export const FolderPickerInput: React.FC<FolderPickerInputProps> = ({
                 value={value}
                 readOnly
                 disabled={disabled}
-                placeholder="No folder selected"
-                aria-label="Custom files folder"
+                placeholder={placeholder}
+                aria-label={ariaLabel}
                 title={value || undefined}
                 style={{ flex: 1, minWidth: 0 }}
                 styles={{

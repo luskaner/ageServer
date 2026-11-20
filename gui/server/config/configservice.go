@@ -125,8 +125,35 @@ func (s *ConfigService) SelectConfigSaveAsDestination(fileName string) (string, 
 // custom files storage folder. Closing the picker is a normal answer: the empty
 // path it returns leaves the setting as it is.
 func (s *ConfigService) SelectCustomFilesFolder() (string, error) {
+	return selectFolder("Select custom files folder")
+}
+
+// SelectModsUploadFolder opens the native directory picker used for the mods
+// upload folder. Closing the picker is a normal answer: the empty path it
+// returns leaves the setting as it is.
+func (s *ConfigService) SelectModsUploadFolder() (string, error) {
+	return selectFolder("Select mods upload folder")
+}
+
+// SelectModsDatabasePath opens the native save dialog used for the mods SQLite
+// file. Closing the picker is a normal answer: the empty path it returns keeps
+// the setting as it is.
+func (s *ConfigService) SelectModsDatabasePath() (string, error) {
+	path, err := application.Get().Dialog.SaveFile().
+		SetMessage("Choose the mods database file").
+		SetFilename("mods.db").
+		AddFilter("SQLite database", "*.db").
+		PromptForSingleSelection()
+	if err != nil {
+		return "", nil
+	}
+	return path, nil
+}
+
+// selectFolder opens a native directory picker. Closing it is a normal answer.
+func selectFolder(title string) (string, error) {
 	path, err := application.Get().Dialog.OpenFile().
-		SetTitle("Select custom files folder").
+		SetTitle(title).
 		CanChooseFiles(false).
 		CanChooseDirectories(true).
 		PromptForSingleSelection()
@@ -262,6 +289,11 @@ func configurationDocument(content []byte, configuration Configuration) ([]byte,
 		{"Replays", "MaxFileSize", tomlString(configuration.Replays.MaxFileSize)},
 		{"Replays", "MaxTotalSize", tomlString(configuration.Replays.MaxTotalSize)},
 		{"Replays", "Expiry", tomlString(configuration.Replays.Expiry)},
+		{"Mods", "Enabled", strconv.FormatBool(configuration.Mods.Enabled)},
+		{"Mods", "DBPath", tomlString(configuration.Mods.DBPath)},
+		{"Mods", "UploadDir", tomlString(configuration.Mods.UploadDir)},
+		{"Mods", "MaxUploadSize", tomlString(configuration.Mods.MaxUploadSize)},
+		{"Mods", "RequireAuthForRead", strconv.FormatBool(configuration.Mods.RequireAuthForRead)},
 	}
 	// The server reads Authentication at the root level. The shipped template
 	// used to keep it under [Internet], so an existing copy there is kept in
@@ -404,6 +436,12 @@ func isConfigurationField(section string, key string) bool {
 			return true
 		}
 	}
+	if section == "Mods" {
+		switch key {
+		case "Enabled", "DBPath", "UploadDir", "MaxUploadSize", "RequireAuthForRead":
+			return true
+		}
+	}
 	if strings.HasPrefix(section, "Games.") {
 		if key == "Hosts" {
 			return true
@@ -453,7 +491,7 @@ func serverDefaults() Configuration {
 		},
 		CustomFiles: CustomFilesConfiguration{
 			Enabled:      true,
-			Folder:       "auto",
+			Folder:       "resources/custom-files",
 			MaxFileSize:  "32MB",
 			MaxTotalSize: "256MB",
 			Expiry:       "12h",
@@ -463,6 +501,12 @@ func serverDefaults() Configuration {
 			MaxFileSize:  "32MB",
 			MaxTotalSize: "1GB",
 			Expiry:       "-1s",
+		},
+		Mods: ModsConfiguration{
+			Enabled:       true,
+			DBPath:        "resources/mods/mods.db",
+			UploadDir:     "resources/mods/uploads",
+			MaxUploadSize: "256MB",
 		},
 	}
 }
@@ -891,6 +935,7 @@ func validateConfiguration(config *Configuration) []ValidationError {
 	}
 	validationErrors = append(validationErrors, validateCustomFiles(config)...)
 	validationErrors = append(validationErrors, validateReplays(config)...)
+	validationErrors = append(validationErrors, validateMods(config)...)
 	validationErrors = append(validationErrors, validateEmbeddedBattleServers(config)...)
 
 	for index := range validationErrors {
@@ -1036,6 +1081,28 @@ func validateReplays(config *Configuration) []ValidationError {
 	}
 	// Expiry <= 0 means keep forever (no TTL-based expiration)
 	return validationErrors
+}
+
+// validateMods checks the mods API settings only while it is enabled: when
+// disabled the server ignores these values and does not even parse the size.
+func validateMods(config *Configuration) []ValidationError {
+	if !config.Mods.Enabled {
+		return nil
+	}
+	size, err := bytesize.Parse(config.Mods.MaxUploadSize)
+	if err != nil {
+		return []ValidationError{{
+			Field:   "Mods.MaxUploadSize",
+			Message: "Must be a size such as 256MB",
+		}}
+	}
+	if size <= 0 {
+		return []ValidationError{{
+			Field:   "Mods.MaxUploadSize",
+			Message: "Must be greater than zero",
+		}}
+	}
+	return nil
 }
 
 // validateEmbeddedBattleServers checks the embedded battle server configuration

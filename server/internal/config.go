@@ -80,6 +80,26 @@ type Replays struct {
 	Expiry       string
 }
 
+// Mods configures the mods API that is served on the Age of Empires hosts. It
+// is the ageAPIServer library mounted in-process, so the mods keep working
+// without internet instead of being forwarded upstream. Sizes are kept as
+// strings and validated once at startup, like CustomFiles.
+type Mods struct {
+	Enabled bool
+	// DBPath is the SQLite file. It defaults to resources/mods/mods.db,
+	// relative to the server directory; 'auto' resolves there too.
+	DBPath string
+	// UploadDir holds the archives and screenshots Publish stores. It defaults
+	// to resources/mods/uploads; 'auto' resolves there too.
+	UploadDir string
+	// MaxUploadSize caps the body of one mods request (a mod archive).
+	MaxUploadSize string
+	// RequireAuthForRead is kept for configuration compatibility: the
+	// embedded ageAPIServer library (since v1.0.1) always follows the spec's
+	// read-only visibility, so this setting no longer changes anything.
+	RequireAuthForRead bool
+}
+
 type SignConfig struct {
 	// Enabled makes the server re-sign the catalogues it serves instead of
 	// replaying the signatures captured alongside them in resources/responses.
@@ -101,6 +121,7 @@ type Configuration struct {
 	Games                  Games
 	CustomFiles            CustomFiles
 	Replays                Replays
+	Mods                   Mods
 	Sign                   SignConfig
 	Automatch              Automatch
 }

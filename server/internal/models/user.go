@@ -25,6 +25,11 @@ type User interface {
 	GetPlatformPath() string
 	GetAccountType() int
 	GetPlatformUserID() uint64
+	// SteamTicketPlaintext reports whether the last Steam ticket seen for
+	// this user decoded as a plaintext (emulated) ticket. It is memory-only:
+	// it is never persisted and defaults to false.
+	SteamTicketPlaintext() bool
+	SetSteamTicketPlaintext(plaintext bool)
 	EncodeExtraProfileInfo(clientLibVersion uint16) i.A
 	EncodeLeaderboardStat(r *PlayerRating) i.A
 	EncodeProfileInfo(clientLibVersion uint16) i.A
@@ -71,6 +76,7 @@ type MainUser struct {
 	challengeProgress  *PersistentJsonData[*[]ChallengeProgress]
 	auth               *PersistentJsonData[*time.Time]
 	rating             atomic.Int32
+	steamTicketPlain   atomic.Bool
 }
 
 // EncodeStats encodes the value for the client's stats field.
@@ -480,6 +486,14 @@ func (u *MainUser) GetAccountType() int {
 		prefix = 3
 	}
 	return prefix
+}
+
+func (u *MainUser) SteamTicketPlaintext() bool {
+	return u.steamTicketPlain.Load()
+}
+
+func (u *MainUser) SetSteamTicketPlaintext(plaintext bool) {
+	u.steamTicketPlain.Store(plaintext)
 }
 
 func (u *MainUser) GetPlatformUserID() uint64 {

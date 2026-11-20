@@ -31,6 +31,9 @@ type fakeResources struct {
 	signedAssets map[string][]byte
 	signatures   map[string]string
 	cloudFiles   *models.CloudFiles
+	// menuBackgrounds is what the AoE4 menu-background tests inject; nil keeps
+	// the endpoint behaving as if the feature were off.
+	menuBackgrounds *models.MenuBackgrounds
 }
 
 func (f *fakeResources) Initialize(_ string, _ *models.ResourcesOpts) {
@@ -113,6 +116,7 @@ func (f *fakeResources) ReturnSignedAsset(name string, w *http.ResponseWriter, r
 func (f *fakeResources) LoginData() []i.A                                 { return f.loginData }
 func (f *fakeResources) ChatChannels() map[string]*models.MainChatChannel { return f.chatChannels }
 func (f *fakeResources) News() []i.A                                      { return f.news }
+func (f *fakeResources) MenuBackgrounds() *models.MenuBackgrounds         { return f.menuBackgrounds }
 func (f *fakeResources) ArrayFiles() map[string]i.A                       { return f.arrayFiles }
 func (f *fakeResources) SignedAssets() map[string][]byte                  { return f.signedAssets }
 func (f *fakeResources) CloudFiles() *models.CloudFiles                   { return f.cloudFiles }
@@ -173,19 +177,9 @@ func newTestGameWithCloud(t *testing.T, gameId, cloudFolder string, setup ...fun
 	opts := &models.CreateMainGameOpts{
 		Instances: &models.InstanceOpts{
 			Resources: fake,
-			// Enable custom files on a per-test temp folder so the
-			// /api/MatchContent/ routes are reachable (they 404 when disabled).
-			CustomFilesOpts: &models.CustomFilesOpts{
-				Enabled:      true,
-				Folder:       t.TempDir(),
-				MaxFileSize:  1 << 20,
-				MaxTotalSize: 4 << 20,
-				Expiry:       time.Hour,
-			},
 		},
 	}
 	g := models.CreateMainGame(gameId, opts)
-	t.Cleanup(g.CustomFiles().Close)
 	return g
 }
 
@@ -586,8 +580,6 @@ func buildExpectedRoutes(gameId string) []routeCase {
 
 	add("GET", "/game/msstore/getStoreTokens")
 
-	add("POST", "/api/MatchContent/")
-
 	add("GET", "/wss/")
 
 	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
@@ -627,17 +619,17 @@ func TestGeneralRoutes_httptest(t *testing.T) {
 		return rr
 	}
 
-	rr := do("GET", "/test")
+	rr := do("GET", "/test/root")
 	if rr.Code != http.StatusOK {
-		t.Fatalf("/test got %d", rr.Code)
+		t.Fatalf("/test/root got %d", rr.Code)
 	}
 	if rr.Header().Get("Content-Type") == "" {
-		t.Error("/test missing content-type")
+		t.Error("/test/root missing content-type")
 	}
-	rr = do("GET", "/cacert.pem")
+	rr = do("GET", "/cacert.pem/root")
 	// may be 404 if cert not found, but should not be 0 and not panic
 	if rr.Code != http.StatusOK && rr.Code != http.StatusNotFound {
-		t.Fatalf("/cacert.pem got %d", rr.Code)
+		t.Fatalf("/cacert.pem/root got %d", rr.Code)
 	}
 	// next handler: ensure unknown path falls through to next (404 from next)
 	rr = do("GET", "/unknown")

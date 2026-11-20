@@ -45,6 +45,16 @@ func PlatformLoginError(t time.Time, w http.ResponseWriter) {
 	})
 }
 
+// loginIsOfficial mirrors the platform login policy: an Xbox Live session is
+// always official, while a Steam one is official only when the ticket seen at
+// the PlayFab login was not a plaintext (emulated) ticket.
+func loginIsOfficial(xbox bool, steamTicketPlaintext bool) bool {
+	if xbox {
+		return true
+	}
+	return !steamTicketPlaintext
+}
+
 func Platformlogin(w http.ResponseWriter, r *http.Request) {
 	g := models.G(r)
 	title := g.Title()
@@ -74,6 +84,7 @@ func Platformlogin(w http.ResponseWriter, r *http.Request) {
 	req := r.Context().Value("request").(PlatformLoginRequest)
 	connectionToken := sessions.Create(u.GetId(), req.ClientLibVersion)
 	sess, _ = sessions.GetById(connectionToken)
+	sess.SetOfficial(loginIsOfficial(u.GetXbox(), u.SteamTicketPlaintext()))
 	presenceDefinitions := g.PresenceDefinitions()
 	relationship.ChangePresence(req.ClientLibVersion, sessions, users, u, presenceDefinitions, 1)
 	profile := u.EncodeProfileInfo(req.ClientLibVersion)

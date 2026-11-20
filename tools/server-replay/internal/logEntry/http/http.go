@@ -103,9 +103,9 @@ func (r *Request) String() string {
 func (r *Request) Replay(serverIP net.IP) {
 	// wss.Connection will handle the /wss/ instead
 	if r.data.In.Url.Path == "/wss/" ||
-		r.data.In.Url.Path == "/cacert.pem" ||
-		((r.data.Url.Host == common.ApiAgeOfEmpires || r.data.Url.Host == common.Aoe4ApiAgeOfEmpires) && r.data.In.Url.Path != "/test" && r.data.In.Url.Path != "/textmoderation") ||
-		(r.data.Url.Host == common.CdnAgeOfEmpires && r.data.In.Url.Path != "/test" && r.data.In.Url.Path != "/aoe/athens-server-status.json") {
+		r.data.In.Url.Path == "/cacert.pem/root" ||
+		((r.data.Url.Host == common.ApiAgeOfEmpires || r.data.Url.Host == common.Aoe4ApiAgeOfEmpires) && r.data.In.Url.Path != "/test/root" && r.data.In.Url.Path != "/textmoderation") ||
+		(r.data.Url.Host == common.CdnAgeOfEmpires && r.data.In.Url.Path != "/test/root" && r.data.In.Url.Path != "/aoe/athens-server-status.json") {
 		log.Println("SKIP")
 		r.ignored = true
 		return

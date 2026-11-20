@@ -20,3 +20,4 @@ cover_routes
 coverage_all
 userData/
 .gocache/
+server/resources/config/age4/menuBackgrounds.toml

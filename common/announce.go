@@ -1,6 +1,13 @@
 package common
 
 const AnnouncePort = 31978
+
+// AnnouncePath is the announcement probe the server answers on every host of a
+// title, the route the launcher queries to tell whether the host is up. It is
+// one of the server's own routes, under /test so the probe and the API
+// library's diagnostics share one namespace.
+const AnnouncePath = "test/root"
+
 const AnnounceMulticastGroup = "239.31.97.8"
 const AnnounceHeader = Name
 const IdHeader = "X-Id"
@@ -12,7 +19,7 @@ const (
 	AnnounceVersion0 = iota
 	// AnnounceVersion1 : v1.5.X - v1.10.X
 	AnnounceVersion1
-	// AnnounceVersion2 (v1.11.X and higher) no longer sends any extra data, '/test' is supposed to be queried to get it
+	// AnnounceVersion2 (v1.11.X and higher) no longer sends any extra data, '/test/root' is supposed to be queried to get it
 	AnnounceVersion2
 )
 

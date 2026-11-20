@@ -40,6 +40,13 @@ Folder = 'D:\saves'
 MaxFileSize = '64MB'
 MaxTotalSize = '1GB'
 Expiry = '30m'
+
+[Mods]
+Enabled = false
+DBPath = 'D:\mods.db'
+UploadDir = 'D:\mods'
+MaxUploadSize = '512MB'
+RequireAuthForRead = true
 `))
 	if err != nil {
 		t.Fatalf("parseConfiguration returned an error: %v", err)
@@ -57,6 +64,11 @@ Expiry = '30m'
 		config.CustomFiles.MaxFileSize != "64MB" || config.CustomFiles.MaxTotalSize != "1GB" ||
 		config.CustomFiles.Expiry != "30m" {
 		t.Fatalf("unexpected custom files configuration: %#v", config.CustomFiles)
+	}
+	if config.Mods.Enabled || config.Mods.DBPath != `D:\mods.db` ||
+		config.Mods.UploadDir != `D:\mods` || config.Mods.MaxUploadSize != "512MB" ||
+		!config.Mods.RequireAuthForRead {
+		t.Fatalf("unexpected mods configuration: %#v", config.Mods)
 	}
 	if len(config.Games.Enabled) != 1 || config.Games.Enabled[0] != "age2" {
 		t.Fatalf("unexpected enabled games: %#v", config.Games.Enabled)
@@ -81,10 +93,15 @@ func TestParseConfigurationAppliesServerDefaults(t *testing.T) {
 		config.Announcement.Port != 31978 || config.Announcement.MulticastGroup != "239.31.97.8" {
 		t.Fatalf("unexpected announcement defaults: %#v", config.Announcement)
 	}
-	if !config.CustomFiles.Enabled || config.CustomFiles.Folder != "auto" ||
+	if !config.CustomFiles.Enabled || config.CustomFiles.Folder != "resources/custom-files" ||
 		config.CustomFiles.MaxFileSize != "32MB" || config.CustomFiles.MaxTotalSize != "256MB" ||
 		config.CustomFiles.Expiry != "12h" {
 		t.Fatalf("unexpected custom files defaults: %#v", config.CustomFiles)
+	}
+	if !config.Mods.Enabled || config.Mods.DBPath != "resources/mods/mods.db" ||
+		config.Mods.UploadDir != "resources/mods/uploads" ||
+		config.Mods.MaxUploadSize != "256MB" || config.Mods.RequireAuthForRead {
+		t.Fatalf("unexpected mods defaults: %#v", config.Mods)
 	}
 	if len(config.Games.Age2.Hosts) != 1 || config.Games.Age2.Hosts[0] != "0.0.0.0" {
 		t.Fatalf("unexpected host defaults: %#v", config.Games.Age2.Hosts)
@@ -478,6 +495,72 @@ func TestValidateConfigurationCustomFiles(t *testing.T) {
 	config.CustomFiles.Folder = ""
 	if issues := errorValidationIssues(validateConfiguration(&config)); len(issues) != 0 {
 		t.Fatalf("disabled custom files returned issues: %#v", issues)
+	}
+}
+
+func TestConfigurationDocumentWritesModsSettings(t *testing.T) {
+	original := []byte(`[Mods]
+Enabled = true
+`)
+	configuration := serverDefaults()
+	configuration.Mods.Enabled = false
+	configuration.Mods.DBPath = "custom/mods.db"
+	configuration.Mods.UploadDir = "custom/uploads"
+	configuration.Mods.MaxUploadSize = "512MB"
+	configuration.Mods.RequireAuthForRead = true
+
+	updated, err := configurationDocument(original, configuration)
+	if err != nil {
+		t.Fatalf("configurationDocument returned an error: %v", err)
+	}
+	if strings.Count(string(updated), "[Mods]") != 1 {
+		t.Fatalf("the mods table was duplicated or lost: %v", updated)
+	}
+	parsed, err := parseConfiguration(updated)
+	if err != nil {
+		t.Fatalf("updated document could not be parsed: %v (%v)", err, updated)
+	}
+	if parsed.Mods.Enabled || parsed.Mods.DBPath != "custom/mods.db" ||
+		parsed.Mods.UploadDir != "custom/uploads" || parsed.Mods.MaxUploadSize != "512MB" ||
+		!parsed.Mods.RequireAuthForRead {
+		t.Fatalf("the mods settings did not round-trip: %#v", parsed.Mods)
+	}
+}
+
+func TestValidateConfigurationMods(t *testing.T) {
+	config := serverDefaults()
+	config.Games.Enabled = []string{"age2"}
+	config.Games.Age2.Hosts = []string{"127.0.0.1"}
+
+	config.Mods.DBPath = ""
+	config.Mods.UploadDir = ""
+	if issues := errorValidationIssues(validateConfiguration(&config)); len(issues) != 0 {
+		t.Fatalf("empty mods paths were rejected: %#v", issues)
+	}
+
+	config.Mods.MaxUploadSize = "256MB"
+	config.Mods.RequireAuthForRead = true
+	if issues := errorValidationIssues(validateConfiguration(&config)); len(issues) != 0 {
+		t.Fatalf("valid mods settings were rejected: %#v", issues)
+	}
+
+	config.Mods.MaxUploadSize = "big"
+	issues := errorValidationIssues(validateConfiguration(&config))
+	if len(issues) != 1 || issues[0].Field != "Mods.MaxUploadSize" {
+		t.Fatalf("unexpected mods size issues: %#v", issues)
+	}
+
+	config.Mods.MaxUploadSize = "0MB"
+	issues = errorValidationIssues(validateConfiguration(&config))
+	if len(issues) != 1 || issues[0].Field != "Mods.MaxUploadSize" {
+		t.Fatalf("unexpected zero mods size issues: %#v", issues)
+	}
+
+	// Disabled, the server ignores the section and does not parse the size.
+	config.Mods.Enabled = false
+	config.Mods.MaxUploadSize = "big"
+	if issues := errorValidationIssues(validateConfiguration(&config)); len(issues) != 0 {
+		t.Fatalf("disabled mods returned issues: %#v", issues)
 	}
 }
 

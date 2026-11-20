@@ -146,18 +146,15 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		for _, f := range closables {
 			_ = f.Close()
 		}
-		// Stop the custom-file sweepers. Their payloads stay in the system temp
-		// folder until CustomFiles.Expiry removes them, so a restart within the
-		// TTL is not what discards a pending savegame.
+		// Stop the replay sweepers and release the cloud roots. The uploaded
+		// replays stay on disk: the TTL is what removes them.
 		for _, g := range initializer.Games {
-			if cf := g.CustomFiles(); cf != nil {
-				cf.Close()
-			}
-			// Stop the replay sweeper and release the cloud root. The uploaded
-			// replays stay on disk: the TTL is what removes them.
 			if store := g.Resources().CloudFiles(); store != nil {
 				store.Close()
 			}
+		}
+		if internal.ModsAPI != nil {
+			_ = internal.ModsAPI.Shutdown(context.Background())
 		}
 		_ = fileLockUnlockFn(lock)
 	}()
@@ -239,6 +236,33 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		logger.Fail("Invalid Replays configuration: %s", err)
 		exitCode = internal.ErrReplays
 		return
+	}
+	if err = applyModsConfig(cfg); err != nil {
+		logger.Fail("Invalid Mods configuration: %s", err)
+		exitCode = internal.ErrMods
+		return
+	}
+	// One library instance serves both trees: the mods API and MatchContent.
+	// It is built when either feature is on, so turning mods off does not take
+	// the savegame endpoints with it.
+	if internal.ModsEnabled || internal.CustomFilesConfig.Enabled {
+		var mods internal.ModsServer
+		if mods, err = newModsServerFn(internal.ModsConfig); err != nil {
+			logger.Fail("Failed to start the embedded Age API: %s", err)
+			if internal.ModsEnabled {
+				exitCode = internal.ErrMods
+			} else {
+				exitCode = internal.ErrCustomFiles
+			}
+			return
+		}
+		internal.ModsAPI = mods
+		if internal.ModsEnabled {
+			logger.Ok("Mods API ready (%s)", internal.ModsConfig.DBPath)
+		}
+		if internal.CustomFilesConfig.Enabled {
+			logger.Ok("MatchContent ready")
+		}
 	}
 	var servers []*http.Server
 	internal.InitializeStopSignal()
@@ -520,7 +544,7 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"Announcement.Port":             common.AnnouncePort,
 		"Games.Enabled":                 []string{},
 		"CustomFiles.Enabled":           true,
-		"CustomFiles.Folder":            "auto",
+		"CustomFiles.Folder":            "resources/custom-files",
 		"CustomFiles.MaxFileSize":       "32MB",
 		"CustomFiles.MaxTotalSize":      "256MB",
 		"CustomFiles.Expiry":            "12h",
@@ -528,6 +552,11 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"Replays.MaxFileSize":           "32MB",
 		"Replays.MaxTotalSize":          "1GB",
 		"Replays.Expiry":                "-1s",
+		"Mods.Enabled":                  true,
+		"Mods.DBPath":                   "resources/mods/mods.db",
+		"Mods.UploadDir":                "resources/mods/uploads",
+		"Mods.MaxUploadSize":            "256MB",
+		"Mods.RequireAuthForRead":       false,
 		"Automatch.AssumeQueue":         "",
 	}
 	for g := range game.SupportedGames.Iter() {
@@ -609,10 +638,20 @@ func resolveSizeLimits(maxFileSizeRaw, maxTotalSizeRaw, expiryRaw string) (sizeL
 }
 
 // applyCustomFilesConfig validates the CustomFiles section and publishes the
-// resolved values in the internal runtime globals.
+// resolved values. The embedded ageAPIServer library serves the endpoints now,
+// so the values are handed to it when it is constructed.
 func applyCustomFilesConfig(cfg *internal.Configuration) error {
-	internal.CustomFilesEnabled = cfg.CustomFiles.Enabled
-	internal.CustomFilesFolder = cfg.CustomFiles.Folder
+	// The default lives under the server's resources directory, as the mods
+	// paths do. 'auto' and an empty value resolve there too, so documents
+	// written before the default was explicit keep working.
+	folder := cfg.CustomFiles.Folder
+	if folder == "" || folder == "auto" {
+		folder = filepath.Join(paths.ResourcesDir, "custom-files")
+	}
+	internal.CustomFilesConfig = internal.CustomFilesConfiguration{
+		Enabled: cfg.CustomFiles.Enabled,
+		Folder:  folder,
+	}
 	if !cfg.CustomFiles.Enabled {
 		// Nothing reads the limits or the TTL while the endpoints are off, so a
 		// typo in them must not stop a server that does not use the feature.
@@ -625,9 +664,9 @@ func applyCustomFilesConfig(cfg *internal.Configuration) error {
 	if limits.expiry <= 0 {
 		return fmt.Errorf("expiry must be greater than zero")
 	}
-	internal.CustomFilesMaxFileSize = limits.maxFileSize
-	internal.CustomFilesMaxTotalSize = limits.maxTotalSize
-	internal.CustomFilesExpiry = limits.expiry
+	internal.CustomFilesConfig.MaxFileSize = limits.maxFileSize
+	internal.CustomFilesConfig.MaxTotalSize = limits.maxTotalSize
+	internal.CustomFilesConfig.Expiry = limits.expiry
 	return nil
 }
 

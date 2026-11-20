@@ -96,6 +96,24 @@ export function SelectCustomFilesFolder(): $CancellablePromise<string> {
 }
 
 /**
+ * SelectModsDatabasePath opens the native save dialog used for the mods SQLite
+ * file. Closing the picker is a normal answer: the empty path it returns keeps
+ * the setting as it is.
+ */
+export function SelectModsDatabasePath(): $CancellablePromise<string> {
+    return $Call.ByID(2929558412);
+}
+
+/**
+ * SelectModsUploadFolder opens the native directory picker used for the mods
+ * upload folder. Closing the picker is a normal answer: the empty path it
+ * returns leaves the setting as it is.
+ */
+export function SelectModsUploadFolder(): $CancellablePromise<string> {
+    return $Call.ByID(2297226543);
+}
+
+/**
  * ValidateConfiguration exposes the authoritative configuration validation to the
  * frontend so that all validation rules live in Go rather than TypeScript.
  */

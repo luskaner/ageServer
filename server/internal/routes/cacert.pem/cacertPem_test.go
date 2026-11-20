@@ -27,14 +27,13 @@ func (m *mockGame) Users() models.Users                                   { retu
 func (m *mockGame) Advertisements() models.Advertisements                 { return nil }
 func (m *mockGame) ChatChannels() models.ChatChannels                     { return nil }
 func (m *mockGame) Sessions() models.Sessions                             { return nil }
-func (m *mockGame) CustomFiles() models.CustomFiles                       { return nil }
 func (m *mockGame) Matchmaking() models.Matchmaking                       { return nil }
 func (m *mockGame) MatchHistory() models.MatchHistory                     { return nil }
 
 func TestCacertPemNotFoundWhenNoFolder(t *testing.T) {
 	// This test will call os.Executable which returns the test binary path, and CertificatePairFolder will create a folder
 	// To test the NotFound path, we can make the folder not contain the cert file
-	req := httptest.NewRequest("GET", "/cacert.pem", nil)
+	req := httptest.NewRequest("GET", "/cacert.pem/root", nil)
 	// Set game in context
 	ctx := context.WithValue(req.Context(), "game", &mockGame{title: "age2"})
 	req = req.WithContext(ctx)
@@ -60,7 +59,7 @@ func TestCacertPemServesFileWhenExists(t *testing.T) {
 			t.Cleanup(func() { _ = os.Remove(path) })
 		}
 	}
-	req := httptest.NewRequest("GET", "/cacert.pem", nil)
+	req := httptest.NewRequest("GET", "/cacert.pem/root", nil)
 	ctx := context.WithValue(req.Context(), "game", &mockGame{title: "age2"})
 	req = req.WithContext(ctx)
 	rr := httptest.NewRecorder()
@@ -82,7 +81,7 @@ func TestCacertPemSelfSignedVsCA(t *testing.T) {
 		{"age4", common.CACert},
 		{"athens", common.CACert},
 	} {
-		req := httptest.NewRequest("GET", "/cacert.pem", nil)
+		req := httptest.NewRequest("GET", "/cacert.pem/root", nil)
 		ctx := context.WithValue(req.Context(), "game", &mockGame{title: tc.gameId})
 		req = req.WithContext(ctx)
 		rr := httptest.NewRecorder()
