@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/schema v1.4.1
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.2
 	github.com/knadh/koanf/v2 v2.4.1
-	github.com/luskaner/ageAPIServer v1.0.1
+	github.com/luskaner/ageAPIServer v1.1.0
 	github.com/luskaner/ageBattleServer v1.1.0
 	github.com/luskaner/ageServer/common v0.0.0-20261115212246-f9bde3f2fcd3
 	github.com/luskaner/ageServer/launcher-common v0.0.0-20261115212246-f9bde3f2fcd3
