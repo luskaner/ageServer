@@ -619,17 +619,17 @@ func TestGeneralRoutes_httptest(t *testing.T) {
 		return rr
 	}
 
-	rr := do("GET", "/test")
+	rr := do("GET", "/test/root")
 	if rr.Code != http.StatusOK {
-		t.Fatalf("/test got %d", rr.Code)
+		t.Fatalf("/test/root got %d", rr.Code)
 	}
 	if rr.Header().Get("Content-Type") == "" {
-		t.Error("/test missing content-type")
+		t.Error("/test/root missing content-type")
 	}
-	rr = do("GET", "/cacert.pem")
+	rr = do("GET", "/cacert.pem/root")
 	// may be 404 if cert not found, but should not be 0 and not panic
 	if rr.Code != http.StatusOK && rr.Code != http.StatusNotFound {
-		t.Fatalf("/cacert.pem got %d", rr.Code)
+		t.Fatalf("/cacert.pem/root got %d", rr.Code)
 	}
 	// next handler: ensure unknown path falls through to next (404 from next)
 	rr = do("GET", "/unknown")

@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/gorilla/handlers"
+	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/server/internal"
 	cacertPem "github.com/luskaner/ageServer/server/internal/routes/cacert.pem"
 	"github.com/luskaner/ageServer/server/internal/routes/shutdown"
@@ -27,14 +28,14 @@ func (g *General) InitializeRoutes(gameId string, next http.Handler) http.Handle
 	writer := internal.NewPrefixedWriter(g.Writer, gameId, g.Name())
 	g.group.Handle(
 		"GET",
-		"/test",
+		"/"+common.AnnouncePath,
 		handlers.CustomLoggingHandler(writer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			test.Test(w, r)
 		}), logFormatter),
 	)
 	g.group.Handle(
 		"GET",
-		"/cacert.pem",
+		"/"+common.CACertPath,
 		handlers.CustomLoggingHandler(writer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cacertPem.CacertPem(w, r)
 		}), logFormatter),

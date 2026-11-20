@@ -28,8 +28,11 @@ func (a *ApiAgeOfEmpires) InitializeRoutes(gameId string, next http.Handler) htt
 	})
 	// The embedded library is mounted once, around the whole host handler, so
 	// every tree it owns (mods and MatchContent) is handled before the proxy
-	// fallback instead of being registered prefix by prefix.
-	return withAgeAPIServer(a.Proxy.InitializeRoutes(gameId, next), gameId, a.Proxy.Upstream(), true)
+	// fallback instead of being registered prefix by prefix. Its ops routes are
+	// exposed under this server's namespace (withLibraryOps) instead of at the
+	// bare /test and /cacert.pem.
+	host := withAgeAPIServer(a.Proxy.InitializeRoutes(gameId, next), gameId, a.Proxy.Upstream(), true)
+	return withLibraryOps(host)
 }
 
 func NewApiAgeOfEmpires() *ApiAgeOfEmpires {

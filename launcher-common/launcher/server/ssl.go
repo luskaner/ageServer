@@ -68,7 +68,7 @@ func fetchFromServer(host string, path string) (body []byte, err error) {
 }
 
 func ReadCACertificateFromServer(host string) *x509.Certificate {
-	bodyBytes, err := fetchFromServer(host, common.CACert)
+	bodyBytes, err := fetchFromServer(host, common.CACertPath)
 	if err != nil {
 		commonLogger.Println("ReadCACertificateFromServer error:", err)
 		return nil

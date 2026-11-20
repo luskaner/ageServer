@@ -337,35 +337,35 @@ func TestRouteExpectedValues_Httptest(t *testing.T) {
 		gen := &General{Writer: &buf}
 		h := gen.InitializeRoutes(game.AoE2, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) }))
 
-		// /test debe devolver AnnounceMessageData con Id y Version header via httptest
-		req := httptest.NewRequest("GET", "/test", nil)
+		// /test/root debe devolver AnnounceMessageData con Id y Version header via httptest
+		req := httptest.NewRequest("GET", "/test/root", nil)
 		req = req.WithContext(cachContextWithGame(req.Context(), g))
 		rr := httptest.NewRecorder()
 		h.ServeHTTP(rr, req)
 		if rr.Code != 200 {
-			t.Fatalf("/test %d", rr.Code)
+			t.Fatalf("/test/root %d", rr.Code)
 		}
 		if rr.Header().Get("X-Id") == "" && rr.Header().Get("X-Version") == "" {
 			// headers son IdHeader y VersionHeader según common
 		}
 		var body i.A
-		// /test devuelve objeto Announce, no array con error code, solo validamos JSON
+		// /test/root devuelve objeto Announce, no array con error code, solo validamos JSON
 		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 			// puede ser objeto, no array, pero debe ser JSON válido
 			var obj map[string]any
 			if err2 := json.Unmarshal(rr.Body.Bytes(), &obj); err2 != nil {
-				t.Fatalf("/test json %v", err)
+				t.Fatalf("/test/root json %v", err)
 			}
 		}
-		t.Logf("/test body=%s", rr.Body.String())
+		t.Logf("/test/root body=%s", rr.Body.String())
 
-		// /cacert.pem debe ser 404 o 200 según exista cert, pero siempre con httptest debe responder
-		req2 := httptest.NewRequest("GET", "/cacert.pem", nil)
+		// /cacert.pem/root debe ser 404 o 200 según exista cert, pero siempre con httptest debe responder
+		req2 := httptest.NewRequest("GET", "/cacert.pem/root", nil)
 		req2 = req2.WithContext(cachContextWithGame(req2.Context(), g))
 		rr2 := httptest.NewRecorder()
 		h.ServeHTTP(rr2, req2)
 		if rr2.Code != 200 && rr2.Code != 404 {
-			t.Fatalf("/cacert.pem %d", rr2.Code)
+			t.Fatalf("/cacert.pem/root %d", rr2.Code)
 		}
 	})
 

@@ -93,7 +93,7 @@ func TestLanServerIPIntegrationSuccess(t *testing.T) {
 
 	serverPort = port
 	buildURLFn = func(_ net.IP) url.URL {
-		return url.URL{Scheme: "https", Host: hostPort, Path: "test"}
+		return url.URL{Scheme: "https", Host: hostPort, Path: "test/root"}
 	}
 	newHTTPClientFn = func(serverName string, insecureSkipVerify bool, rootCAs *x509.CertPool) *http.Client {
 		// Use test server's client which trusts its cert; ignore args
@@ -133,7 +133,7 @@ func TestLanServerIPIntegrationWithLatency(t *testing.T) {
 	origPort := serverPort
 	defer func() { buildURLFn = origBuildURL; newHTTPClientFn = origClient; serverPort = origPort }()
 	serverPort = port
-	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: hostPort, Path: "test"} }
+	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: hostPort, Path: "test/root"} }
 	newHTTPClientFn = func(string, bool, *x509.CertPool) *http.Client { return ts.Client() }
 
 	ok, _, latency, _ := LanServerIP(uuid.Nil(), gameTitle, ip, "test.local", true, nil, false)
@@ -210,7 +210,7 @@ func TestLanServerIPIntegrationFailures(t *testing.T) {
 			origPort := serverPort
 			defer func() { buildURLFn = origBuildURL; newHTTPClientFn = origClient; serverPort = origPort }()
 			serverPort = port
-			buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: hostPort, Path: "test"} }
+			buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: hostPort, Path: "test/root"} }
 			newHTTPClientFn = func(string, bool, *x509.CertPool) *http.Client { return ts.Client() }
 			ok, _, _, _ := LanServerIP(tc.id, tc.game, ip, "test.local", true, nil, true)
 			if ok {
@@ -240,7 +240,7 @@ func TestLanServerHostIntegration(t *testing.T) {
 	origPort := serverPort
 	defer func() { buildURLFn = origBuildURL; newHTTPClientFn = origClient; serverPort = origPort }()
 	serverPort = port
-	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: hostPort, Path: "test"} }
+	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: hostPort, Path: "test/root"} }
 	newHTTPClientFn = func(string, bool, *x509.CertPool) *http.Client { return ts.Client() }
 
 	// Mock HostOrIpToIps to return 127.0.0.1 for our fake host
@@ -336,7 +336,7 @@ func TestLanServerHostFailure(t *testing.T) {
 	origPort := serverPort
 	defer func() { buildURLFn = origBuildURL; newHTTPClientFn = origClient; serverPort = origPort }()
 	serverPort = port
-	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: hostPort, Path: "test"} }
+	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: hostPort, Path: "test/root"} }
 	newHTTPClientFn = func(string, bool, *x509.CertPool) *http.Client { return ts.Client() }
 	origResolver := common.SetResolver(&mockResolverForServer{ips: []string{"127.0.0.1"}})
 	defer origResolver()
@@ -355,7 +355,7 @@ func TestLanServerIPHeadDoError(t *testing.T) {
 	origBuildURL := buildURLFn
 	origClient := newHTTPClientFn
 	defer func() { buildURLFn = origBuildURL; newHTTPClientFn = origClient }()
-	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: "127.0.0.1:443", Path: "test"} }
+	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: "127.0.0.1:443", Path: "test/root"} }
 	newHTTPClientFn = func(string, bool, *x509.CertPool) *http.Client {
 		return &http.Client{Transport: errRoundTripper{}, Timeout: 1 * time.Second}
 	}
@@ -369,7 +369,7 @@ func TestLanServerIPGetDoError(t *testing.T) {
 	origBuildURL := buildURLFn
 	origClient := newHTTPClientFn
 	defer func() { buildURLFn = origBuildURL; newHTTPClientFn = origClient }()
-	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: "127.0.0.1:443", Path: "test"} }
+	buildURLFn = func(_ net.IP) url.URL { return url.URL{Scheme: "https", Host: "127.0.0.1:443", Path: "test/root"} }
 	newHTTPClientFn = func(string, bool, *x509.CertPool) *http.Client {
 		return &http.Client{Transport: errRoundTripper{}, Timeout: 1 * time.Second}
 	}

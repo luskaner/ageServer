@@ -53,6 +53,60 @@ func withAgeAPIServer(host http.Handler, gameID string, upstream http.Handler, s
 	})
 }
 
+// libraryOps maps the public ops paths of the Age of Empires hosts to the ops
+// routes the embedded ageAPIServer library registers. It is a rewrite and not a
+// second registration: the library keeps its own paths and is not modified, and
+// this server keeps /test/root and /cacert.pem/root for itself, so neither side
+// has to know about the other's names.
+//
+// The targets are the library's own ops routes since v1.1.0: /test is its
+// liveness probe and /cacert.pem the certificate its listener terminates TLS
+// with. Embedded, this server terminates TLS, so the library has no certificate
+// of its own and that route answers 404 while the probe answers 200 or 503.
+var libraryOps = []struct{ public, library string }{
+	{"/test/api", "/test"},
+	{"/cacert.pem/api", "/cacert.pem"},
+}
+
+// withLibraryOps exposes the library ops routes under the public names of
+// libraryOps on the hosts that carry the library. It wraps the host handler, so
+// the rewrite happens before the dispatch of withAgeAPIServer and the request
+// reaches the library itself: these are local diagnostics, the official service
+// has no counterpart, so they never follow the upstream client condition.
+//
+// Without the library there is nothing to rewrite to, so the public paths are
+// left to the host handler instead of being registered as aliases.
+func withLibraryOps(host http.Handler) http.Handler {
+	server := i.ModsAPI
+	if server == nil {
+		return host
+	}
+	local := modsHandler(server.Handler())
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target, ok := libraryOpsTarget(r.URL.Path)
+		if !ok {
+			host.ServeHTTP(w, r)
+			return
+		}
+		rewritten := r.Clone(r.Context())
+		rewritten.URL.Path = target
+		rewritten.URL.RawPath = ""
+		local.ServeHTTP(w, rewritten)
+	})
+}
+
+// libraryOpsTarget returns the library path a public ops path rewrites to,
+// ignoring the case and the trailing slash the clients disagree on.
+func libraryOpsTarget(urlPath string) (string, bool) {
+	cleaned := strings.ToLower(strings.TrimSuffix(urlPath, "/"))
+	for _, op := range libraryOps {
+		if cleaned == op.public {
+			return op.library, true
+		}
+	}
+	return "", false
+}
+
 // isModsPath reports whether the path belongs to the mods tree, ignoring the
 // casing and the trailing slash the clients disagree on.
 func isModsPath(urlPath string) bool {

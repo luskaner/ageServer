@@ -4,6 +4,11 @@ const Name = "ageServer"
 const Cert = "cert.pem"
 const Key = "key.pem"
 const CACert = "cacert.pem"
+
+// CACertPath is the route the server serves the CA certificate on. It is not
+// the file name (CACert) the certificate stores keep using, and it leaves
+// /cacert.pem free for the API library's own certificate route.
+const CACertPath = "cacert.pem/root"
 const SelfSignedCert = "selfsigned_cert.pem"
 const SelfSignedKey = "selfsigned_key.pem"
 

@@ -284,3 +284,58 @@ func TestIsPublishPath(t *testing.T) {
 		}
 	}
 }
+
+// TestApiHostsRewriteTheLibraryOpsRoutes covers the public names of the
+// library's ops routes: the request is rewritten onto the path the library
+// registers, and it is the library that answers. The fake library echoes the
+// path it received, so the body proves which path arrived.
+func TestApiHostsRewriteTheLibraryOpsRoutes(t *testing.T) {
+	withMods(t)
+	handler := apiHandler()
+
+	for _, tc := range []struct{ public, library string }{
+		{"/test/api", "/test"},
+		{"/test/api/", "/test"},
+		{"/TEST/API", "/test"},
+		{"/cacert.pem/api", "/cacert.pem"},
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, tc.public, nil))
+		if got := recorder.Body.String(); got != tc.library {
+			t.Fatalf("%s reached %q, want the library path %q", tc.public, got, tc.library)
+		}
+	}
+}
+
+// TestApiHostsLeaveTheBareOpsPathsToTheHost pins that only the public names are
+// rewritten: the bare /test and /cacert.pem are not a second way in, they keep
+// whatever the host handler did with them.
+func TestApiHostsLeaveTheBareOpsPathsToTheHost(t *testing.T) {
+	withMods(t)
+	handler := apiHandler()
+
+	for _, path := range []string{"/test", "/cacert.pem"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("%s code = %d, want the mux 404", path, recorder.Code)
+		}
+	}
+}
+
+// TestApiHostsWithoutTheLibraryDoNotRewrite pins the rollback: with no library
+// there is nothing to rewrite to, so the public paths are not registered.
+func TestApiHostsWithoutTheLibraryDoNotRewrite(t *testing.T) {
+	old := i.ModsAPI
+	i.ModsAPI = nil
+	t.Cleanup(func() { i.ModsAPI = old })
+
+	handler := apiHandler()
+	for _, path := range []string{"/test/api", "/cacert.pem/api"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("%s code = %d, want the mux 404 without the library", path, recorder.Code)
+		}
+	}
+}
