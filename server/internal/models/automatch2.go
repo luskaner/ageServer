@@ -255,6 +255,9 @@ type automatchQueueEntry struct {
 	// unknownLogged deduplicates the unknown-pool metric across the polling
 	// loop (one WARN per search, not one every 10 seconds).
 	unknownLogged bool
+	// waitRecorded is set once this search contributed its wait to the
+	// estimator, so a requeued match does not count the same search twice.
+	waitRecorded bool
 }
 
 type automatchMatchState uint8
@@ -326,6 +329,9 @@ type MainMatchmaking struct {
 	byUser  map[int32]*automatchQueueEntry
 	byPoll  map[int32]*automatchQueueEntry
 	matches map[int32]*automatchMatch
+	// waits holds the most recent observed queue waits per queue id; it feeds
+	// the estimated wait reported to searching clients.
+	waits map[int32][]time.Duration
 }
 
 func (mm *MainMatchmaking) Initialize(game Game) {
@@ -336,6 +342,7 @@ func (mm *MainMatchmaking) Initialize(game Game) {
 	mm.byUser = make(map[int32]*automatchQueueEntry)
 	mm.byPoll = make(map[int32]*automatchQueueEntry)
 	mm.matches = make(map[int32]*automatchMatch)
+	mm.waits = make(map[int32][]time.Duration)
 	if game == nil {
 		mm.catalog = newEmptyQueueCatalog("")
 		return
@@ -371,12 +378,11 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 	entry, exists := mm.byUser[userID]
 	if !exists {
 		entry = &automatchQueueEntry{
-			UserID:          userID,
-			PollID:          mm.newPollIDLocked(),
-			EstimatedWaitMs: estimatedWaitMillis(),
-			CreatedAt:       time.Now(),
-			QueuedAt:        time.Now(),
-			SearchState:     1,
+			UserID:      userID,
+			PollID:      mm.newPollIDLocked(),
+			CreatedAt:   time.Now(),
+			QueuedAt:    time.Now(),
+			SearchState: 1,
 		}
 		mm.byUser[userID] = entry
 		mm.byPoll[entry.PollID] = entry
@@ -392,7 +398,8 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 	if newSearch && entry.MatchID == 0 {
 		entry.CreatedAt = time.Now()
 		entry.QueuedAt = time.Now()
-		entry.EstimatedWaitMs = estimatedWaitMillis()
+		entry.EstimatedWaitMs = mm.estimatedWaitMillisLocked(matchTypes)
+		entry.waitRecorded = false
 		entry.unknownLogged = false
 	}
 	entry.Stopped = false
@@ -1460,6 +1467,7 @@ func (mm *MainMatchmaking) createMatchLocked(host *automatchQueueEntry, players 
 		CreatedAt:   time.Now(),
 	}
 	match.State = automatchWaitingHost
+	mm.recordWaitLocked(queue, players, match.CreatedAt)
 	for _, player := range players {
 		player.MatchID = matchID
 		player.SearchState = 0
@@ -1871,15 +1879,73 @@ func (mm *MainMatchmaking) newPollIDLocked() int32 {
 	}
 }
 
-// estimatedWaitMillis is the value of polling response slot 2. The client
-// renders it as an H:MM:SS estimated wait (e.g. 180000 renders 00:03:00 and
-// 567932821 renders 157:45:32), so the official service's tokens observed in
-// the captures (180000, 33587, 1001, 1267, 5679) are really wait estimates in
-// milliseconds. The LAN server cannot predict a wait, so it reports 0, which
-// the client shows as 00:00:00. If a predictor is ever added (F5 metrics),
-// this is the single point to change.
-func estimatedWaitMillis() int32 {
-	return 0
+// Estimated wait bounds. The window keeps the estimate responsive to recent
+// population changes and maxEstimatedWait keeps it inside the int32 slot.
+const (
+	automatchWaitWindow = 20
+	maxEstimatedWait    = 24 * time.Hour
+)
+
+// recordWaitLocked feeds the wait estimator with how long each player of a
+// freshly created match spent in the queue. QueuedAt survives requeues, so it
+// is the true start of the search.
+func (mm *MainMatchmaking) recordWaitLocked(queue *automatchQueue, players []*automatchQueueEntry, now time.Time) {
+	if queue == nil {
+		return
+	}
+	if mm.waits == nil {
+		mm.waits = make(map[int32][]time.Duration)
+	}
+	for _, player := range players {
+		if player.waitRecorded || player.QueuedAt.IsZero() {
+			continue
+		}
+		player.waitRecorded = true
+		wait := now.Sub(player.QueuedAt)
+		if wait < 0 {
+			wait = 0
+		}
+		samples := append(mm.waits[queue.ID], wait)
+		if len(samples) > automatchWaitWindow {
+			samples = samples[len(samples)-automatchWaitWindow:]
+		}
+		mm.waits[queue.ID] = samples
+	}
+}
+
+// estimatedWaitMillisLocked is the value of polling response slot 2. The
+// client renders it as an H:MM:SS estimated wait (e.g. 180000 renders 00:03:00
+// and 567932821 renders 157:45:32), so the official service's tokens observed
+// in the captures (180000, 33587, 1001, 1267, 5679) are really wait estimates
+// in milliseconds. The estimate is the average of the latest waits observed
+// in the requested queues; with several queues the shortest average wins since
+// the player is matched by whichever fills first. Queues that have no history
+// yet are ignored and 0 (00:00:00) is reported when nothing is known.
+func (mm *MainMatchmaking) estimatedWaitMillisLocked(matchTypes []int32) int32 {
+	var best time.Duration
+	found := false
+	for _, matchType := range matchTypes {
+		samples := mm.waits[matchType]
+		if len(samples) == 0 {
+			continue
+		}
+		var total time.Duration
+		for _, sample := range samples {
+			total += sample
+		}
+		average := total / time.Duration(len(samples))
+		if !found || average < best {
+			best = average
+			found = true
+		}
+	}
+	if !found {
+		return 0
+	}
+	if best > maxEstimatedWait {
+		best = maxEstimatedWait
+	}
+	return int32(best / time.Millisecond)
 }
 
 func (mm *MainMatchmaking) newMatchIDLocked() int32 {
