@@ -21,3 +21,4 @@ coverage_all
 userData/
 .gocache/
 server/resources/config/age4/menuBackgrounds.toml
+server/api_spec_internal.yml
