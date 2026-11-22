@@ -5,6 +5,7 @@ import (
 	"crypto/x509/pkix"
 	"io"
 	"net"
+	"slices"
 	"testing"
 
 	"github.com/luskaner/ageServer/common/executor/exec"
@@ -34,7 +35,7 @@ func TestRunSetUp_ForwardsFlags(t *testing.T) {
 
 	cert := &x509.Certificate{Raw: []byte("raw"), Subject: pkix.Name{CommonName: "test"}}
 	ip := net.ParseIP("1.2.3.4")
-	result := ex.RunSetUp("age2", ip, true, false, cert, "/logs", nil, nil)
+	result := ex.RunSetUp("age2", ip, true, false, false, false, cert, "/logs", nil, nil)
 	if result == nil {
 		t.Fatal("nil result")
 	}
@@ -66,7 +67,7 @@ func TestRunSetUp_NilCert(t *testing.T) {
 	t.Parallel()
 	ex := NewExecutor(fakeRunner{})
 	ip := net.ParseIP("10.0.0.1")
-	res := ex.RunSetUp("age2", ip, false, true, nil, "", nil, nil)
+	res := ex.RunSetUp("age2", ip, false, true, false, false, nil, "", nil, nil)
 	if res == nil {
 		t.Fatal("nil")
 	}
@@ -80,7 +81,7 @@ func TestRunSetUp_DefaultInternetOmitsFlag(t *testing.T) {
 		return &exec.Result{}
 	}})
 	ip := net.ParseIP("1.2.3.4")
-	ex.RunSetUp("age2", ip, false, true, nil, "", nil, nil)
+	ex.RunSetUp("age2", ip, false, true, false, false, nil, "", nil, nil)
 	for _, a := range captured.Args {
 		if a == "--internet=false" || a == "--internet" {
 			t.Fatalf("internet enabled should not include an internet flag, got %v", captured.Args)
@@ -157,9 +158,42 @@ func TestRun_OptionsFnMutation(t *testing.T) {
 		}
 		return &exec.Result{}
 	}})
-	ex.RunSetUp("age2", nil, false, false, nil, "", nil, func(o *exec.Options) { o.File = "mutated" })
+	ex.RunSetUp("age2", nil, false, false, false, false, nil, "", nil, func(o *exec.Options) { o.File = "mutated" })
 }
 
+// A setup that did the server's half or the API's half of a split mapping has
+// to carry the flag through, or the elevated side maps everything instead and
+// the two halves overwrite each other.
+func TestRunSetUp_ForwardsApiAndRootOnly(t *testing.T) {
+	t.Parallel()
+	assertHasArg := func(args []string, want string) {
+		t.Helper()
+		if slices.Contains(args, want) {
+			return
+		}
+		t.Errorf("expected %s in args, got %v", want, args)
+	}
+	assertNoArg := func(args []string, unwanted string) {
+		t.Helper()
+		for _, a := range args {
+			if a == unwanted {
+				t.Errorf("unexpected %s in args, got %v", unwanted, args)
+			}
+		}
+	}
+	var captured exec.Options
+	ex := NewExecutor(fakeRunner{exec: func(o exec.Options) *exec.Result {
+		captured = o
+		return &exec.Result{}
+	}})
+	_ = ex.RunSetUp("age2", net.ParseIP("1.2.3.4"), false, true, true, false, nil, "", nil, nil)
+	assertHasArg(captured.Args, "--api")
+	assertNoArg(captured.Args, "--rootOnly")
+	captured = exec.Options{}
+	_ = ex.RunSetUp("age2", net.ParseIP("1.2.3.4"), false, true, false, true, nil, "", nil, nil)
+	assertHasArg(captured.Args, "--rootOnly")
+	assertNoArg(captured.Args, "--api")
+}
 func TestRun_OutRedirectionNonWindows(t *testing.T) {
 	t.Parallel()
 	var captured exec.Options

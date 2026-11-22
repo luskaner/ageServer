@@ -11,6 +11,7 @@ import (
 	"github.com/luskaner/ageServer/common"
 	launcherCommonHosts "github.com/luskaner/ageServer/common/hosts"
 	"github.com/luskaner/ageServer/common/logger"
+	launcherCommonCmd "github.com/luskaner/ageServer/launcher-common/cmd/config"
 	"github.com/luskaner/ageServer/launcher-common/cmd/config/admin"
 	commonUi "github.com/luskaner/ageServer/launcher-common/ui"
 	"github.com/luskaner/ageServer/launcher-config-admin/internal"
@@ -48,6 +49,10 @@ func logHostsDiagnostics() {
 func runSetUp(args []string) (err error, exitCode int) {
 	values, fs := admin.SetupFlagSet()
 	if err = fs.Parse(args); err != nil {
+		exitCode = common.ErrSyntax
+		return
+	}
+	if err = launcherCommonCmd.ValidateSetupHostSet(values.SetupBaseValues); err != nil {
 		exitCode = common.ErrSyntax
 		return
 	}
@@ -94,7 +99,13 @@ func runSetUp(args []string) (err error, exitCode int) {
 	}
 	if len(values.MapIp) > 0 {
 		commonLogger.Println(commonUi.Step("Adding IP mappings for game %s with IP %s...", values.GameId, values.MapIp.String()))
-		if ok, addHostsErr := addHostsFn(values.MapIp, values.GameId, "", "", values.MacOsExclusiveMappings, hosts.FlushDns); ok {
+		mapHostsFn := addHostsFn
+		if values.Api {
+			mapHostsFn = addApiHostsFn
+		} else if values.RootOnly {
+			mapHostsFn = addRootHostsFn
+		}
+		if ok, addHostsErr := mapHostsFn(values.MapIp, values.GameId, "", "", values.MacOsExclusiveMappings, hosts.FlushDns); ok {
 			commonLogger.Println(commonUi.Ok("Successfully added IP mappings"))
 		} else {
 			exitCode = internal.ErrIpMapAdd

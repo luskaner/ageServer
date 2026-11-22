@@ -83,6 +83,9 @@ func undoSetUp() {
 	if setupValues.CertFilePath != "" {
 		_ = removeFileFn(setupValues.CertFilePath)
 	}
+	if setupValues.ApiCertFilePath != "" {
+		_ = removeFileFn(setupValues.ApiCertFilePath)
+	}
 	if setupValues.SigKeyFilePath != "" {
 		_ = removeFileFn(setupValues.SigKeyFilePath)
 	}
@@ -110,6 +113,9 @@ func runSetUp(args []string) (err error, exitCode int) {
 	setupValues, flags = launcherCommonCmd.SetUpFlagSet()
 	if err = flags.Parse(args); err != nil {
 		exitCode = common.ErrSyntax
+		return
+	}
+	if err = launcherCommonCmd.ValidateSetupHostSet(setupValues.SetupBaseValues); err != nil {
 		return
 	}
 
@@ -155,7 +161,7 @@ func runSetUp(args []string) (err error, exitCode int) {
 	}
 
 	var addLocalCertData []byte = nil
-	if setupValues.CertFilePath != "" {
+	if setupValues.CertFilePath != "" || setupValues.ApiCertFilePath != "" {
 		if len(setupValues.AddLocalCertData) == 0 {
 			commonLogger.Println(commonUi.Fail("Certificate file path is set but no local certificate data is provided"))
 			exitCode = internal.ErrMissingLocalCertData
@@ -258,7 +264,16 @@ func runSetUp(args []string) (err error, exitCode int) {
 			ipToMap = setupValues.MapIp
 		}
 	} else if len(setupValues.MapIp) > 0 {
-		if ok, addHostsErr := addHostsFn(setupValues.MapIp, setupValues.GameId, setupValues.HostFilePath, hosts.WindowsLineEnding, setupValues.MacOsExclusiveMappings, nil); ok {
+		mapHostsFn := addHostsFn
+		if setupValues.Api {
+			mapHostsFn = addApiHostsFn
+		} else if setupValues.RootOnly {
+			// The server's half of a split mapping: writing the whole set
+			// here would put the API domains back at the root server's
+			// address and undo the pass that ran before this one.
+			mapHostsFn = addRootHostsFn
+		}
+		if ok, addHostsErr := mapHostsFn(setupValues.MapIp, setupValues.GameId, setupValues.HostFilePath, hosts.WindowsLineEnding, setupValues.MacOsExclusiveMappings, nil); ok {
 			commonLogger.Println(commonUi.Ok("Successfully added host mappings"))
 		} else {
 			commonLogger.Println(commonUi.Fail("Failed to add host mappings with IP %s to custom hosts file %s", setupValues.MapIp.String(), setupValues.HostFilePath))
@@ -272,9 +287,12 @@ func runSetUp(args []string) (err error, exitCode int) {
 			return
 		}
 	}
-	if setupValues.CertFilePath != "" {
+	for _, certFilePath := range []string{setupValues.CertFilePath, setupValues.ApiCertFilePath} {
+		if certFilePath == "" {
+			continue
+		}
 		var certFile *os.File
-		certFile, err = createFileFn(setupValues.CertFilePath)
+		certFile, err = createFileFn(certFilePath)
 		if err == nil {
 			err = writeAsPemFn(setupValues.AddLocalCertData, certFile)
 			_ = certFile.Close()
@@ -311,7 +329,7 @@ func runSetUp(args []string) (err error, exitCode int) {
 			}
 			commonLogger.Println(commonUi.Step("%s", str+"..."))
 		}
-		err, exitCode = runSetUpAdminFn(setupValues.GameId, setupValues.LogRoot, ipToMap, setupValues.MacOsExclusiveMappings, addLocalCertData, setupValues.CanUseInternet)
+		err, exitCode = runSetUpAdminFn(setupValues.GameId, setupValues.LogRoot, ipToMap, setupValues.MacOsExclusiveMappings, addLocalCertData, setupValues.CanUseInternet, setupValues.SetupBaseValues.Api, setupValues.SetupBaseValues.RootOnly)
 		if err == nil && exitCode == common.ErrSuccess {
 			if agentStarted {
 				commonLogger.Println(commonUi.Ok("Successfully communicated with config-admin-agent"))

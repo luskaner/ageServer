@@ -44,6 +44,8 @@ var (
 	backupProfilesFn          func(path *commonUserData.Path) bool
 	restoreProfilesFn         func(path *commonUserData.Path, reverseFailed bool) bool
 	addHostsFn                func(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() *exec.Result) (bool, error)
+	addApiHostsFn             func(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() *exec.Result) (bool, error)
+	addRootHostsFn            func(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() *exec.Result) (bool, error)
 	bytesToCertFn             = common.BytesToCertificate
 	writeAsPemFn              = common.WriteAsPem
 	createFileFn              = os.Create
@@ -73,5 +75,11 @@ func init() {
 	}
 	addHostsFn = func(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() *exec.Result) (bool, error) {
 		return hosts.AddHosts(ip, gameId, hostFilePath, lineEnding, withMacOsExclusive, flushFn)
+	}
+	addApiHostsFn = func(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() *exec.Result) (bool, error) {
+		return hosts.AddApiHosts(ip, gameId, hostFilePath, lineEnding, withMacOsExclusive, flushFn)
+	}
+	addRootHostsFn = func(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() *exec.Result) (bool, error) {
+		return hosts.AddRootHosts(ip, gameId, hostFilePath, lineEnding, withMacOsExclusive, flushFn)
 	}
 }

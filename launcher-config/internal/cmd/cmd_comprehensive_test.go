@@ -62,6 +62,8 @@ func saveCmdDeps(t *testing.T) {
 	oldBackupProfiles := backupProfilesFn
 	oldRestoreProfiles := restoreProfilesFn
 	oldAddHosts := addHostsFn
+	oldAddApiHosts := addApiHostsFn
+	oldAddRootHosts := addRootHostsFn
 	oldBytesToCert := bytesToCertFn
 	oldWriteAsPem := writeAsPemFn
 	oldCreateFile := createFileFn
@@ -88,6 +90,8 @@ func saveCmdDeps(t *testing.T) {
 		backupProfilesFn = oldBackupProfiles
 		restoreProfilesFn = oldRestoreProfiles
 		addHostsFn = oldAddHosts
+		addApiHostsFn = oldAddApiHosts
+		addRootHostsFn = oldAddRootHosts
 		bytesToCertFn = oldBytesToCert
 		writeAsPemFn = oldWriteAsPem
 		createFileFn = oldCreateFile
@@ -873,7 +877,7 @@ func TestRunSetUpAdminSuccessViaAgent(t *testing.T) {
 	initializeFn = func(string) error { return nil }
 	connectAgentFn = func() error { return nil } // agent connected
 	gotCanUseInternet := true
-	runSetUpAdminFn = func(_ string, _ string, _ net.IP, _ bool, _ []byte, canUseInternet bool) (error, int) {
+	runSetUpAdminFn = func(_ string, _ string, _ net.IP, _ bool, _ []byte, canUseInternet bool, _ bool, _ bool) (error, int) {
 		gotCanUseInternet = canUseInternet
 		return nil, common.ErrSuccess
 	}
@@ -899,7 +903,9 @@ func TestRunSetUpAdminFailureViaAgent(t *testing.T) {
 	statFn = func(string) (os.FileInfo, error) { return mockFileInfo{isDir: true}, nil }
 	initializeFn = func(string) error { return nil }
 	connectAgentFn = func() error { return nil } // agent connected
-	runSetUpAdminFn = func(string, string, net.IP, bool, []byte, bool) (error, int) { return errors.New("admin fail"), 1 }
+	runSetUpAdminFn = func(string, string, net.IP, bool, []byte, bool, bool, bool) (error, int) {
+		return errors.New("admin fail"), 1
+	}
 	removeFileFn = func(string) error { return nil }
 	removeUserCertsFn = func() ([]*x509.Certificate, error) { return nil, nil }
 	metadataRestoreFn = func(*commonUserData.Path) bool { return true }
@@ -921,5 +927,62 @@ func TestRunSetUpSuccessMinimal(t *testing.T) {
 	_, exitCode := runSetUp([]string{"--game", "age2"})
 	if exitCode != common.ErrSuccess {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+}
+
+// Regression: with a separate API server and a custom hosts file, the root
+// pass must only map the root domains — the API pass has already written its
+// half into the same file, and mapping every domain again would rewrite the
+// API entries with the root server's address.
+func TestRunSetUpRootOnlyHostFilePathMapsRootHalfOnly(t *testing.T) {
+	resetCmdState(t)
+	saveCmdDeps(t)
+	supportedGamesContainsFn = func(string) bool { return true }
+	statFn = func(string) (os.FileInfo, error) { return mockFileInfo{isDir: true}, nil }
+	initializeFn = func(string) error { return nil }
+	removeFileFn = func(string) error { return nil }
+	removeUserCertsFn = func() ([]*x509.Certificate, error) { return nil, nil }
+	metadataRestoreFn = func(*commonUserData.Path) bool { return true }
+	restoreProfilesFn = func(*commonUserData.Path, bool) bool { return true }
+	newCACertFn = func(string, string) caCertifier { return &mockCACert{} }
+
+	var calledAll, calledApi, calledRoot bool
+	var gotIp net.IP
+	var gotHostFilePath string
+	addHostsFn = func(net.IP, string, string, string, bool, func() *exec.Result) (bool, error) {
+		calledAll = true
+		return true, nil
+	}
+	addApiHostsFn = func(net.IP, string, string, string, bool, func() *exec.Result) (bool, error) {
+		calledApi = true
+		return true, nil
+	}
+	addRootHostsFn = func(ip net.IP, _ string, hostFilePath string, _ string, _ bool, _ func() *exec.Result) (bool, error) {
+		calledRoot = true
+		gotIp = ip
+		gotHostFilePath = hostFilePath
+		return true, nil
+	}
+	hostFilePath := filepath.Join(t.TempDir(), "hosts")
+	_, exitCode := runSetUp([]string{
+		"--game", "age2",
+		"--ip", "127.0.0.2",
+		"--rootOnly",
+		"--hostFilePath", hostFilePath,
+	})
+	if exitCode != common.ErrSuccess {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if calledAll || calledApi {
+		t.Error("root-only pass must not map the whole set or the API half")
+	}
+	if !calledRoot {
+		t.Fatal("root-only pass must map the root domains")
+	}
+	if !gotIp.Equal(net.IPv4(127, 0, 0, 2).To4()) {
+		t.Errorf("mapped IP = %v, want 127.0.0.2", gotIp)
+	}
+	if gotHostFilePath != hostFilePath {
+		t.Errorf("hostFilePath = %q, want %q", gotHostFilePath, hostFilePath)
 	}
 }

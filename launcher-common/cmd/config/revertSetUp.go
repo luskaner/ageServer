@@ -8,13 +8,14 @@ import (
 type CommonBaseValues struct {
 	*cmd.GameIdValues
 	*cmd.LogRootValues
-	GamePath       string
-	DataPath       string
-	HostFilePath   string
-	CertFilePath   string
-	SigKeyFilePath string
-	Metadata       bool
-	Profiles       bool
+	GamePath        string
+	DataPath        string
+	HostFilePath    string
+	CertFilePath    string
+	ApiCertFilePath string
+	SigKeyFilePath  string
+	Metadata        bool
+	Profiles        bool
 }
 
 func NewCommonBaseValues() *CommonBaseValues {
@@ -38,6 +39,10 @@ func (v *CommonBaseValues) HostFilePathRef() *string {
 
 func (v *CommonBaseValues) CertFilePathRef() *string {
 	return &v.CertFilePath
+}
+
+func (v *CommonBaseValues) ApiCertFilePathRef() *string {
+	return &v.ApiCertFilePath
 }
 
 func (v *CommonBaseValues) SigKeyFilePathRef() *string {
@@ -68,6 +73,7 @@ func AddCommonFlags(flags *pflag.FlagSet, hostFilePathDescSuffix string, certFil
 	)
 	flags.StringVarP(values.HostFilePathRef(), "hostFilePath", "o", "", "Path to the host file. "+hostFilePathDescSuffix)
 	flags.StringVarP(values.CertFilePathRef(), "certFilePath", "t", "", "Path to the certificate file. "+certFilePathDescSuffix)
+	flags.StringVar(values.ApiCertFilePathRef(), "apiCertFilePath", "", "Path to the API server's certificate file.")
 	flags.StringVar(values.SigKeyFilePathRef(), "sigKeyFilePath", "", "Path to the server's public signing key file. "+sigKeyFilePathDescSuffix)
 	flags.BoolVarP(values.MetadataRef(), "metadata", "m", false, metadataDesc)
 	flags.BoolVarP(values.ProfilesRef(), "profiles", "p", false, profilesDesc)

@@ -88,16 +88,82 @@ func TestHandleSetUpDecodeFailure(t *testing.T) {
 	}
 }
 
-func TestHandleSetUpIPsAlreadyMapped(t *testing.T) {
+// One session maps hosts and adds certificates more than once (an API pass
+// and the server's own pass when a standalone API server is configured), so a
+// repeat Setup has to succeed: one-shot guards would break the session's
+// second pass everywhere an agent is alive.
+func TestHandleSetUpAllowsRepeatedHostsAndCertificates(t *testing.T) {
 	resetIPCState(t)
-	mappedIps = true
+	runSetUpFn = func(string, net.IP, bool, bool, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
+		return &exec.Result{ExitCode: common.ErrSuccess}
+	}
+	parseCertFn = func([]byte) (*x509.Certificate, error) { return makeValidCert(game.AoE2), nil }
+	sendSetup := func(cmd ipc.SetupCommand) int {
+		var buf bytes.Buffer
+		_ = gob.NewEncoder(&buf).Encode(cmd)
+		return handleSetUp("", gob.NewDecoder(&buf))
+	}
+	if code := sendSetup(ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("127.0.0.2"), Api: true}); code != common.ErrSuccess {
+		t.Fatalf("first (API hosts) setup = %d, want success", code)
+	}
+	if code := sendSetup(ipc.SetupCommand{GameId: game.AoE2, Certificate: []byte("cert"), Api: true}); code != common.ErrSuccess {
+		t.Fatalf("second (API certificate) setup = %d, want success", code)
+	}
+	if code := sendSetup(ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("127.0.0.3"), RootOnly: true}); code != common.ErrSuccess {
+		t.Fatalf("third (server hosts) setup = %d, want success", code)
+	}
+	if code := sendSetup(ipc.SetupCommand{GameId: game.AoE2, Certificate: []byte("cert")}); code != common.ErrSuccess {
+		t.Fatalf("fourth (server certificate) setup = %d, want success", code)
+	}
+	if !mappedIps || !addedCert {
+		t.Fatal("revert flags should be set after hosts and certificate setups")
+	}
+}
+
+func TestHandleSetUpRejectsApiAndRootOnlyTogether(t *testing.T) {
+	resetIPCState(t)
 	var buf bytes.Buffer
-	cmd := ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("127.0.0.2")}
+	cmd := ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("1.1.1.1"), Api: true, RootOnly: true}
 	_ = gob.NewEncoder(&buf).Encode(cmd)
-	dec := gob.NewDecoder(&buf)
-	code := handleSetUp("", dec)
-	if code != internal.ErrIpsAlreadyMapped {
-		t.Fatalf("code=%d want ErrIpsAlreadyMapped", code)
+	code := handleSetUp("", gob.NewDecoder(&buf))
+	if code != internal.ErrHostSetConflict {
+		t.Fatalf("code=%d want ErrHostSetConflict", code)
+	}
+}
+
+// The host-set halves have to reach the elevated side: a flag lost on the way
+// made the API pass map the whole game, and there was no way to run the
+// server's pass without overwriting the API domains back.
+func TestHandleSetUpForwardsApiAndRootOnly(t *testing.T) {
+	resetIPCState(t)
+	type capturedOpts struct {
+		api      bool
+		rootOnly bool
+	}
+	var captured []capturedOpts
+	runSetUpFn = func(_ string, _ net.IP, _ bool, _ bool, api bool, rootOnly bool, _ *x509.Certificate, _ string, _ io.Writer, _ func(*exec.Options)) *exec.Result {
+		captured = append(captured, capturedOpts{api: api, rootOnly: rootOnly})
+		return &exec.Result{ExitCode: common.ErrSuccess}
+	}
+	sendSetup := func(cmd ipc.SetupCommand) int {
+		var buf bytes.Buffer
+		_ = gob.NewEncoder(&buf).Encode(cmd)
+		return handleSetUp("", gob.NewDecoder(&buf))
+	}
+	if code := sendSetup(ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("127.0.0.2"), Api: true}); code != common.ErrSuccess {
+		t.Fatalf("API setup = %d, want success", code)
+	}
+	if code := sendSetup(ipc.SetupCommand{GameId: game.AoE2, IP: net.ParseIP("127.0.0.3"), RootOnly: true}); code != common.ErrSuccess {
+		t.Fatalf("root setup = %d, want success", code)
+	}
+	if len(captured) != 2 {
+		t.Fatalf("captured %d setups, want 2", len(captured))
+	}
+	if !captured[0].api || captured[0].rootOnly {
+		t.Errorf("first setup flags = api:%v rootOnly:%v, want api:true rootOnly:false", captured[0].api, captured[0].rootOnly)
+	}
+	if captured[1].api || !captured[1].rootOnly {
+		t.Errorf("second setup flags = api:%v rootOnly:%v, want api:false rootOnly:true", captured[1].api, captured[1].rootOnly)
 	}
 }
 
@@ -110,19 +176,6 @@ func TestHandleSetUpGameNotSupported(t *testing.T) {
 	code := handleSetUp("", dec)
 	if code != internal.ErrGameNotSupported {
 		t.Fatalf("code=%d want ErrGameNotSupported", code)
-	}
-}
-
-func TestHandleSetUpCertAlreadyAdded(t *testing.T) {
-	resetIPCState(t)
-	addedCert = true
-	var buf bytes.Buffer
-	cmd := ipc.SetupCommand{GameId: game.AoE2, Certificate: []byte("cert")}
-	_ = gob.NewEncoder(&buf).Encode(cmd)
-	dec := gob.NewDecoder(&buf)
-	code := handleSetUp("", dec)
-	if code != internal.ErrCertAlreadyAdded {
-		t.Fatalf("code=%d want ErrCertAlreadyAdded", code)
 	}
 }
 
@@ -172,7 +225,7 @@ func TestHandleSetUpBufferFailure(t *testing.T) {
 func TestHandleSetUpSuccessWithCert(t *testing.T) {
 	resetIPCState(t)
 	parseCertFn = func([]byte) (*x509.Certificate, error) { return makeValidCert(game.AoE2), nil }
-	runSetUpFn = func(string, net.IP, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
+	runSetUpFn = func(string, net.IP, bool, bool, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
 		return &exec.Result{ExitCode: common.ErrSuccess}
 	}
 	var buf bytes.Buffer
@@ -190,7 +243,7 @@ func TestHandleSetUpSuccessWithCert(t *testing.T) {
 
 func TestHandleSetUpSuccessWithIP(t *testing.T) {
 	resetIPCState(t)
-	runSetUpFn = func(string, net.IP, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
+	runSetUpFn = func(string, net.IP, bool, bool, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
 		return &exec.Result{ExitCode: common.ErrSuccess}
 	}
 	var buf bytes.Buffer
@@ -208,7 +261,7 @@ func TestHandleSetUpSuccessWithIP(t *testing.T) {
 
 func TestHandleSetUpResultFailure(t *testing.T) {
 	resetIPCState(t)
-	runSetUpFn = func(string, net.IP, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
+	runSetUpFn = func(string, net.IP, bool, bool, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
 		return &exec.Result{ExitCode: 1, Err: errors.New("fail")}
 	}
 	var buf bytes.Buffer
@@ -228,7 +281,7 @@ func TestHandleSetUpForwardsCanUseInternet(t *testing.T) {
 	resetIPCState(t)
 	parseCertFn = func([]byte) (*x509.Certificate, error) { return nil, nil }
 	gotCanUseInternet := false
-	runSetUpFn = func(_ string, _ net.IP, _ bool, canUseInternet bool, _ *x509.Certificate, _ string, _ io.Writer, _ func(*exec.Options)) *exec.Result {
+	runSetUpFn = func(_ string, _ net.IP, _ bool, canUseInternet bool, _ bool, _ bool, _ *x509.Certificate, _ string, _ io.Writer, _ func(*exec.Options)) *exec.Result {
 		gotCanUseInternet = canUseInternet
 		return &exec.Result{ExitCode: common.ErrSuccess}
 	}
@@ -356,7 +409,7 @@ func TestHandleRevertFailureKeepsState(t *testing.T) {
 
 func TestHandleClientSetupSuccess(t *testing.T) {
 	resetIPCState(t)
-	runSetUpFn = func(string, net.IP, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
+	runSetUpFn = func(string, net.IP, bool, bool, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
 		return &exec.Result{ExitCode: common.ErrSuccess}
 	}
 	parseCertFn = func([]byte) (*x509.Certificate, error) { return makeValidCert(game.AoE2), nil }

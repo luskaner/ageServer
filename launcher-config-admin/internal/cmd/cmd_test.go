@@ -17,6 +17,8 @@ func resetState(t *testing.T) {
 	oldTrust := trustCertsFn
 	oldUntrust := untrustCertsFn
 	oldAddHosts := addHostsFn
+	oldAddApiHosts := addApiHostsFn
+	oldAddRootHosts := addRootHostsFn
 	oldRemoveHosts := removeHostsFn
 	oldFlushDns := flushDnsFn
 	oldFlushCerts := flushCertsFn
@@ -29,6 +31,8 @@ func resetState(t *testing.T) {
 		trustCertsFn = oldTrust
 		untrustCertsFn = oldUntrust
 		addHostsFn = oldAddHosts
+		addApiHostsFn = oldAddApiHosts
+		addRootHostsFn = oldAddRootHosts
 		removeHostsFn = oldRemoveHosts
 		flushDnsFn = oldFlushDns
 		flushCertsFn = oldFlushCerts
@@ -472,5 +476,62 @@ func TestExecuteSetsVersionAndHandlesUnknown(t *testing.T) {
 	_ = code
 	if rootFlagSet == nil {
 		t.Fatal("rootFlagSet should be set")
+	}
+}
+
+// A session that points the API domains at a standalone API server runs two
+// host passes; this binary has to map exactly the half it is told, or the
+// second pass overwrites the first one's domains.
+func TestRunSetUpMapsTheHalfItIsTold(t *testing.T) {
+	resetState(t)
+	initializeFn = func(string) error { return nil }
+	var hostSetsUsed []string
+	addHostsFn = func(net.IP, string, string, string, bool, func() *exec.Result) (bool, error) {
+		hostSetsUsed = append(hostSetsUsed, "all")
+		return true, nil
+	}
+	addApiHostsFn = func(net.IP, string, string, string, bool, func() *exec.Result) (bool, error) {
+		hostSetsUsed = append(hostSetsUsed, "api")
+		return true, nil
+	}
+	addRootHostsFn = func(net.IP, string, string, string, bool, func() *exec.Result) (bool, error) {
+		hostSetsUsed = append(hostSetsUsed, "root")
+		return true, nil
+	}
+	type argsAndWant struct {
+		args []string
+		want string
+	}
+	for _, aw := range []argsAndWant{
+		{args: []string{"--game", "age2", "--ip", "127.0.0.2"}, want: "all"},
+		{args: []string{"--game", "age2", "--ip", "127.0.0.2", "--api"}, want: "api"},
+		{args: []string{"--game", "age2", "--ip", "127.0.0.2", "--rootOnly"}, want: "root"},
+	} {
+		if _, code := runSetUp(aw.args); code != common.ErrSuccess {
+			t.Fatalf("runSetUp(%v) = %d, want success", aw.args, code)
+		}
+	}
+	if len(hostSetsUsed) != 3 {
+		t.Fatalf("map set used %+v, want [all api root]", hostSetsUsed)
+	}
+	for i, want := range []string{"all", "api", "root"} {
+		if hostSetsUsed[i] != want {
+			t.Fatalf("pass %d mapped %s, want %s", i, hostSetsUsed[i], want)
+		}
+	}
+}
+
+// Asking for both halves at once resolves to neither being special, and the
+// caller almost certainly meant one: refuse it instead of mapping everything.
+func TestRunSetUpRefusesApiAndRootOnlyTogether(t *testing.T) {
+	resetState(t)
+	initializeFn = func(string) error { return nil }
+	addHostsFn = func(net.IP, string, string, string, bool, func() *exec.Result) (bool, error) {
+		t.Error("--api --rootOnly was accepted and mapped with the whole set")
+		return true, nil
+	}
+	_, code := runSetUp([]string{"--game", "age2", "--ip", "127.0.0.2", "--api", "--rootOnly"})
+	if code != common.ErrSyntax {
+		t.Fatalf("code=%d want syntax", code)
 	}
 }
