@@ -40,5 +40,13 @@ type ModsConfiguration struct {
 // ModsEnabled reports whether the resolved configuration asked for the API.
 var ModsEnabled bool
 
+// ApiEnabled reports whether the API tree is served at all. With it false the
+// hosts answer those paths with 404 instead of the embedded library or the
+// official service, even when [Mods] is on: the tree is off as a whole.
+//
+// It starts on because that is the documented default of [Api] Enabled; startup
+// replaces it with the resolved value before anything is served.
+var ApiEnabled = true
+
 // ModsConfig is the resolved configuration published at startup.
 var ModsConfig ModsConfiguration

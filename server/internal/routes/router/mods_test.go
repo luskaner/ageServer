@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/luskaner/ageServer/common/game"
@@ -141,23 +140,6 @@ func TestMatchContentStaysLocalWhenModsAreDisabled(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v4/Mods/Games", nil))
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("mods path code = %d, want the mux 404 with the feature off", recorder.Code)
-	}
-}
-
-// TestApiAgeOfEmpiresKeepsTextModerationLocal checks the mock that was already
-// there is still the one answering, not the mods API.
-func TestApiAgeOfEmpiresKeepsTextModerationLocal(t *testing.T) {
-	withMods(t)
-	handler := apiHandler()
-
-	body := strings.NewReader(`{"textType":"SanitisationUsername"}`)
-	request := httptest.NewRequest(http.MethodPost, "/textmoderation", body)
-	request.Header.Set("Content-Type", "application/json")
-	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
-
-	if got := recorder.Body.String(); !strings.Contains(got, "Allow") {
-		t.Fatalf("body = %q, want the local moderation answer", got)
 	}
 }
 
@@ -320,6 +302,87 @@ func TestApiHostsLeaveTheBareOpsPathsToTheHost(t *testing.T) {
 		if recorder.Code != http.StatusNotFound {
 			t.Fatalf("%s code = %d, want the mux 404", path, recorder.Code)
 		}
+	}
+}
+
+// TestApiTreeDisabledAnswers404WithoutForwarding pins [Api] Enabled=false: the
+// mods tree is answered here, not by the embedded library and not by the
+// official service, while MatchContent keeps following its own switch.
+func TestApiTreeDisabledAnswers404WithoutForwarding(t *testing.T) {
+	withMods(t)
+	old := i.ApiEnabled
+	i.ApiEnabled = false
+	t.Cleanup(func() { i.ApiEnabled = old })
+
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("upstream"))
+	})
+	handler := withAgeAPIServer(http.NotFoundHandler(), game.AoE1, upstream, true)
+	for _, path := range []string{"/api/v4/Mods/Games", "/api/v1/Mods/Detail/", "/Poll/list"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("%s code = %d, want 404 with the API tree off", path, recorder.Code)
+		}
+		if recorder.Body.String() == "upstream" {
+			t.Fatalf("%s was forwarded upstream with the API tree off", path)
+		}
+	}
+
+	// The savegame endpoints are governed by [CustomFiles], not by the API
+	// switch: they keep answering locally.
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/MatchContent/", nil)
+	request.Header.Set("Authorization", "Steam1.0 "+modsSteamToken(76561198000000456))
+	handler.ServeHTTP(recorder, request)
+	if got := recorder.Body.String(); got != "/api/MatchContent/" {
+		t.Fatalf("MatchContent reached %q with the API tree off, want the library", got)
+	}
+}
+
+// The library's public ops names are diagnostics of the tree, so turning the
+// tree off takes them with it instead of leaving them to the host handler.
+func TestApiTreeDisabledAnswers404ForTheLibraryOpsRoutes(t *testing.T) {
+	withMods(t)
+	old := i.ApiEnabled
+	i.ApiEnabled = false
+	t.Cleanup(func() { i.ApiEnabled = old })
+
+	handler := withLibraryOps(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("host"))
+	}))
+	for _, path := range []string{"/test/api", "/cacert.pem/api"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound || recorder.Body.String() == "host" {
+			t.Fatalf("%s code = %d body = %q, want a local 404", path, recorder.Code, recorder.Body.String())
+		}
+	}
+}
+
+// Without a library there is no embedded fallback, but the tree is still off:
+// the request must not reach the upstream proxy.
+func TestApiTreeDisabledWithoutLibraryAnswers404(t *testing.T) {
+	oldAPI := i.ModsAPI
+	oldEnabled := i.ModsEnabled
+	oldApiEnabled := i.ApiEnabled
+	i.ModsAPI = nil
+	i.ModsEnabled = false
+	i.ApiEnabled = false
+	t.Cleanup(func() {
+		i.ModsAPI = oldAPI
+		i.ModsEnabled = oldEnabled
+		i.ApiEnabled = oldApiEnabled
+	})
+
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("upstream"))
+	})
+	handler := withAgeAPIServer(http.NotFoundHandler(), game.AoE1, upstream, true)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v4/Mods/Games", nil))
+	if recorder.Code != http.StatusNotFound || recorder.Body.String() == "upstream" {
+		t.Fatalf("code = %d body = %q, want a local 404", recorder.Code, recorder.Body.String())
 	}
 }
 

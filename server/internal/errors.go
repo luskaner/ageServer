@@ -20,4 +20,7 @@ const (
 	ErrEmbeddedBattleServer
 	ErrReplays
 	ErrMods
+	// ErrApiDisabledWithMods is the code for a configuration that turns the API
+	// tree off while asking for the mods API that lives in it.
+	ErrApiDisabledWithMods
 )

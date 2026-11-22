@@ -72,7 +72,10 @@ func (p *Proxy) Check(r *http.Request) bool {
 
 func (p *Proxy) InitializeRoutes(gameId string, next http.Handler) http.Handler {
 	p.initialize()
-	current := p.initializeRoutes(gameId, next)
+	current := next
+	if p.initializeRoutes != nil {
+		current = p.initializeRoutes(gameId, next)
+	}
 	if p.proxy != nil {
 		p.group.HandlePath("/", p.proxy)
 	}

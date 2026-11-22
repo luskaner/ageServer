@@ -336,6 +336,7 @@ func modsConfig(t *testing.T, maxUploadSize string) func(*pflag.FlagSet) (*inter
 				Age1:    internal.Game{Hosts: []string{"127.0.0.1"}},
 			},
 			Announcement: internal.Announcement{Enabled: false},
+			Api:          internal.Api{Enabled: true},
 			Mods: internal.Mods{
 				Enabled:       true,
 				DBPath:        filepath.Join(dir, "mods.db"),
@@ -414,5 +415,46 @@ func TestInitConfigDefaults(t *testing.T) {
 	}
 	if cfg.Mods != wantMods {
 		t.Fatalf("Mods = %+v, want %+v", cfg.Mods, wantMods)
+	}
+	if !cfg.Api.Enabled {
+		t.Fatal("Api.Enabled must default to true")
+	}
+}
+
+// Turning the API tree off while the mods API that lives in it is on is a
+// configuration that cannot run, so it has to fail the boot instead of serving
+// one of the two answers.
+func TestRunRootApiDisabledWithModsFailsTheBoot(t *testing.T) {
+	resetState(t)
+	certificatePairFolderFn = func(string) string { return t.TempDir() }
+	base := modsConfig(t, "1MB")
+	initConfigFn = func(fs *pflag.FlagSet) (*internal.Configuration, string) {
+		cfg, usedFile := base(fs)
+		cfg.Api.Enabled = false
+		return cfg, usedFile
+	}
+	values.Id = "00000000-0000-0000-0000-000000000000"
+	_, code := runRoot(nil)
+	if code != internal.ErrApiDisabledWithMods {
+		t.Fatalf("code=%d, want %d", code, internal.ErrApiDisabledWithMods)
+	}
+}
+
+// With the mods API off, turning the tree off is a valid configuration: the
+// server has nothing left to serve there.
+func TestRunRootApiDisabledWithoutModsBoots(t *testing.T) {
+	resetState(t)
+	certificatePairFolderFn = func(string) string { return t.TempDir() }
+	base := modsConfig(t, "1MB")
+	initConfigFn = func(fs *pflag.FlagSet) (*internal.Configuration, string) {
+		cfg, usedFile := base(fs)
+		cfg.Api.Enabled = false
+		cfg.Mods.Enabled = false
+		return cfg, usedFile
+	}
+	values.Id = "00000000-0000-0000-0000-000000000000"
+	_, code := runRoot(nil)
+	if code == internal.ErrApiDisabledWithMods {
+		t.Fatal("a tree that is off with no mods API must not be a conflict")
 	}
 }

@@ -5,7 +5,6 @@ import (
 
 	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/common/game"
-	"github.com/luskaner/ageServer/server/internal/routes/apiAgeOfEmpires/textmoderation"
 )
 
 type ApiAgeOfEmpires struct {
@@ -22,10 +21,7 @@ func (a *ApiAgeOfEmpires) Initialize(_ string) bool {
 }
 
 func (a *ApiAgeOfEmpires) InitializeRoutes(gameId string, next http.Handler) http.Handler {
-	a.Proxy = NewProxy(a.Name(), func(_ string, _ http.Handler) http.Handler {
-		a.group.HandleFunc("POST", "/textmoderation", textmoderation.TextModeration)
-		return a.group.mux
-	})
+	a.Proxy = NewProxy(a.Name(), nil)
 	// The embedded library is mounted once, around the whole host handler, so
 	// every tree it owns (mods and MatchContent) is handled before the proxy
 	// fallback instead of being registered prefix by prefix. Its ops routes are

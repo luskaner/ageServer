@@ -771,15 +771,20 @@ func TestApiAgeOfEmpires_httptest(t *testing.T) {
 		{"aoe4api", func() Initializer { return NewAoe4ApiAgeOfEmpires() }},
 	} {
 		hdl := factory.init()
-		h := hdl.InitializeRoutes(game.AoE2, nil)
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("next"))
+		})
+		h := hdl.InitializeRoutes(game.AoE2, next)
 		req := httptest.NewRequest("POST", "/textmoderation", strings.NewReader(`{"text":"hello"}`))
 		req.Header.Set("Content-Type", "application/json")
 		req = req.WithContext(context.WithValue(req.Context(), "game", g))
 		rr := httptest.NewRecorder()
 		h.ServeHTTP(rr, req)
-		// may proxy if not handled, but /textmoderation should be handled
-		if rr.Code == http.StatusNotFound {
-			t.Errorf("%s /textmoderation 404", factory.name)
+		// /textmoderation belongs to the embedded library now, not to this
+		// router: without a library the request falls through to the next
+		// handler instead of panicking on a nil one.
+		if rr.Body.String() != "next" {
+			t.Errorf("%s /textmoderation reached %q, want the next handler", factory.name, rr.Body.String())
 		}
 	}
 	// Aoe4Api should only initialize for age4

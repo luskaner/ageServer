@@ -100,6 +100,14 @@ type Mods struct {
 	RequireAuthForRead bool
 }
 
+// Api governs the public API tree of Age of Empires on its hosts. With
+// Enabled=false none of that tree is served by this process: neither the embedded
+// library nor the forward to the official service. The root server's own routes
+// (/test/root, /cacert.pem/root, the signing key and shutdown) are unaffected.
+type Api struct {
+	Enabled bool
+}
+
 type SignConfig struct {
 	// Enabled makes the server re-sign the catalogues it serves instead of
 	// replaying the signatures captured alongside them in resources/responses.
@@ -122,6 +130,7 @@ type Configuration struct {
 	CustomFiles            CustomFiles
 	Replays                Replays
 	Mods                   Mods
+	Api                    Api
 	Sign                   SignConfig
 	Automatch              Automatch
 }

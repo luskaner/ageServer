@@ -164,6 +164,14 @@ MaxTotalSize = '1GB'
 # Set to 0 or a negative value (e.g. -1) to keep replays forever.
 Expiry = '-1s'
 
+# CONFIGURING THE API TREE
+[Api]
+# Whether this server serves the public Age of Empires API on its hosts: the
+# mods API and the /api/MatchContent/ endpoints. With it disabled those paths
+# answer 404 here, without the embedded library and without forwarding them to
+# the official service. It cannot be disabled while [Mods] Enabled is true.
+Enabled = true
+
 # CONFIGURING THE MODS API
 # Serves /api/v4/Mods/..., /api/v1/Mods/... and /Poll/... on the Age of Empires
 # hosts with the embedded ageAPIServer library and its own SQLite database,

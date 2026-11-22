@@ -227,6 +227,12 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 	internal.GeneratePlatformUserId = cfg.GeneratePlatformUserId
 	internal.SignConfigRuntime.Enabled = cfg.Sign.Enabled
 	internal.SignConfigRuntime.PlatformUserIdExceptions = cfg.Sign.PlatformUserIdExceptions
+	internal.ApiEnabled = cfg.Api.Enabled
+	if !cfg.Api.Enabled && cfg.Mods.Enabled {
+		logger.Fail("Mods.Enabled is true but Api.Enabled is false: the mods API lives in the API tree that is turned off.")
+		exitCode = internal.ErrApiDisabledWithMods
+		return
+	}
 	if err = applyCustomFilesConfig(cfg); err != nil {
 		logger.Fail("Invalid CustomFiles configuration: %s", err)
 		exitCode = internal.ErrCustomFiles
@@ -553,6 +559,7 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"Replays.MaxTotalSize":          "1GB",
 		"Replays.Expiry":                "-1s",
 		"Mods.Enabled":                  true,
+		"Api.Enabled":                   true,
 		"Mods.DBPath":                   "resources/mods/mods.db",
 		"Mods.UploadDir":                "resources/mods/uploads",
 		"Mods.MaxUploadSize":            "256MB",

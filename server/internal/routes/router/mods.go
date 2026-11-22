@@ -37,7 +37,18 @@ const matchContentRoot = "/api/MatchContent"
 func withAgeAPIServer(host http.Handler, gameID string, upstream http.Handler, serveMods bool) http.Handler {
 	server := i.ModsAPI
 	if server == nil {
-		return host
+		if !serveMods || i.ApiEnabled {
+			return host
+		}
+		// No library at all and the tree turned off: there is nothing to serve
+		// and nothing worth forwarding, so the paths stop at this server.
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isModsPath(r.URL.Path) {
+				http.NotFound(w, r)
+				return
+			}
+			host.ServeHTTP(w, r)
+		})
 	}
 	local := modsHandler(server.Handler())
 	byClient := clientDispatch(gameID, local, upstream)
@@ -45,8 +56,18 @@ func withAgeAPIServer(host http.Handler, gameID string, upstream http.Handler, s
 		switch {
 		case isMatchContentPath(r.URL.Path):
 			byClient.ServeHTTP(w, r)
-		case serveMods && i.ModsEnabled && isModsPath(r.URL.Path):
-			byClient.ServeHTTP(w, r)
+		case serveMods && isModsPath(r.URL.Path):
+			if !i.ApiEnabled {
+				// Off means off: neither the embedded library nor the official
+				// service, which is what [Mods] Enabled=false alone still allows.
+				http.NotFound(w, r)
+				return
+			}
+			if i.ModsEnabled {
+				byClient.ServeHTTP(w, r)
+				return
+			}
+			host.ServeHTTP(w, r)
 		default:
 			host.ServeHTTP(w, r)
 		}
@@ -77,6 +98,17 @@ var libraryOps = []struct{ public, library string }{
 // Without the library there is nothing to rewrite to, so the public paths are
 // left to the host handler instead of being registered as aliases.
 func withLibraryOps(host http.Handler) http.Handler {
+	if !i.ApiEnabled {
+		// The tree is off as a whole: its diagnostics are not a second way in,
+		// and they must not fall through to the official service either.
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, ok := libraryOpsTarget(r.URL.Path); ok {
+				http.NotFound(w, r)
+				return
+			}
+			host.ServeHTTP(w, r)
+		})
+	}
 	server := i.ModsAPI
 	if server == nil {
 		return host
