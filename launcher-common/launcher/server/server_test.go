@@ -130,13 +130,11 @@ func TestReportIsRaceFreeAndCountsFoundServers(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for round := 1; round <= announceRounds; round++ {
 				report(progress, servers, &mu, round, announceRounds)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if len(rounds) != 4*announceRounds {

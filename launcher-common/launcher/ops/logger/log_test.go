@@ -12,20 +12,16 @@ func TestConcurrentStateAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrent writers (simulating the setup flow).
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for i := range 100 {
 			SetBasePath("/some/path")
 			SetMacOsExclusiveMappings(i%2 == 0)
 			SetCacert(nil)
 		}
-	}()
+	})
 
 	// Concurrent readers (simulating signal-triggered Revert → WriteFileLog).
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for range 100 {
 			_ = GetBasePath()
 			state.mu.RLock()
@@ -33,7 +29,7 @@ func TestConcurrentStateAccess(t *testing.T) {
 			_ = state.MacOsExclusiveMappings
 			state.mu.RUnlock()
 		}
-	}()
+	})
 
 	wg.Wait()
 }
