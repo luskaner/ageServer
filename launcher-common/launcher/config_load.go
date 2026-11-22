@@ -3,6 +3,7 @@ package launcher
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -246,6 +247,26 @@ func ValidateServerStopValue(r Reporter, serverStop string, nonWindowsAdmin bool
 	if validValues := ServerStopValues(nonWindowsAdmin); !validValues.Contains(serverStop) {
 		r.Fail("Invalid value for serverStop (%s): %s", list(validValues), serverStop)
 		return ErrInvalidServerStop
+	}
+	return common.ErrSuccess
+}
+
+// ServerApiSeparate reports whether host names a standalone API server. An
+// empty value and '0.0.0.0' both mean the API embedded in the server.
+func ServerApiSeparate(host string) bool {
+	trimmed := strings.TrimSpace(host)
+	return trimmed != "" && trimmed != netip.IPv4Unspecified().String()
+}
+
+// ValidateApiHostValue checks the host of the API server. '0.0.0.0' and an
+// empty value mean the API embedded in the server; anything else has to be a
+// host name or an IPv4 address, because the launcher resolves it to reach port
+// 443.
+func ValidateApiHostValue(r Reporter, serverApiHost string) (exitCode int) {
+	host := strings.TrimSpace(serverApiHost)
+	if addr, err := netip.ParseAddr(host); err == nil && addr.Is6() {
+		r.Fail("Invalid value for Server.Api.Host: only a host or an IPv4 address is supported, not %s.", host)
+		return ErrInvalidServerApiHost
 	}
 	return common.ErrSuccess
 }

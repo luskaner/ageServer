@@ -71,6 +71,13 @@ AnnouncePorts = [31978]
 # Only IPv4 is supported.
 AnnounceMulticastGroups = ['239.31.97.8']
 
+# The server that answers the Age of Empires API (mods and match content).
+[Server.Api]
+# '0.0.0.0' uses the API embedded in the server above. Any other host or IPv4 address uses a
+# standalone API server on port 443: the launcher checks its /test probe, trusts its /cacert.pem
+# certificate and maps the API domains to it before configuring the rest of the game.
+Host = '0.0.0.0'
+
 # This section only applies if starting the server.
 [Server.BattleServerManager]
 # When to use the manager to start a new Battle Server running the manager; accepted values:

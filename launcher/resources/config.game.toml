@@ -29,6 +29,8 @@ Executable = 'auto'
 # {CertFilePath} will be replaced by the certificate file path.
 # If using this variable, 'Config.Certificate.CanTrustInPc' setting will be ignored.
 # The certificate format is the same as the server stored certificate.
+# {ApiCertFilePath} will be replaced by the standalone API server's certificate file path, when Server.Api.Host
+# configures one. If using this variable, 'Config.Certificate.CanTrustInPc' is ignored for that certificate.
 # {SigKeyFilePath} will be replaced by the public signing key path, to pass to the client launcher as '--sigkey-der'.
 # The key is downloaded from the server ("/sigkey.der") and written to a temporary file.
 # Windows: Path names need to use double backslashes within single quotes or be within double quotes.

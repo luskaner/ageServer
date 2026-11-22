@@ -32,6 +32,15 @@ require admin rights elevation.**
 - Start the Online-like Battle Server.
 - Stop the Online-like Battle Server.
 
+## API server
+
+By default the Age of Empires API (mods and match content) is the one embedded in
+the server. `[Server.Api] Host` points it at a standalone API server instead: the
+launcher checks its `/test` probe, trusts the certificate it serves on
+`/cacert.pem`, maps the API domains to it and then configures the root server's
+own domains. A custom client can read that second certificate from the file named
+by the `{ApiCertFilePath}` placeholder.
+
 ## Client (via [`bin\config`](../launcher-config/README.md))
 
 - Isolated metadata directory (except AoE I).

@@ -2,9 +2,11 @@ package session
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"os/signal"
@@ -36,6 +38,7 @@ import (
 	"github.com/luskaner/ageServer/common/game/executor/custom"
 	commonLogger "github.com/luskaner/ageServer/common/logger"
 	commonProcess "github.com/luskaner/ageServer/common/process"
+	commonServer "github.com/luskaner/ageServer/common/server"
 	launcherCommon "github.com/luskaner/ageServer/launcher-common"
 	"github.com/luskaner/ageServer/launcher-common/launcher"
 	"github.com/luskaner/ageServer/launcher-common/launcher/executor"
@@ -257,8 +260,13 @@ var (
 	configRunBattleServerManagerFn  = config.RunBattleServerManager
 	configStartServerFn             = config.StartServer
 	serverReadCACertFn              = server.ReadCACertificateFromServer
+	serverReadApiCACertFn           = server.ReadApiCACertificateFromServer
+	serverProbeApiFn                = commonServer.ProbeApiServer
 	configMapHostsFn                = config.MapHosts
+	configMapApiHostsFn             = config.MapApiHosts
+	configAddApiCertFn              = config.AddApiCert
 	configAddCertFn                 = config.AddCert
+	configAddApiCACertToGameFn      = config.AddApiCACertToGame
 	configAddSigKeyFn               = config.AddSigKey
 	configIsolateUserDataFn         = config.IsolateUserData
 	configAddCACertToGameFn         = config.AddCACertToGame
@@ -419,6 +427,14 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		return
 	}
 	serverStop := cfg.Server.Stop
+	// Trimmed once, here: validation can be lenient about surrounding spaces,
+	// but everything below (the /test probe, the mapping) works on this value
+	// as it is and a padded host would simply fail to resolve.
+	serverApiHost := strings.TrimSpace(cfg.Server.Api.Host)
+	if ec := launcher.ValidateApiHostValue(reportOrDiscard(), serverApiHost); ec != common.ErrSuccess {
+		atomicExitCode.Store(int32(ec))
+		return
+	}
 	if ec := launcher.ValidateServerStopValue(reportOrDiscard(), serverStop, runtime.GOOS != "windows" && isAdmin); ec != common.ErrSuccess {
 		atomicExitCode.Store(int32(ec))
 		return
@@ -733,6 +749,9 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	customCertFile := slices.ContainsFunc(cfg.Client.Args, func(s string) bool {
 		return strings.Contains(s, "{CertFilePath}")
 	})
+	customApiCertFile := slices.ContainsFunc(cfg.Client.Args, func(s string) bool {
+		return strings.Contains(s, "{ApiCertFilePath}")
+	})
 	customSigKeyFile := slices.ContainsFunc(cfg.Client.Args, func(s string) bool {
 		return strings.Contains(s, "{SigKeyFilePath}")
 	})
@@ -790,6 +809,67 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 			atomicExitCode.Store(int32(launcher.ErrSetupCommand))
 			return
 		}
+	}
+	// A separate API server is configured before the root server is discovered
+	// or started: it is the first thing the game needs, and a failure here
+	// should not leave a server running for a run that stops.
+	apiSeparate := launcher.ServerApiSeparate(serverApiHost)
+	// Declared out here because the game's CA step, much later, adds the API
+	// certificate of its own on a game that keeps a bundle of its own.
+	var apiCertificate *x509.Certificate
+	if apiSeparate {
+		if cancelled("configuring the API server") {
+			return
+		}
+		apiIPs := commonHostOrIpToIpsFn(serverApiHost)
+		if len(apiIPs) == 0 {
+			reportOrDiscard().Fail("Failed to resolve Server.Api.Host %s to an IPv4 address.", serverApiHost)
+			atomicExitCode.Store(int32(launcher.ErrInvalidServerApiHost))
+			return
+		}
+		apiIP := apiIPs[0]
+		apiSearch := launcher.ActivePresenter().Start("Checking API server /test...")
+		apiProgress := launcher.ActivePresenter().BeginProgress()
+		status, probeErr := serverProbeApiFn(serverApiHost, true, nil)
+		if probeErr != nil || status != http.StatusOK {
+			apiProgress.Fail()
+			apiSearch.Fail("API server did not answer /test with 200.")
+			if probeErr != nil {
+				reportOrDiscard().Fault("Error: %s", probeErr.Error())
+			} else {
+				reportOrDiscard().Fault("Status: %d.", status)
+			}
+			atomicExitCode.Store(int32(launcher.ErrApiServerUnreachable))
+			return
+		}
+		apiProgress.Done()
+		apiSearch.Done("API server answered /test.")
+		apiCertificate = serverReadApiCACertFn(serverApiHost)
+		if apiCertificate == nil {
+			reportOrDiscard().Fail("Failed to read the certificate of the API server from %s.", serverApiHost)
+			atomicExitCode.Store(int32(launcher.ErrReadApiCACert))
+			return
+		}
+		if cancelled("mapping the API hosts") {
+			return
+		}
+		atomicExitCode.Store(int32(configMapApiHostsFn(gameId, apiIP, macOsExclusiveMappings, canAddHost, customHostFile)))
+		if atomicExitCode.Load() != int32(common.ErrSuccess) {
+			return
+		}
+		logger.WriteFileLog(gameId, "post api host mapping")
+		if cancelled("trusting the API certificate") {
+			return
+		}
+		atomicExitCode.Store(int32(configAddApiCertFn(gameId, apiCertificate, canTrustCertificate, customApiCertFile, macOsExclusiveMappings)))
+		if atomicExitCode.Load() != int32(common.ErrSuccess) {
+			return
+		}
+		logger.WriteFileLog(gameId, "post add api cert")
+	} else if customApiCertFile && !customCertFile {
+		// No API pass runs (auto) and no root certificate file is written
+		// either, so the client's placeholder has nothing to become.
+		reportOrDiscard().Warn("The client arguments ask for {ApiCertFilePath}, but with the API embedded in the server no separate certificate file is written unless {CertFilePath} is used too; the placeholder is left as-is.")
 	}
 	var serverIP string
 	if serverStart == "auto" {
@@ -941,12 +1021,12 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	if cancelled("changing the machine") {
 		return
 	}
-	atomicExitCode.Store(int32(configMapHostsFn(gameId, serverIP, macOsExclusiveMappings, canAddHost, customHostFile)))
+	atomicExitCode.Store(int32(configMapHostsFn(gameId, serverIP, macOsExclusiveMappings, canAddHost, customHostFile, apiSeparate)))
 	if atomicExitCode.Load() != int32(common.ErrSuccess) {
 		return
 	}
 	logger.WriteFileLog(gameId, "post host mapping")
-	atomicExitCode.Store(int32(configAddCertFn(gameId, uuidMustParseFn(serverArgsValues.Id), serverCertificate, canTrustCertificate, customCertFile, macOsExclusiveMappings)))
+	atomicExitCode.Store(int32(configAddCertFn(gameId, uuidMustParseFn(serverArgsValues.Id), serverCertificate, canTrustCertificate, customCertFile, macOsExclusiveMappings, apiSeparate)))
 	if atomicExitCode.Load() != int32(common.ErrSuccess) {
 		return
 	}
@@ -964,11 +1044,22 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	}
 	logger.WriteFileLog(gameId, "post isolate user data")
 	if gamePath != "" {
-		atomicExitCode.Store(int32(configAddCACertToGameFn(gameId, uuidMustParseFn(serverArgsValues.Id), serverCertificate, configGamePathToGameCertPathFn(executer, gamePath), gameCaCertPath, cfg.Config.Certificate.CanTrustInGame, macOsExclusiveMappings)))
+		atomicExitCode.Store(int32(configAddCACertToGameFn(gameId, uuidMustParseFn(serverArgsValues.Id), serverCertificate, configGamePathToGameCertPathFn(executer, gamePath), gameCaCertPath, cfg.Config.Certificate.CanTrustInGame, macOsExclusiveMappings, apiSeparate)))
 		if atomicExitCode.Load() != int32(common.ErrSuccess) {
 			return
 		}
 		logger.WriteFileLog(gameId, "post add game cert")
+		if apiSeparate {
+			// The game validates what it connects to against its own CA
+			// bundle, so on a game that keeps one the standalone API
+			// server's certificate has to land there too, or the mods
+			// endpoints fail TLS however well the system store was set up.
+			atomicExitCode.Store(int32(configAddApiCACertToGameFn(gameId, apiCertificate, configGamePathToGameCertPathFn(executer, gamePath), gameCaCertPath, cfg.Config.Certificate.CanTrustInGame, macOsExclusiveMappings)))
+			if atomicExitCode.Load() != int32(common.ErrSuccess) {
+				return
+			}
+			logger.WriteFileLog(gameId, "post add game api cert")
+		}
 	}
 	atomicExitCode.Store(int32(configLaunchAgentAndGameFn(executer, customExecutor, cfg.Client.Args, canTrustCertificate, canBroadcastBattleServer, isolationPath)))
 	return

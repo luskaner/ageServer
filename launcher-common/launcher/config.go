@@ -32,6 +32,15 @@ type BattleServerManager struct {
 	Run        string
 }
 
+// ServerApi configures the Age of Empires API separately from the root server.
+//
+// Host is '0.0.0.0' (the default) when the API is the one embedded in the root
+// server, and a host or IPv4 address when a standalone API server answers it on
+// port 443.
+type ServerApi struct {
+	Host string
+}
+
 type Server struct {
 	Executable               `koanf:",squash"`
 	Start                    string
@@ -42,6 +51,7 @@ type Server struct {
 	AnnouncePorts            []int
 	AnnounceMulticastGroups  []string
 	BattleServerManager      BattleServerManager
+	Api                      ServerApi
 }
 
 type Client struct {

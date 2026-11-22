@@ -27,7 +27,7 @@ func TestAddCertRemovesTempFileWhenSetupFails(t *testing.T) {
 	}
 
 	c := &Config{Report: launcher.Discard{}}
-	if exitCode := c.AddCert("age2", uuid.Nil(), &x509.Certificate{Raw: []byte{0x30, 0x01}}, "local", true, false); exitCode != launcher.ErrConfigCertAdd {
+	if exitCode := c.AddCert("age2", uuid.Nil(), &x509.Certificate{Raw: []byte{0x30, 0x01}}, "local", true, false, false); exitCode != launcher.ErrConfigCertAdd {
 		t.Fatalf("AddCert = %d, want ErrConfigCertAdd", exitCode)
 	}
 	if writtenPath == "" {
@@ -46,7 +46,7 @@ func TestAddCertKeepsTempFileOnSuccess(t *testing.T) {
 	runCertSetupFn = func(*executor.ConfigSetupOptions) *exec.Result { return &exec.Result{} }
 
 	c := &Config{Report: launcher.Discard{}}
-	exitCode := c.AddCert("age2", uuid.Nil(), &x509.Certificate{Raw: []byte{0x30, 0x01}}, "local", true, false)
+	exitCode := c.AddCert("age2", uuid.Nil(), &x509.Certificate{Raw: []byte{0x30, 0x01}}, "local", true, false, false)
 	if exitCode != common.ErrSuccess {
 		t.Fatalf("AddCert = %d, want success", exitCode)
 	}

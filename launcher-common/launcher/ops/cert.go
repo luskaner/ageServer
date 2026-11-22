@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -61,8 +62,134 @@ func checkCertMatch(r launcher.Reporter, serverId uuid.UUID, gameId string, serv
 	return
 }
 
-func (c *Config) AddCert(gameId string, serverId uuid.UUID, serverCertificate *x509.Certificate, canAdd string, customCertFile bool, macOsExclusiveMappings bool) (errorCode int) {
-	hosts := common.AllHosts(gameId, macOsExclusiveMappings)
+// AddApiCert trusts the certificate of a standalone API server, or leaves it in
+// a file for a custom launcher. It is AddCert's counterpart for a server that
+// publishes no announcement: the post-install check is the API's own liveness
+// probe, answered over TLS the trust store now accepts.
+func (c *Config) AddApiCert(gameId string, apiCertificate *x509.Certificate, canAdd string, customCertFile bool, macOsExclusiveMappings bool) (errorCode int) {
+	hosts := common.ApiHosts(gameId, macOsExclusiveMappings)
+	if !customCertFile {
+		// A certificate that is already trusted is left alone, and a run that
+		// was not allowed to trust one has to find it trusted already: adding
+		// it again would either duplicate it or write to a store that does not
+		// exist.
+		alreadyTrusted := true
+		for _, host := range hosts {
+			if status, probeErr := server2.ProbeApiServer(host, false, nil); probeErr != nil || status != http.StatusOK {
+				alreadyTrusted = false
+				break
+			}
+		}
+		if alreadyTrusted {
+			return common.ErrSuccess
+		}
+		if canAdd == "false" {
+			c.report().Fail("The API server certificate must have been trusted manually: canTrustCertificate is false and %s does not accept it.", hosts[0])
+			return launcher.ErrConfigCert
+		}
+	}
+	var certMsg string
+	var addUserCertData []byte
+	var addLocalCertData []byte
+	if customCertFile {
+		certFile, err := os.CreateTemp("", common.Name+"_api_cert_*.pem")
+		if err != nil {
+			return launcher.ErrConfigCertAdd
+		}
+		if err = certFile.Close(); err != nil {
+			return launcher.ErrConfigCertAdd
+		}
+		c.apiCertFilePath, _ = filepath.Abs(certFile.Name())
+		addLocalCertData = apiCertificate.Raw
+		certMsg = fmt.Sprintf("Saving API server certificate to '%s' file", certFile.Name())
+		// Remove the temp file if the setup below fails before consuming it.
+		defer func() {
+			if errorCode != 0 {
+				_ = os.Remove(c.apiCertFilePath)
+			}
+		}()
+	} else {
+		certMsg = fmt.Sprintf("Adding API server certificate to %s store", canAdd)
+		if runtime.GOOS == "darwin" || canAdd == "user" {
+			certMsg += ", accept the dialog"
+		}
+		if canAdd == "local" {
+			addLocalCertData = apiCertificate.Raw
+		} else {
+			addUserCertData = apiCertificate.Raw
+		}
+	}
+	certMsg += "..."
+	c.report().Step("%s", certMsg)
+	var err error
+	var setupErr error
+	if err = commonLogger.FileLogger.Buffer("config_setup_api_CA_store", func(writer io.Writer) {
+		cfgSetupOpts := executor.NewConfigSetupOptions()
+		cfgSetupOpts.Out = writer
+		cfgSetupOpts.OptionsFn = func(options *exec.Options) {
+			commonLogger.Println("run config setup for API CA store cert", options.String())
+		}
+		cfgSetupOpts.GameId = gameId
+		cfgSetupOpts.AddUserCertData = addUserCertData
+		cfgSetupOpts.AddLocalCertData = addLocalCertData
+		cfgSetupOpts.ApiCertFilePath = c.apiCertFilePath
+		cfgSetupOpts.AgentEndOnError = !c.RequiresConfigRevert()
+		if result := runCertSetupFn(cfgSetupOpts); !result.Success() {
+			if customCertFile {
+				c.report().Fail("Failed to save API server certificate to file")
+			} else {
+				c.report().Fail("Failed to trust API server certificate")
+			}
+			errorCode = launcher.ErrConfigCertAdd
+			if result.Err != nil {
+				c.report().Fault("Error message: %s", result.Err.Error())
+				setupErr = result.Err
+			}
+			if result.ExitCode != common.ErrSuccess {
+				c.report().Fault("Exit code: %d.", result.ExitCode)
+				setupErr = fmt.Errorf("exit code: %d", result.ExitCode)
+			}
+		}
+	}); err != nil {
+		return common.ErrFileLog
+	}
+	if setupErr != nil {
+		return launcher.ErrConfigCertAdd
+	}
+	if !customCertFile {
+		for _, host := range hosts {
+			status, probeErr := server2.ProbeApiServer(host, false, nil)
+			if probeErr != nil || status != http.StatusOK {
+				c.report().Fail("%s", host+" must point to the API server and it must be trusted at this point.")
+				if probeErr != nil {
+					c.report().Fault("Error: %s", probeErr.Error())
+				} else {
+					c.report().Fault("Status: %d.", status)
+				}
+				errorCode = launcher.ErrServerConnectSecure
+				return
+			}
+		}
+	}
+	return
+}
+
+// rootCertDomains chooses the hosts the root server's certificate passes may
+// look at. They are AllHosts by default; with a separate API server they
+// shrink to the root's own half, because an API domain resolves to the
+// standalone API server, which publishes neither the announcement this check
+// identifies the server by nor a /cacert.pem/root its certificate could be
+// compared against, so every check against them would fail no matter how well
+// the setup went.
+func rootCertDomains(gameId string, macOsExclusiveMappings bool, apiSeparate bool) []string {
+	if apiSeparate {
+		return common.RootHosts(gameId, macOsExclusiveMappings)
+	}
+	return common.AllHosts(gameId, macOsExclusiveMappings)
+}
+
+func (c *Config) AddCert(gameId string, serverId uuid.UUID, serverCertificate *x509.Certificate, canAdd string, customCertFile bool, macOsExclusiveMappings bool, apiSeparate bool) (errorCode int) {
+	hosts := rootCertDomains(gameId, macOsExclusiveMappings, apiSeparate)
 	var addCert bool
 	if customCertFile {
 		addCert = true

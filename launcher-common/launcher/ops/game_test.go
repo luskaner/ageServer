@@ -56,7 +56,23 @@ func TestClientArgsValuesOfferEveryFileTheRunHas(t *testing.T) {
 			t.Errorf("values[%q] = %q, want %q", name, values[name], want)
 		}
 	}
-	if len(values) != 3 {
-		t.Errorf("values = %v, want only the three paths the run has", values)
+	// With the API embedded there is no API certificate file of its own: the
+	// placeholder must resolve to the root server's PEM, not stay unreplaced
+	// for the client to read as a literal path.
+	if values["ApiCertFilePath"] != values["CertFilePath"] {
+		t.Errorf("values[ApiCertFilePath] = %q, want %q (the embedded API shares the root server's certificate)", values["ApiCertFilePath"], values["CertFilePath"])
+	}
+	if len(values) != 4 {
+		t.Errorf("values = %v, want the three paths the run has plus the API certificate", values)
+	}
+
+	c.apiCertFilePath = filepath.Join("tmp", "api-cert.pem")
+	values = c.clientArgsValues()
+	wantApi := c.apiCertFilePath
+	if runtime.GOOS == "windows" {
+		wantApi = strings.ReplaceAll(wantApi, `\`, `\\`)
+	}
+	if values["ApiCertFilePath"] != wantApi {
+		t.Errorf("values[ApiCertFilePath] = %q, want %q (the separate pass produced its own file)", values["ApiCertFilePath"], wantApi)
 	}
 }

@@ -66,6 +66,14 @@ func (c *Config) clientArgsValues() map[string]string {
 	}
 	add("HostFilePath", c.hostFilePath)
 	add("CertFilePath", c.certFilePath)
+	// With the API embedded in the server (no separate API pass ran) the API
+	// server is the root server, so its certificate is the same PEM: reuse
+	// that file instead of leaving the placeholder unreplaced.
+	if c.apiCertFilePath != "" {
+		add("ApiCertFilePath", c.apiCertFilePath)
+	} else {
+		add("ApiCertFilePath", c.certFilePath)
+	}
 	// Converted before add escapes it: the client's signing key DLL reads this
 	// one from a command line it splits on spaces, so it may need the short form
 	// of the path, whose separators must not then be doubled twice.

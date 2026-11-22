@@ -68,7 +68,20 @@ func fetchFromServer(host string, path string) (body []byte, err error) {
 }
 
 func ReadCACertificateFromServer(host string) *x509.Certificate {
-	bodyBytes, err := fetchFromServer(host, common.CACertPath)
+	return ReadCACertificateFromServerPath(host, common.CACertPath)
+}
+
+// ReadApiCACertificateFromServer reads the certificate a standalone API server
+// serves on its own route, which is not this server's /cacert.pem/root.
+func ReadApiCACertificateFromServer(host string) *x509.Certificate {
+	return ReadCACertificateFromServerPath(host, common.ApiCACertPath)
+}
+
+// ReadCACertificateFromServerPath reads a PEM certificate from a path the
+// server serves it on. The path is a parameter because the root server and the
+// API server publish their certificates under different names.
+func ReadCACertificateFromServerPath(host string, path string) *x509.Certificate {
+	bodyBytes, err := fetchFromServer(host, path)
 	if err != nil {
 		commonLogger.Println("ReadCACertificateFromServer error:", err)
 		return nil

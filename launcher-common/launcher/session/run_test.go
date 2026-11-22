@@ -32,7 +32,7 @@ func TestRunSessionStopsWhenCancelled(t *testing.T) {
 			return common.ErrSuccess, "192.168.1.10"
 		},
 		serverReadCACertFnVal: func(string) *x509.Certificate { return nil },
-		configMapHostsFnVal: func(string, string, bool, bool, bool) int {
+		configMapHostsFnVal: func(string, string, bool, bool, bool, bool) int {
 			mapHostsCalls.Add(1)
 			return common.ErrSuccess
 		},
