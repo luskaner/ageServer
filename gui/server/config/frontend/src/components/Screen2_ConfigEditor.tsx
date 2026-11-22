@@ -99,6 +99,9 @@ function toServiceConfiguration(config: AppConfig): Configuration {
             MaxTotalSize: '1GB',
             Expiry: '-1s',
         },
+        Api: config.Api ?? {
+            Enabled: true,
+        },
         Mods: config.Mods ?? {
             Enabled: true,
             DBPath: 'resources/mods/mods.db',
@@ -171,6 +174,7 @@ const AUTH_OPTIONS = [
     if (field.startsWith('Announcement.')) return 'announcement';
     if (field.startsWith('CustomFiles.')) return 'customFiles';
     if (field.startsWith('Mods.')) return 'mods';
+    if (field.startsWith('Api.')) return 'mods';
     if (field.startsWith('Replays.')) return 'replays';
     if (field.startsWith('Sign.')) return 'sign';
     return 'general';
@@ -944,6 +948,14 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                     enabled.
                                 </Text>
                             </InfoBar>
+                            <SwitchSettingCard
+                                icon={<IconApi size={20} stroke={1.6} />}
+                                title="API tree"
+                                description="Serve the Age of Empires API on its hosts. Off answers those paths with 404 instead of the embedded library or the official service; it cannot be off while the mods API is on."
+                                error={allErrors['Api.Enabled']}
+                                ariaLabel="API tree"
+                                {...switchProps('Api.Enabled')}
+                            />
                             <AutoManualCard
                                 icon={<IconDatabase size={20} stroke={1.6} />}
                                 title="Database file"

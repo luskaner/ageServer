@@ -294,6 +294,7 @@ func configurationDocument(content []byte, configuration Configuration) ([]byte,
 		{"Mods", "UploadDir", tomlString(configuration.Mods.UploadDir)},
 		{"Mods", "MaxUploadSize", tomlString(configuration.Mods.MaxUploadSize)},
 		{"Mods", "RequireAuthForRead", strconv.FormatBool(configuration.Mods.RequireAuthForRead)},
+		{"Api", "Enabled", strconv.FormatBool(configuration.Api.Enabled)},
 	}
 	// The server reads Authentication at the root level. The shipped template
 	// used to keep it under [Internet], so an existing copy there is kept in
@@ -442,6 +443,9 @@ func isConfigurationField(section string, key string) bool {
 			return true
 		}
 	}
+	if section == "Api" {
+		return key == "Enabled"
+	}
 	if strings.HasPrefix(section, "Games.") {
 		if key == "Hosts" {
 			return true
@@ -507,6 +511,9 @@ func serverDefaults() Configuration {
 			DBPath:        "resources/mods/mods.db",
 			UploadDir:     "resources/mods/uploads",
 			MaxUploadSize: "256MB",
+		},
+		Api: ApiConfiguration{
+			Enabled: true,
 		},
 	}
 }
@@ -936,6 +943,12 @@ func validateConfiguration(config *Configuration) []ValidationError {
 	validationErrors = append(validationErrors, validateCustomFiles(config)...)
 	validationErrors = append(validationErrors, validateReplays(config)...)
 	validationErrors = append(validationErrors, validateMods(config)...)
+	if !config.Api.Enabled && config.Mods.Enabled {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:   "Api.Enabled",
+			Message: "The mods API cannot run while the API tree is disabled",
+		})
+	}
 	validationErrors = append(validationErrors, validateEmbeddedBattleServers(config)...)
 
 	for index := range validationErrors {

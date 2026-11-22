@@ -10,6 +10,7 @@ export {
 
 export type {
     AnnouncementConfig,
+    ApiConfiguration,
     BattleServerConfig,
     ConfigFile,
     Configuration,

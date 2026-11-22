@@ -65,6 +65,9 @@ function toEditorConfig(config: Configuration): AppConfig {
             MaxTotalSize: '1GB',
             Expiry: '-1s',
         },
+        Api: {
+            Enabled: config.Api?.Enabled ?? true,
+        },
         Mods: {
             Enabled: config.Mods?.Enabled ?? true,
             DBPath: config.Mods?.DBPath ?? 'resources/mods/mods.db',

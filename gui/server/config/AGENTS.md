@@ -24,6 +24,7 @@ The model in `models.go` mirrors `server/internal/config.go`. Do not invent keys
 | `[Announcement]` | `Enabled`, `Multicast`, `Port`, `MulticastGroup`. |
 | `[CustomFiles]` | `Enabled`, `Folder`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. These are the `/api/MatchContent/` endpoints; `Folder` defaults to `resources/custom-files`, relative to the server directory. |
 | `[Mods]` | `Enabled`, `DBPath`, `UploadDir`, `MaxUploadSize`, `RequireAuthForRead`. The same library instance serves `/api/MatchContent/`, configured by `[CustomFiles]`; `DBPath` and `UploadDir` default under `resources/mods`. |
+| `[Api]` | `Enabled`, the master switch of the Age of Empires API tree. Off, those paths answer 404 here instead of the embedded library or the official service. It cannot be off while `[Mods] Enabled` is true. |
 | `[Replays]` | Replays uploaded by the game: `Enabled`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. They are always stored under `<resources>/responses/cloud/<game>/replays`, so there is no `Folder`. `Expiry` `<= 0` keeps replays forever. |
 
 ### Battle servers
@@ -154,9 +155,9 @@ settings must stay byte-identical.
 `resources/custom-files`/`32MB`/`256MB`/`12h`, `Mods` enabled with
 `resources/mods/mods.db`/`resources/mods/uploads`/`256MB` and
 `RequireAuthForRead = false`, and `Hosts = ['0.0.0.0']` for every game.
-`Replays` defaults to enabled with `32MB`/`1GB`/`-1s`. The default folders are
-relative paths resolved against the server's working directory, where
-`resources` lives.
+`Replays` defaults to enabled with `32MB`/`1GB`/`-1s`, and `Api.Enabled` defaults
+to `true`. The default folders are relative paths resolved against the server's
+working directory, where `resources` lives.
 
 ## Validation
 
@@ -184,7 +185,9 @@ do not. It mirrors what the server would do at startup:
   same rules (`Expiry` may be `0` or negative to keep replays forever);
 - the mods request size (`MaxUploadSize`) while `[Mods]` is enabled, with the
   same size rules. A disabled `[Mods]` section is ignored by the server, so it
-  does not block saving.
+  does not block saving;
+- `Api.Enabled = false` while `[Mods] Enabled` is true: the mods API lives in
+  the tree the switch turns off, and the server refuses to boot with both.
 
 ## Look and feel
 

@@ -8,6 +8,15 @@ export interface AnnouncementConfig {
     "MulticastGroup": string;
 }
 
+/**
+ * ApiConfiguration is the master switch of the Age of Empires API tree. With
+ * it off the server answers those paths with 404 instead of the embedded
+ * library or the official service.
+ */
+export interface ApiConfiguration {
+    "Enabled": boolean;
+}
+
 export interface BattleServerConfig {
     "Region": string;
     "Name": string;
@@ -38,6 +47,7 @@ export interface Configuration {
     "CustomFiles": CustomFilesConfiguration;
     "Replays": ReplaysConfiguration;
     "Mods": ModsConfiguration;
+    "Api": ApiConfiguration;
 }
 
 /**

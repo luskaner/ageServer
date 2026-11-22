@@ -81,6 +81,10 @@ export interface ModsConfig {
   RequireAuthForRead: boolean;
 }
 
+export interface ApiConfig {
+  Enabled: boolean;
+}
+
 export interface AppConfig {
   Log: boolean;
   GeneratePlatformUserId: boolean;
@@ -92,6 +96,7 @@ export interface AppConfig {
   CustomFiles: CustomFilesConfig;
   Replays: ReplaysConfig;
   Mods: ModsConfig;
+  Api: ApiConfig;
 }
 
 export interface ValidationErrors {
@@ -134,6 +139,7 @@ export function fieldLabel(field: string): string {
   if (field === 'Replays.MaxTotalSize') return 'Replay total size limit';
   if (field === 'Replays.Expiry') return 'Replay expiry';
   if (field === 'Mods.Enabled') return 'Mods API';
+  if (field === 'Api.Enabled') return 'API tree';
   if (field === 'Mods.DBPath') return 'Mods database file';
   if (field === 'Mods.UploadDir') return 'Mods upload folder';
   if (field === 'Mods.MaxUploadSize') return 'Maximum mods request size';

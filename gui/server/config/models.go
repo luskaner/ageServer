@@ -29,6 +29,14 @@ type Configuration struct {
 	CustomFiles            CustomFilesConfiguration `toml:"CustomFiles" json:"CustomFiles"`
 	Replays                ReplaysConfiguration     `toml:"Replays" json:"Replays"`
 	Mods                   ModsConfiguration        `toml:"Mods" json:"Mods"`
+	Api                    ApiConfiguration         `toml:"Api" json:"Api"`
+}
+
+// ApiConfiguration is the master switch of the Age of Empires API tree. With
+// it off the server answers those paths with 404 instead of the embedded
+// library or the official service.
+type ApiConfiguration struct {
+	Enabled bool `toml:"Enabled" json:"Enabled"`
 }
 
 type GamesConfiguration struct {
