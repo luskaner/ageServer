@@ -331,7 +331,7 @@ type MainMatchmaking struct {
 	matches map[int32]*automatchMatch
 	// waits holds the most recent observed queue waits per queue id; it feeds
 	// the estimated wait reported to searching clients.
-	waits map[int32][]time.Duration
+	waits map[int32][]automatchWaitSample
 }
 
 func (mm *MainMatchmaking) Initialize(game Game) {
@@ -342,7 +342,7 @@ func (mm *MainMatchmaking) Initialize(game Game) {
 	mm.byUser = make(map[int32]*automatchQueueEntry)
 	mm.byPoll = make(map[int32]*automatchQueueEntry)
 	mm.matches = make(map[int32]*automatchMatch)
-	mm.waits = make(map[int32][]time.Duration)
+	mm.waits = make(map[int32][]automatchWaitSample)
 	if game == nil {
 		mm.catalog = newEmptyQueueCatalog("")
 		return
@@ -398,6 +398,8 @@ func (mm *MainMatchmaking) Poll(session Session, request *AutomatchPollingReques
 	if newSearch && entry.MatchID == 0 {
 		entry.CreatedAt = time.Now()
 		entry.QueuedAt = time.Now()
+		// A snapshot taken when the search starts: this entry has not joined
+		// mm.queue yet and only a new search refreshes the value.
 		entry.EstimatedWaitMs = mm.estimatedWaitMillisLocked(matchTypes)
 		entry.waitRecorded = false
 		entry.unknownLogged = false
@@ -1881,59 +1883,126 @@ func (mm *MainMatchmaking) newPollIDLocked() int32 {
 
 // Estimated wait bounds. The window keeps the estimate responsive to recent
 // population changes and maxEstimatedWait keeps it inside the int32 slot.
+// automatchWaitTTL bounds how long a sample may describe the queue: a 2-8
+// player LAN can sit idle for hours, so last night's averages must expire
+// instead of being reported tonight. When every sample is stale the estimate
+// degrades to 0 (unknown), not to a stale number.
 const (
 	automatchWaitWindow = 20
 	maxEstimatedWait    = 24 * time.Hour
+	automatchWaitTTL    = 30 * time.Minute
 )
 
-// recordWaitLocked feeds the wait estimator with how long each player of a
+// automatchWaitSample is one observed queue wait and when it was recorded, so
+// the window can drop samples that no longer describe the queue.
+type automatchWaitSample struct {
+	wait       time.Duration
+	recordedAt time.Time
+}
+
+// automatchWaitUnit groups the entries that share one queue search: a party
+// counts once, not once per member.
+type automatchWaitUnit struct {
+	queuedAt time.Time
+	entries  []*automatchQueueEntry
+}
+
+// recordWaitLocked feeds the wait estimator with how long each unit of a
 // freshly created match spent in the queue. QueuedAt survives requeues, so it
-// is the true start of the search.
+// is the true start of the search. A sample is recorded per matchmaking unit
+// (a party is one unit, using its oldest member's QueuedAt) rather than per
+// entry, so a four-stack does not outweigh four solo players in the history of
+// the queue it plays.
 func (mm *MainMatchmaking) recordWaitLocked(queue *automatchQueue, players []*automatchQueueEntry, now time.Time) {
 	if queue == nil {
 		return
 	}
 	if mm.waits == nil {
-		mm.waits = make(map[int32][]time.Duration)
+		mm.waits = make(map[int32][]automatchWaitSample)
 	}
+
+	units := make(map[int64]*automatchWaitUnit, len(players))
+	order := make([]int64, 0, len(players))
 	for _, player := range players {
 		if player.waitRecorded || player.QueuedAt.IsZero() {
 			continue
 		}
-		player.waitRecorded = true
-		wait := now.Sub(player.QueuedAt)
-		if wait < 0 {
-			wait = 0
+		key := int64(player.UserID)
+		if player.PartySessionID > 0 && mm.usesParties() {
+			key = player.PartySessionID
 		}
-		samples := append(mm.waits[queue.ID], wait)
-		if len(samples) > automatchWaitWindow {
-			samples = samples[len(samples)-automatchWaitWindow:]
+		unit, exists := units[key]
+		if !exists {
+			unit = &automatchWaitUnit{queuedAt: player.QueuedAt}
+			units[key] = unit
+			order = append(order, key)
 		}
-		mm.waits[queue.ID] = samples
+		if player.QueuedAt.Before(unit.queuedAt) {
+			unit.queuedAt = player.QueuedAt
+		}
+		unit.entries = append(unit.entries, player)
 	}
+
+	samples := mm.waits[queue.ID]
+	kept := samples[:0]
+	for _, sample := range samples {
+		if now.Sub(sample.recordedAt) <= automatchWaitTTL {
+			kept = append(kept, sample)
+		}
+	}
+	samples = kept
+	for _, key := range order {
+		unit := units[key]
+		for _, entry := range unit.entries {
+			entry.waitRecorded = true
+		}
+		samples = append(samples, automatchWaitSample{
+			wait:       max(now.Sub(unit.queuedAt), 0),
+			recordedAt: now,
+		})
+	}
+	if len(samples) > automatchWaitWindow {
+		samples = samples[len(samples)-automatchWaitWindow:]
+	}
+	mm.waits[queue.ID] = samples
 }
 
 // estimatedWaitMillisLocked is the value of polling response slot 2. The
 // client renders it as an H:MM:SS estimated wait (e.g. 180000 renders 00:03:00
 // and 567932821 renders 157:45:32), so the official service's tokens observed
 // in the captures (180000, 33587, 1001, 1267, 5679) are really wait estimates
-// in milliseconds. The estimate is the average of the latest waits observed
-// in the requested queues; with several queues the shortest average wins since
-// the player is matched by whichever fills first. Queues that have no history
-// yet are ignored and 0 (00:00:00) is reported when nothing is known.
+// in milliseconds. The estimate is the average of the waits observed recently
+// in the requested queues; samples older than automatchWaitTTL and queues
+// without history are ignored, and 0 (00:00:00) is reported when nothing is
+// known. It is computed once, when the search starts, from history alone: the
+// players already queued and their skill do not enter it yet.
+//
+// It is deliberately optimistic. Samples come from matches that formed, so
+// their mean is about half the interval it took the queue to fill (the first
+// member waited nearly all of it, the last one almost nothing), while a new
+// arrival waits closer to the time until the queue fills again. With several
+// queues the shortest average wins because the player is matched by whichever
+// fills first, which compounds that optimism: the client's number is a
+// reassurance, not an expectation.
 func (mm *MainMatchmaking) estimatedWaitMillisLocked(matchTypes []int32) int32 {
 	var best time.Duration
 	found := false
+	now := time.Now()
 	for _, matchType := range matchTypes {
 		samples := mm.waits[matchType]
-		if len(samples) == 0 {
+		var total time.Duration
+		count := 0
+		for _, sample := range samples {
+			if now.Sub(sample.recordedAt) > automatchWaitTTL {
+				continue
+			}
+			total += sample.wait
+			count++
+		}
+		if count == 0 {
 			continue
 		}
-		var total time.Duration
-		for _, sample := range samples {
-			total += sample
-		}
-		average := total / time.Duration(len(samples))
+		average := total / time.Duration(count)
 		if !found || average < best {
 			best = average
 			found = true
