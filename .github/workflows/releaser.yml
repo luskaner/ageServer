@@ -62,3 +62,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          # GoReleaser otherwise derives the tag from `git tag --points-at HEAD`
+          # sorted with -version:refname, which returns a prerelease tag first
+          # when a release and its rc point at the same commit (v2.0.0 vs
+          # v2.0.0-rc.1). Pin it to the tag that triggered this run.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
