@@ -85,7 +85,18 @@ func GameHosts(gameId string, withMacOsExclusive bool) (domains []string) {
 	return domains
 }
 
+// AllHosts is every domain the game talks to: the ones the root server answers
+// and the ones the API answers. It is composed from the two halves so that the
+// halves and the whole cannot diverge.
 func AllHosts(gameId string, withMacOsExclusive bool) (domains []string) {
+	domains = RootHosts(gameId, withMacOsExclusive)
+	domains = append(domains, ApiHosts(gameId, withMacOsExclusive)...)
+	return
+}
+
+// RootHosts are the domains the root server answers itself: the game's own
+// hosts, its PlayFab API and the CDN.
+func RootHosts(gameId string, withMacOsExclusive bool) (domains []string) {
 	domains = GameHosts(gameId, withMacOsExclusive)
 	switch gameId {
 	case commonGame.AoM:
@@ -94,12 +105,17 @@ func AllHosts(gameId string, withMacOsExclusive bool) (domains []string) {
 		domains = append(domains, "ed603"+playFabSuffix)
 	}
 	domains = append(domains, CdnAgeOfEmpires)
-	if gameId == commonGame.AoE4 {
-		domains = append(domains, Aoe4ApiAgeOfEmpires)
-	} else {
-		domains = append(domains, ApiAgeOfEmpires)
-	}
 	return
+}
+
+// ApiHosts are the domains of the Age of Empires API: the mods and match
+// content tree. They can be answered by this server or by a standalone API
+// server, which is why they are separate from the rest.
+func ApiHosts(gameId string, _ bool) (domains []string) {
+	if gameId == commonGame.AoE4 {
+		return []string{Aoe4ApiAgeOfEmpires}
+	}
+	return []string{ApiAgeOfEmpires}
 }
 
 func generateDomains(gameId string) (domains []string) {

@@ -67,6 +67,39 @@ func CheckConnectionFromServer(host string, insecureSkipVerify bool, rootCAs *x5
 	return err
 }
 
+// ProbeApiServer asks the liveness probe of a standalone API server and returns
+// the status it answered with. A server that is up answers 200; the launcher
+// reads anything else as a server it cannot use.
+//
+// It is the API's own probe and not this server's announce route: a standalone
+// ageAPIServer publishes no announcement, so growing the probe into one would
+// make the check depend on something the API server does not have.
+func ProbeApiServer(host string, insecureSkipVerify bool, rootCAs *x509.CertPool) (status int, err error) {
+	ips := common.HostOrIpToIps(host)
+	var ip string
+	if len(ips) == 0 {
+		ip = host
+	} else {
+		ip = ips[0]
+	}
+	client := newHTTPClientFn(host, insecureSkipVerify, rootCAs)
+	u := url.URL{Scheme: "https", Host: net.JoinHostPort(ip, serverPort), Path: "/" + common.ApiTestPath}
+	var req *http.Request
+	if req, err = http.NewRequest("GET", u.String(), nil); err != nil {
+		return
+	}
+	req.Header.Set("User-Agent", common.UserAgent())
+	req.Host = host
+	var resp *http.Response
+	if resp, err = client.Do(req); err != nil {
+		return
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+	return resp.StatusCode, nil
+}
+
 func LanServerHost(id uuid.UUID, gameTitle string, host string, insecureSkipVerify bool, rootCAs *x509.CertPool) (ok bool) {
 	ipAddrs := common.HostOrIpToIps(host)
 	if len(ipAddrs) == 0 {

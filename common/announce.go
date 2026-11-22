@@ -8,6 +8,11 @@ const AnnouncePort = 31978
 // library's diagnostics share one namespace.
 const AnnouncePath = "test/root"
 
+// ApiTestPath is the liveness probe of the API server, the library's own route.
+// A standalone API server answers it on port 443 and it is what the launcher
+// checks before trusting its certificate.
+const ApiTestPath = "test"
+
 const AnnounceMulticastGroup = "239.31.97.8"
 const AnnounceHeader = Name
 const IdHeader = "X-Id"

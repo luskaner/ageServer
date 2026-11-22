@@ -256,7 +256,11 @@ func missingIpMappings(mappings *HostMappings, hostFile *os.File) (restLines []L
 		}
 		if len(keptHosts) > 0 {
 			nl := Line{ip: lineIp, hosts: keptHosts}
-			if removedHosts {
+			// A line this package wrote keeps its mark even when this pass did
+			// not touch any of its hosts: the mapping may belong to the other
+			// pass (API and root domains share one file), and the revert has to
+			// find it.
+			if removedHosts || lineParsed.Own() {
 				nl = nl.WithOwnMarking()
 			}
 			restLines = append(restLines, nl)
@@ -486,7 +490,22 @@ func ensureHostsBackup(current []byte) error {
 	return createHostsBackup(current)
 }
 
+// AddHosts maps every domain of the game, API included, to ip.
 func AddHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() (result *exec.Result)) (ok bool, err error) {
+	return addHosts(ip, Mappings(gameId, ip, withMacOsExclusive), hostFilePath, lineEnding, flushFn)
+}
+
+// AddApiHosts maps only the API domains to ip, for a standalone API server.
+func AddApiHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() (result *exec.Result)) (ok bool, err error) {
+	return addHosts(ip, ApiMappings(gameId, ip, withMacOsExclusive), hostFilePath, lineEnding, flushFn)
+}
+
+// AddRootHosts maps only the domains the root server answers to ip.
+func AddRootHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, withMacOsExclusive bool, flushFn func() (result *exec.Result)) (ok bool, err error) {
+	return addHosts(ip, RootMappings(gameId, ip, withMacOsExclusive), hostFilePath, lineEnding, flushFn)
+}
+
+func addHosts(ip net.IP, mappings HostMappings, hostFilePath string, lineEnding string, flushFn func() (result *exec.Result)) (ok bool, err error) {
 	var systemHosts bool
 	if hostFilePath == "" {
 		systemHosts = true
@@ -496,7 +515,6 @@ func AddHosts(ip net.IP, gameId string, hostFilePath string, lineEnding string, 
 		lineEnding = LineEnding
 	}
 	var hostsFileLock *fileLock.Lock
-	mappings := Mappings(gameId, ip, withMacOsExclusive)
 	var restLines []Line
 	hostsFileLock, err = openLockedHostsFile(hostFilePath, os.O_RDWR)
 	if err != nil {
