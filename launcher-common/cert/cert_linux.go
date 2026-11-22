@@ -43,6 +43,11 @@ var certStoreBundlePaths = []string{
 	"/etc/ssl/ca-bundle.pem",
 }
 
+// flushCertsFn runs the store update. It is a variable so a test that writes a
+// store file does not have to run the update binary, which needs root through
+// pkexec and is not there on a CI runner.
+var flushCertsFn = FlushCerts
+
 func FlushCerts() (result *exec.Result) {
 	binary := which.Which(updateStoreBinaries...)
 	if binary == "" {
@@ -213,7 +218,7 @@ func TrustCertificates(_ bool, certs []*x509.Certificate) error {
 		return err
 	}
 
-	return FlushCerts().Err
+	return flushCertsFn().Err
 }
 
 // UntrustCertificates removes the store file whole and returns every
@@ -237,12 +242,13 @@ func UntrustCertificates(_ bool) (certs []*x509.Certificate, err error) {
 		return
 	}
 
-	if err = FlushCerts().Err; err != nil {
+	if err = flushCertsFn().Err; err != nil {
 		// The update never ran, so the caller can put the file back whole.
 		return certs, err
 	}
-	certs = nil
 
+	// The certificates are returned even on success: a revert interrupted after
+	// this point has to be able to trust them again, as on Windows and macOS.
 	return
 }
 

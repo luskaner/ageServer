@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/luskaner/ageServer/common/executor/exec"
 )
 
 // A session trusts two certificates through one store file (the API server's
@@ -24,6 +26,11 @@ func TestLinuxStoreHoldsEveryCertificateAcrossPasses(t *testing.T) {
 	origPaths := certStorePaths
 	certStorePaths = []string{storeDir}
 	t.Cleanup(func() { certStorePaths = origPaths })
+	// The store update binary needs root and pkexec, which a CI runner does not
+	// have: what this test covers is the bundle, not the system's rebuild.
+	origFlush := flushCertsFn
+	flushCertsFn = func() *exec.Result { return &exec.Result{} }
+	t.Cleanup(func() { flushCertsFn = origFlush })
 
 	certA := generatedCert(t, "api root", 1)
 	certB := generatedCert(t, "server root", 2)
