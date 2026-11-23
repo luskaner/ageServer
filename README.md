@@ -31,6 +31,7 @@ is in maintenance or is eventually shutdown.
 - 📦 Data mods.
 - 🗣️ Lobby chatting.
 - 🎮 Crossplay Xbox & Steam.
+- ⚔️ Matchmaking.
 
 > [!TIP]
 > See more details
@@ -82,7 +83,7 @@ is in maintenance or is eventually shutdown.
 <details>
 <summary>List of features</summary>
   
-- 🏛️Crucible Co-Op
+- 🏛️ Crucible Co-Op
 
 </details>
 
