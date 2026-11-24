@@ -70,6 +70,64 @@ func joinAddrs(addrs mapset.Set[netip.Addr]) string {
 	return strings.Join(strs, ", ")
 }
 
+// isUnspecifiedOnly reports whether a host list is the single 0.0.0.0 entry.
+func isUnspecifiedOnly(hosts []string) bool {
+	if len(hosts) != 1 {
+		return false
+	}
+	addr, err := netip.ParseAddr(strings.TrimSpace(hosts[0]))
+	return err == nil && addr == netip.IPv4Unspecified()
+}
+
+// placeholderHosts reports whether the configured listeners are still the
+// template placeholder: 0.0.0.0 in Modern and/or Legacy, meaning "serve every
+// enabled game on every interface with the certificate class it needs".
+func placeholderHosts(modern, legacy []string) bool {
+	lists := 0
+	for _, hosts := range [][]string{modern, legacy} {
+		if len(hosts) == 0 {
+			continue
+		}
+		lists++
+		if !isUnspecifiedOnly(hosts) {
+			return false
+		}
+	}
+	return lists > 0
+}
+
+// defaultListenerHosts replaces the placeholder listeners with the certificate
+// class of the enabled games. v2.0 chose the pair per game, so a stock install
+// serving only AoE I-III: DE must keep the self-signed leaf they accept and must
+// not be handed the CA-signed one by a default nobody configured. A document
+// that lists its own addresses is left alone.
+//
+// Both classes on the same address cannot be a placeholder: they need two
+// listeners, so mixing them without distinct addresses is an error rather than a
+// silent fallback to the certificate that half the games may reject.
+func defaultListenerHosts(modern, legacy []string, gameIDs []string) (outModern, outLegacy []string, err error) {
+	if !placeholderHosts(modern, legacy) {
+		return modern, legacy, nil
+	}
+	unspecified := []string{netip.IPv4Unspecified().String()}
+	allLegacy, allModern := true, true
+	for _, gameID := range gameIDs {
+		if common.GameCertMode(gameID) == common.CertModeLegacy {
+			allModern = false
+		} else {
+			allLegacy = false
+		}
+	}
+	switch {
+	case len(gameIDs) > 0 && allLegacy:
+		return nil, unspecified, nil
+	case allModern:
+		return unspecified, nil, nil
+	default:
+		return nil, nil, fmt.Errorf("the enabled games need both certificate classes, and [Hosts] gives them the same address (0.0.0.0): set Modern and Legacy to different addresses (one of them a concrete LAN address), or enable only games of one class")
+	}
+}
+
 func listenerSpecs(modern, legacy mapset.Set[netip.Addr]) []listenerSpec {
 	var specs []listenerSpec
 	for addr := range modern.Iter() {
@@ -89,13 +147,8 @@ func listenerSpecs(modern, legacy mapset.Set[netip.Addr]) []listenerSpec {
 
 // buildListenerReport is the deterministic text printed at startup. It is a
 // pure function so the golden test does not need to start a listener.
-func buildListenerReport(specs []listenerSpec, gameIDs []string, filter common.CertMode) []string {
-	var lines []string
-	title := "Listener report:"
-	if filter != "" {
-		title = fmt.Sprintf("Listener report (listening only: %s):", filter)
-	}
-	lines = append(lines, title)
+func buildListenerReport(specs []listenerSpec, gameIDs []string) []string {
+	lines := []string{"Listener report:"}
 	ordered := slices.Clone(specs)
 	slices.SortFunc(ordered, func(a, b listenerSpec) int {
 		if cmp := a.Addr.Compare(b.Addr); cmp != 0 {

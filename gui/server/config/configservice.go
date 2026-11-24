@@ -1655,6 +1655,23 @@ type hostOwner struct {
 	index int
 }
 
+// placeholderListeners mirrors the server's listener placeholder: 0.0.0.0 in
+// either list means "follow the certificate class of the enabled games", so the
+// two lists sharing it is not a bind conflict.
+func placeholderListeners(hosts HostsConfiguration) bool {
+	lists := 0
+	for _, list := range [][]string{hosts.Modern, hosts.Legacy} {
+		if len(list) == 0 {
+			continue
+		}
+		lists++
+		if len(list) != 1 || strings.TrimSpace(list[0]) != "0.0.0.0" {
+			return false
+		}
+	}
+	return lists > 0
+}
+
 // validateHosts checks the global listener lists. A host must resolve to IPv4,
 // Modern and Legacy cannot share an address (the process would bind it twice),
 // and 0.0.0.0 cannot be combined with another address in the same list or with
@@ -1662,6 +1679,7 @@ type hostOwner struct {
 // one listener serves all of them.
 func validateHosts(config *Configuration) []ValidationError {
 	var validationErrors []ValidationError
+	placeholder := placeholderListeners(config.Hosts)
 	lists := []struct {
 		name  string
 		hosts []string
@@ -1710,6 +1728,9 @@ func validateHosts(config *Configuration) []ValidationError {
 	}
 	sort.Strings(addresses)
 	for _, address := range addresses {
+		if placeholder {
+			break
+		}
 		var modern, legacy []hostOwner
 		for _, owner := range owners[address] {
 			if owner.list == "Modern" {
@@ -1733,13 +1754,13 @@ func validateHosts(config *Configuration) []ValidationError {
 		}
 	}
 
-	if index, ok := wildcard["Modern"]; ok && len(config.Hosts.Legacy) > 0 {
+	if index, ok := wildcard["Modern"]; ok && len(config.Hosts.Legacy) > 0 && !placeholder {
 		validationErrors = append(validationErrors, ValidationError{
 			Field:   fmt.Sprintf("Hosts.Modern.%d", index),
 			Message: "0.0.0.0 leaves no address for Hosts.Legacy to bind",
 		})
 	}
-	if index, ok := wildcard["Legacy"]; ok && len(config.Hosts.Modern) > 0 {
+	if index, ok := wildcard["Legacy"]; ok && len(config.Hosts.Modern) > 0 && !placeholder {
 		validationErrors = append(validationErrors, ValidationError{
 			Field:   fmt.Sprintf("Hosts.Legacy.%d", index),
 			Message: "0.0.0.0 leaves no address for Hosts.Modern to bind",
@@ -1757,17 +1778,30 @@ func validateHosts(config *Configuration) []ValidationError {
 		class := common.GameCertMode(gameID)
 		byClass[class] = append(byClass[class], gameID)
 	}
-	if games := byClass[common.CertModeLegacy]; len(games) > 0 && len(config.Hosts.Legacy) == 0 {
+	// The placeholder resolves to the class the games need, so a list it does not
+	// name is not a missing listener.
+	if games := byClass[common.CertModeLegacy]; len(games) > 0 && len(config.Hosts.Legacy) == 0 && !placeholder {
 		validationErrors = append(validationErrors, ValidationError{
 			Field:    "Hosts.Legacy",
 			Message:  fmt.Sprintf("No legacy listener: %s may reject the modern certificate", strings.Join(games, ", ")),
 			Severity: severityWarning,
 		})
 	}
-	if games := byClass[common.CertModeModern]; len(games) > 0 && len(config.Hosts.Modern) == 0 {
+	if games := byClass[common.CertModeModern]; len(games) > 0 && len(config.Hosts.Modern) == 0 && !placeholder {
 		validationErrors = append(validationErrors, ValidationError{
 			Field:    "Hosts.Modern",
 			Message:  fmt.Sprintf("No modern listener: %s may reject the legacy certificate", strings.Join(games, ", ")),
+			Severity: severityWarning,
+		})
+	}
+	// 0.0.0.0 is a placeholder that follows the games, but it can only follow
+	// one class per address: the server refuses to start when the enabled games
+	// need both, so say it here instead of at boot.
+	if placeholder && len(byClass[common.CertModeLegacy]) > 0 && len(byClass[common.CertModeModern]) > 0 {
+		validationErrors = append(validationErrors, ValidationError{
+			Field: "Hosts.Legacy",
+			Message: fmt.Sprintf("0.0.0.0 follows the certificate class of the games, but %s need the legacy one and %s the modern one: set one list to a concrete address or enable games of a single class",
+				strings.Join(byClass[common.CertModeLegacy], ", "), strings.Join(byClass[common.CertModeModern], ", ")),
 			Severity: severityWarning,
 		})
 	}

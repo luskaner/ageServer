@@ -173,7 +173,7 @@ settings must stay byte-identical.
 `resources/custom-files`/`32MB`/`256MB`/`12h`, `Mods` enabled with
 `resources/mods/mods.db`/`resources/mods/uploads`/`256MB` and
 `RequireAuthForRead = false`, and `Hosts.Modern = ['0.0.0.0']` with an empty
-`Hosts.Legacy`.
+`Hosts.Legacy` (the listener placeholder, see below).
 `Replays` defaults to enabled with `32MB`/`1GB`/`-1s`, and `Api.Enabled` defaults
 to `true`. The default folders are relative paths resolved against the server's
 working directory, where `resources` lives.
@@ -189,8 +189,12 @@ do not. It mirrors what the server would do at startup:
 - `Hosts.Modern`/`Hosts.Legacy` cannot both be empty; every host must resolve to
   IPv4; the two lists cannot share an address; `0.0.0.0` cannot be combined with
   another address in the same list or with a non-empty list of the other class;
+  the exception is the server's placeholder (0.0.0.0 alone in one list, or in
+  both), which is accepted and warns when the enabled games need both classes,
+  because the server refuses to start with both classes on one address;
 - an enabled game whose certificate class has no listener only warns, because the
-  other class may still work; a deprecated `Games.<game>.Hosts` also warns;
+  other class may still work (the 0.0.0.0 placeholder is exempt: it resolves to
+  the class the games need); a deprecated `Games.<game>.Hosts` also warns;
 - a document without `[Hosts]` that still holds `Games.<game>.Hosts` is migrated
   when it opens: equal lists go to the class of the enabled games (all legacy →
   `Hosts.Legacy`, otherwise `Hosts.Modern`, emptying the other list). Differing

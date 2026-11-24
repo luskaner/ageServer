@@ -446,20 +446,14 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		gameModels[gameId] = initializer.Games[gameId]
 	}
 
-	// Phase B: one listener per address, shared by every game. The mode only
-	// selects the certificate pair.
-	modeFilter := common.CertMode(strings.ToLower(strings.TrimSpace(values.Mode)))
-	if modeFilter != "" && modeFilter != common.CertModeModern && modeFilter != common.CertModeLegacy {
-		logger.Fail("Invalid mode value: %s (accepted: modern, legacy)", values.Mode)
+	// Phase B: one listener per address, shared by every game. The certificate
+	// pair of each listener is the one its list names; the template's 0.0.0.0
+	// placeholder is replaced by the class of the enabled games.
+	modernHosts, legacyHosts, hostsErr := defaultListenerHosts(cfg.Hosts.Modern, cfg.Hosts.Legacy, gameIds)
+	if hostsErr != nil {
+		logger.Fail("%s", hostsErr)
 		exitCode = common.ErrConfigParse
 		return
-	}
-	modernHosts := cfg.Hosts.Modern
-	legacyHosts := cfg.Hosts.Legacy
-	if modeFilter == common.CertModeModern {
-		legacyHosts = nil
-	} else if modeFilter == common.CertModeLegacy {
-		modernHosts = nil
 	}
 	modernAddrs, resolveErr := resolveConfiguredHosts(modernHosts, "Modern")
 	if resolveErr != nil {
@@ -479,11 +473,7 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		return
 	}
 	if modernAddrs.IsEmpty() && legacyAddrs.IsEmpty() {
-		if modeFilter != "" {
-			logger.Fail("No addresses to listen on with certificate mode %s", modeFilter)
-		} else {
-			logger.Fail("No addresses to listen on: set [Hosts] Modern and/or Legacy")
-		}
+		logger.Fail("No addresses to listen on: set [Hosts] Modern and/or Legacy")
 		exitCode = internal.ErrResolveHost
 		return
 	}
@@ -545,7 +535,7 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 	}
 
 	// Phase C: say what is listening and how each game stands against it.
-	for _, line := range buildListenerReport(specs, gameIds, modeFilter) {
+	for _, line := range buildListenerReport(specs, gameIds) {
 		logger.Println(line)
 	}
 

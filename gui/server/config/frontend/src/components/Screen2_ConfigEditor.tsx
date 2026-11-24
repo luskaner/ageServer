@@ -881,7 +881,9 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                 <Text size="sm">
                                     Every listener serves every enabled game. The certificate class only changes what
                                     the address presents: AoE IV and AoM require the modern certificate, while AoE I-III:
-                                    DE have always used the legacy one.
+                                    DE have always used the legacy one. A single 0.0.0.0 is a placeholder: the server keeps
+                                    only the class the enabled games need, and it cannot serve both classes at once, so
+                                    enabling modern and legacy games together needs a concrete address in one list.
                                 </Text>
                             </InfoBar>
                             <ListenerCard

@@ -340,6 +340,48 @@ func TestValidateConfigurationHostsWildcard(t *testing.T) {
 	}
 }
 
+func TestValidateConfigurationPlaceholderListeners(t *testing.T) {
+	// 0.0.0.0 in both lists is the server's placeholder: one listener follows
+	// the certificate class of the enabled games, so it must not block saving.
+	config := serverDefaults()
+	config.Hosts = HostsConfiguration{Modern: []string{"0.0.0.0"}, Legacy: []string{"0.0.0.0"}}
+	config.Games.Enabled = []string{"age2"}
+	if errors := errorValidationIssues(validateConfiguration(&config)); len(errors) != 0 {
+		t.Fatalf("the placeholder blocked saving: %#v", errors)
+	}
+
+	// A single class is what the placeholder resolves to, so there is nothing
+	// to warn about either.
+	for _, issue := range validateConfiguration(&config) {
+		if issue.Field == "Hosts.Legacy" || issue.Field == "Hosts.Modern" {
+			t.Fatalf("one class with the placeholder warned: %#v", issue)
+		}
+	}
+
+	// A single 0.0.0.0 list is the same placeholder, so the class it does not
+	// name is not reported as a missing listener.
+	config.Hosts = HostsConfiguration{Modern: []string{"0.0.0.0"}}
+	for _, issue := range validateConfiguration(&config) {
+		if issue.Field == "Hosts.Legacy" || issue.Field == "Hosts.Modern" {
+			t.Fatalf("the single-list placeholder warned: %#v", issue)
+		}
+	}
+
+	// Both classes need two addresses, and the server refuses to start without
+	// them, so the editor says so before the document is saved.
+	config.Hosts = HostsConfiguration{Modern: []string{"0.0.0.0"}, Legacy: []string{"0.0.0.0"}}
+	config.Games.Enabled = []string{"age2", "age4"}
+	found := false
+	for _, issue := range validateConfiguration(&config) {
+		if issue.Field == "Hosts.Legacy" && issue.Severity == severityWarning {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the placeholder with both classes did not warn")
+	}
+}
+
 func TestValidateConfigurationPrivilegedPortWarnsWithoutBlocking(t *testing.T) {
 	config := Configuration{
 		Authentication: "disabled",

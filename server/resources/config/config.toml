@@ -48,8 +48,14 @@ IP = 'auto'
 # Principal addresses: CA root + signed leaf. Required by AoE IV: AE and AoM: RT.
 Modern = ['0.0.0.0']
 # Alternative addresses: self-signed leaf (the certificate AoE I-III: DE accept).
-# Leave empty unless you need a second address for those titles.
-Legacy = []
+Legacy = ['0.0.0.0']
+# 0.0.0.0 in either list (the default above) is a placeholder: the server keeps
+# only the list of the certificate class every enabled game needs, so a stock
+# install serving AoE I-III: DE listens with the self-signed leaf, as v2.0 did,
+# and one serving only AoE IV: AE / AoM: RT listens with the CA-signed leaf.
+# That cannot serve both classes at once on the same address: enabling games of
+# both classes with these values is an error asking for two addresses. Set the
+# lists to concrete addresses to pin a class to them.
 
 [Games]
 # Games that the server will accept.
