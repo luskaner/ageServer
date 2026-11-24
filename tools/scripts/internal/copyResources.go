@@ -36,12 +36,18 @@ func CopyGameConfigs(module string) {
 // manager read them from resources itself; the server reads them from
 // resources/config, next to config.toml, which is where the release puts them.
 func CopyGameConfigsTo(module, subdir string) {
+	CopyGameConfigsToWithTemplate(module, subdir, filepath.Join(ResourcePath(module), fmt.Sprintf(c.GameConfigFileName, "game")))
+}
+
+// CopyGameConfigsToWithTemplate is like CopyGameConfigsTo but allows specifying
+// a custom template source path (e.g., for server where the template lives in
+// resources/config/config.game.toml instead of resources/config.game.toml).
+func CopyGameConfigsToWithTemplate(module, subdir, templateSrc string) {
 	dstPath := filepath.Join(BuildResourcePath(module), subdir)
 	MkdirP(dstPath)
-	src := filepath.Join(ResourcePath(module), fmt.Sprintf(c.GameConfigFileName, "game"))
 	for g := range game.SupportedGames.Iter() {
 		dst := filepath.Join(dstPath, fmt.Sprintf(c.GameConfigFileName, g))
-		if err := Cp(src, dst); err != nil {
+		if err := Cp(templateSrc, dst); err != nil {
 			log.Fatal(err)
 		}
 	}
