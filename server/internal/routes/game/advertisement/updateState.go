@@ -50,8 +50,10 @@ func UpdateState(w http.ResponseWriter, r *http.Request) {
 		var userIds []i.A
 		var userIdStr []i.A
 		var races []i.A
-		var challengeProgress []i.A
+		var unsafeChallengeProgress []i.A
+		var safeChallengeProgress []i.A
 		var sessions []models.Session
+		var safeSessions []bool
 		gameSessions := game.Sessions()
 		for userId, peer := range peers {
 			user, userFound := game.Users().GetUserById(userId)
@@ -67,10 +69,16 @@ func UpdateState(w http.ResponseWriter, r *http.Request) {
 			userIdStr = append(userIdStr, i.A{userIdSingleStr, i.A{}})
 			peerMutable := peer.GetMutable()
 			races = append(races, i.A{userIdSingleStr, strconv.Itoa(int(peerMutable.RaceID))})
-			challengeProgress = append(challengeProgress, i.A{userIdSingleStr, challengeShared.GetChallengeProgressData(user)})
+			unsafeChallengeProgress = append(unsafeChallengeProgress, i.A{userIdSingleStr, challengeShared.GetChallengeProgressData(user, false)})
+			safeChallengeProgress = append(safeChallengeProgress, i.A{userIdSingleStr, challengeShared.GetChallengeProgressData(user, true)})
+			safeSessions = append(safeSessions, i.SafeEnabled(sess.Official(), user.GetPlatformUserID()))
 			sessions = append(sessions, sess)
 		}
-		for _, session := range sessions {
+		for index, session := range sessions {
+			progress := unsafeChallengeProgress
+			if safeSessions[index] {
+				progress = safeChallengeProgress
+			}
 			wss.SendOrStoreMessage(
 				session,
 				"MatchStartMessage",
@@ -80,7 +88,7 @@ func UpdateState(w http.ResponseWriter, r *http.Request) {
 					advStartTime,
 					userIdStr,
 					advEncoded,
-					challengeProgress,
+					progress,
 				},
 			)
 		}

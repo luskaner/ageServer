@@ -37,11 +37,21 @@ type SignConfig struct {
 	PlatformUserIdExceptions []string `toml:"PlatformUserIdExceptions" json:"PlatformUserIdExceptions"`
 }
 
+// SafeConfig controls the progress the server hands to official accounts.
+type SafeConfig struct {
+	// Enabled is any because TOML accepts both a string ('auto', 'true',
+	// 'false') and an unquoted bool; parseConfiguration normalizes it to the
+	// string the server reads.
+	Enabled                  any      `toml:"Enabled" json:"Enabled"`
+	PlatformUserIdExceptions []string `toml:"PlatformUserIdExceptions" json:"PlatformUserIdExceptions"`
+}
+
 type Configuration struct {
 	Log                    bool                     `toml:"Log" json:"Log"`
 	GeneratePlatformUserID bool                     `toml:"GeneratePlatformUserId" json:"GeneratePlatformUserId"`
 	Hosts                  HostsConfiguration       `toml:"Hosts" json:"Hosts"`
 	Sign                   SignConfig               `toml:"Sign" json:"Sign"`
+	Safe                   SafeConfig               `toml:"Safe" json:"Safe"`
 	Authentication         string                   `toml:"Authentication" json:"Authentication"`
 	Internet               InternetConfiguration    `toml:"Internet" json:"Internet"`
 	Games                  GamesConfiguration       `toml:"Games" json:"Games"`

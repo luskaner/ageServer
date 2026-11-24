@@ -58,7 +58,7 @@ func SelectServerIP(gameID string, addrs []MesuredIpAddress, warn func(string)) 
 	return MesuredIpAddress{}, false
 }
 
-func StartServer(r launcher.Reporter, gameTitle string, stop string, executable string, flags *pflag.FlagSet, values *cmdServer.Values, optionsFn func(options commonExecutor.Options)) (result *commonExecutor.Result, executablePath string, ip string) {
+func StartServer(r launcher.Reporter, gameTitle string, stop string, executable string, flags *pflag.FlagSet, values *cmdServer.Values, optionsFn func(options commonExecutor.Options)) (result *commonExecutor.Result, executablePath string, ip string, data *server.AnnounceMessageDataSupportedLatest) {
 	executablePath = GetExecutablePath(executable)
 	if executablePath == "" {
 		return
@@ -81,11 +81,12 @@ func StartServer(r launcher.Reporter, gameTitle string, stop string, executable 
 			case <-timeout:
 				break loop
 			default:
-				if _, measuredIpAddrs, _ := FilterServerIPs(uuid.MustParse(values.Id), "", gameTitle, localIPs); len(measuredIpAddrs) > 0 {
+				if _, measuredIpAddrs, announce := FilterServerIPs(uuid.MustParse(values.Id), "", gameTitle, localIPs); len(measuredIpAddrs) > 0 {
 					if selected, ok := SelectServerIP(gameTitle, measuredIpAddrs, func(message string) {
 						r.Warn("%s", message)
 					}); ok {
 						ip = selected.Ip.String()
+						data = announce
 						return
 					}
 				}

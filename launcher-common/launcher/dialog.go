@@ -52,6 +52,10 @@ type Dialog interface {
 	// ConfirmStartServer asks whether to go ahead and start the server.
 	// It returns false only when the user actively declined.
 	ConfirmStartServer(text string, stdin io.Reader) bool
+
+	// Warning shows a blocking warning. It returns when the user
+	// acknowledges it; it never asks whether to continue.
+	Warning(text string, stdin io.Reader)
 }
 
 // Resolution is the outcome of resolving the configured mode to a backend.
@@ -115,3 +119,5 @@ func (DefaultsDialog) SelectServer([]ServerCandidate, io.Reader) (int, bool) {
 func (DefaultsDialog) ListCandidates([]ServerCandidate) {}
 
 func (DefaultsDialog) ConfirmStartServer(string, io.Reader) bool { return false }
+
+func (DefaultsDialog) Warning(string, io.Reader) {}

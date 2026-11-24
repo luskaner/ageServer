@@ -615,6 +615,8 @@ func configurationDocument(content []byte, configuration Configuration) ([]byte,
 		{"", "GeneratePlatformUserId", strconv.FormatBool(configuration.GeneratePlatformUserID)},
 		{"Sign", "Enabled", strconv.FormatBool(configuration.Sign.Enabled)},
 		{"Sign", "PlatformUserIdExceptions", tomlArray(configuration.Sign.PlatformUserIdExceptions)},
+		{"Safe", "Enabled", tomlString(safeModeString(configuration.Safe.Enabled))},
+		{"Safe", "PlatformUserIdExceptions", tomlArray(configuration.Safe.PlatformUserIdExceptions)},
 		{"Internet", "Enabled", strconv.FormatBool(configuration.Internet.Enabled)},
 		{"Internet", "IP", tomlString(configuration.Internet.IP)},
 		{"Games", "Enabled", tomlArray(configuration.Games.Enabled)},
@@ -939,6 +941,12 @@ func isConfigurationField(section string, key string) bool {
 			return true
 		}
 	}
+	if section == "Safe" {
+		switch key {
+		case "Enabled", "PlatformUserIdExceptions":
+			return true
+		}
+	}
 	if section == "Internet" {
 		switch key {
 		case "Enabled", "IP", "Authentication":
@@ -1005,6 +1013,10 @@ func serverDefaults() Configuration {
 			Enabled:                  false,
 			PlatformUserIdExceptions: []string{},
 		},
+		Safe: SafeConfig{
+			Enabled:                  "auto",
+			PlatformUserIdExceptions: []string{},
+		},
 		Internet: InternetConfiguration{
 			Enabled: true,
 			IP:      "auto",
@@ -1057,12 +1069,38 @@ func serverDefaults() Configuration {
 	}
 }
 
+// normalizeSafeMode accepts the bool TOML also permits for [Safe] Enabled and
+// returns the canonical string. An empty value means the default.
+func normalizeSafeMode(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return "auto"
+	case bool:
+		if typed {
+			return "true"
+		}
+		return "false"
+	case string:
+		return strings.ToLower(strings.TrimSpace(typed))
+	default:
+		return fmt.Sprint(typed)
+	}
+}
+
+func safeModeString(value any) string {
+	if mode := normalizeSafeMode(value); mode != "" {
+		return mode
+	}
+	return "auto"
+}
+
 // parseConfiguration decodes TOML into the public configuration model.
 func parseConfiguration(content []byte) (*Configuration, error) {
 	config := serverDefaults()
 	if err := toml.Unmarshal(content, &config); err != nil {
 		return nil, fmt.Errorf("invalid TOML or configuration type: %w", err)
 	}
+	config.Safe.Enabled = safeModeString(config.Safe.Enabled)
 	if config.Games.Enabled == nil {
 		config.Games.Enabled = []string{}
 	}
@@ -1441,6 +1479,12 @@ func validateConfiguration(config *Configuration) []ValidationError {
 		validationErrors = append(validationErrors, ValidationError{
 			Field:   "GeneratePlatformUserId",
 			Message: "Requires Authentication to be disabled",
+		})
+	}
+	if mode := safeModeString(config.Safe.Enabled); mode != "auto" && mode != "true" && mode != "false" {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:   "Safe.Enabled",
+			Message: "Must be auto, true or false",
 		})
 	}
 	// The server refuses to start when authentication is required without

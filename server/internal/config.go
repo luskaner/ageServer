@@ -131,6 +131,16 @@ type SignConfig struct {
 	PlatformUserIdExceptions []string
 }
 
+// SafeConfig controls the progress the server hands to official accounts.
+type SafeConfig struct {
+	// Enabled accepts "auto", "true" or "false". A TOML boolean written
+	// without quotes is normalized to "true"/"false" at startup.
+	Enabled string
+
+	// PlatformUserIdExceptions inverts the resolved value, like [Sign].
+	PlatformUserIdExceptions []string
+}
+
 type Configuration struct {
 	Log                    bool
 	GeneratePlatformUserId bool
@@ -144,6 +154,7 @@ type Configuration struct {
 	Mods                   Mods
 	Api                    Api
 	Sign                   SignConfig
+	Safe                   SafeConfig
 	Automatch              Automatch
 }
 

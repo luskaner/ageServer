@@ -53,6 +53,13 @@ func (consoleDialog) ConfirmStartServer(text string, reader io.Reader) bool {
 	return true
 }
 
+func (consoleDialog) Warning(text string, reader io.Reader) {
+	// Like ConfirmStartServer, EOF is ignored: the warning has already been
+	// shown and only asks the reader to continue.
+	sinks().Println(text + " Press enter to continue...")
+	_, _ = bufio.NewReader(reader).ReadBytes('\n')
+}
+
 // printCandidates writes the numbered list of discovered servers to the
 // console sinks. The console has room for the full description, so that is what
 // it prints.

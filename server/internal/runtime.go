@@ -24,6 +24,12 @@ var SignConfigRuntime struct {
 	PlatformUserIdExceptions []string
 }
 
+// SafeConfigRuntime holds the resolved [Safe] configuration.
+var SafeConfigRuntime struct {
+	Enabled                  string
+	PlatformUserIdExceptions []string
+}
+
 var CanUseInternet bool
 var Authentication string
 

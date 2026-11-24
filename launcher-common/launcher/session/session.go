@@ -252,7 +252,7 @@ var (
 	executablesNativeFileNameFn  = executables.NativeFileName
 	configRunSetupCommandFn      = config.RunSetupCommand
 	netipParseAddrFn             = netip.ParseAddr
-	discoverServersFn            = func(gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
+	discoverServersFn            = func(gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool) {
 		return ops.DiscoverServersAndSelectBestIpAddr(reportOrDiscard(), promptInput(), gameTitle, singleAutoSelect, multicastGroups, targetPorts)
 	}
 	serverGetExecutablePathFn = server.GetExecutablePath
@@ -912,6 +912,7 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		reportOrDiscard().Warn("The client arguments ask for {ApiCertFilePath}, but with the API embedded in the server no separate certificate file is written unless {CertFilePath} is used too; the placeholder is left as-is.")
 	}
 	var serverIP string
+	var serverSafeMode string
 	if serverStart == "auto" {
 		announcePorts := cfg.Server.AnnouncePorts
 		ports := mapset.NewThreadUnsafeSetWithSize[uint16](len(announcePorts))
@@ -929,7 +930,7 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 				return
 			}
 		}
-		serverId, selectedServerIp, canceled := discoverServersFn(
+		serverId, selectedServerIp, discoveredSafe, canceled := discoverServersFn(
 			gameId,
 			cfg.Server.SingleAutoSelect,
 			multicastIPs,
@@ -942,6 +943,7 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		}
 		if serverId != uuidNilFn() {
 			serverIP = selectedServerIp.String()
+			serverSafeMode = discoveredSafe
 			serverStart = "false"
 			serverArgsValues.Id = serverId.String()
 			if serverStop == "auto" && (!isAdmin || runtime.GOOS == "windows") {
@@ -995,6 +997,7 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 			}); ok {
 				serverIP = selected.Ip.String()
 				serverArgsValues.Id = id.String()
+				serverSafeMode = data.Safe
 			} else {
 				reportOrDiscard().Fail("serverStart is false. Failed to find a usable address of the server.")
 				atomicExitCode.Store(int32(launcher.ErrInvalidServerHost))
@@ -1061,10 +1064,14 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 			}
 		}
 		var ec int
-		ec, serverIP = configStartServerFn(serverExecutablePath, serverFlags, serverArgsValues, serverStop == "true")
+		var serverData *commonServer.AnnounceMessageDataSupportedLatest
+		ec, serverIP, serverData = configStartServerFn(serverExecutablePath, serverFlags, serverArgsValues, serverStop == "true")
 		if ec != common.ErrSuccess {
 			atomicExitCode.Store(int32(ec))
 			return
+		}
+		if serverData != nil {
+			serverSafeMode = serverData.Safe
 		}
 	}
 	serverCertificate := serverReadCACertFn(serverIP)
@@ -1072,6 +1079,9 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		reportOrDiscard().Fail("Failed to read certificate from %s. Try to access it with your browser and checking the certificate.", serverIP)
 		atomicExitCode.Store(int32(launcher.ErrReadCert))
 		return
+	}
+	if launcher.SafeAppliesToClient(serverSafeMode, clientExecutableOfficial) {
+		launcher.ActiveDialog().Warning(launcher.SafeModeWarning, promptInput())
 	}
 	// Past this point the run stops hosts, installs certificates and launches the
 	// game, and each of those is something the user would have to undo by hand.

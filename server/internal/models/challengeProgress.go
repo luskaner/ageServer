@@ -466,6 +466,24 @@ func EncodeChallengeProgress(progress []ChallengeProgress) []any {
 	return encoded
 }
 
+// EncodeChallengeProgressPending returns the positional form of every record
+// as pending: no completion, no progress and no completion time. The expiry
+// and assignment time the client already knows are preserved.
+func EncodeChallengeProgressPending(progress []ChallengeProgress) []any {
+	encoded := make([]any, 0, len(progress))
+	for _, entry := range progress {
+		if _, ok := ChallengeProgressDefinitionID(entry); !ok {
+			continue
+		}
+		row := EncodeChallengeProgressEntry(entry)
+		row[2] = int64(0)
+		row[3] = int64(0)
+		row[5] = nil
+		encoded = append(encoded, row)
+	}
+	return encoded
+}
+
 // ChallengeTargets returns the counter each challenge definition must reach to
 // be completed, keyed by definition ID.
 func (d *ChallengeProgressUpgradableDefaultData) ChallengeTargets() map[int64]int64 {

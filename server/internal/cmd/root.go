@@ -239,6 +239,11 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 	internal.GeneratePlatformUserId = cfg.GeneratePlatformUserId
 	internal.SignConfigRuntime.Enabled = cfg.Sign.Enabled
 	internal.SignConfigRuntime.PlatformUserIdExceptions = cfg.Sign.PlatformUserIdExceptions
+	if err = applySafeConfig(cfg); err != nil {
+		logger.Fail("Invalid Safe configuration: %s", err)
+		exitCode = internal.ErrSafe
+		return
+	}
 	internal.ApiEnabled = cfg.Api.Enabled
 	if !cfg.Api.Enabled && cfg.Mods.Enabled {
 		logger.Fail("Mods.Enabled is true but Api.Enabled is false: the mods API lives in the API tree that is turned off.")
@@ -598,6 +603,8 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"GeneratePlatformUserId":        false,
 		"Sign.Enabled":                  false,
 		"Sign.PlatformUserIdExceptions": []string{},
+		"Safe.Enabled":                  "auto",
+		"Safe.PlatformUserIdExceptions": []string{},
 		"Authentication":                "disabled",
 		"Internet.Enabled":              true,
 		"Internet.IP":                   "auto",
@@ -654,6 +661,9 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 	if values.CfgFile != "" && usedFile == "" {
 		logger.Warn("No config file found, using defaults.")
 	}
+	// An unquoted `Enabled = true` arrives as a bool; canonicalize it before
+	// decoding so mapstructure does not turn it into "1".
+	normalizeSafeEnabled(k)
 	// The file this run is using is named by the summary at the top, and only
 	// there: announced once, from one place.
 

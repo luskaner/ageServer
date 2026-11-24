@@ -15,6 +15,7 @@ import (
 func Test(w http.ResponseWriter, r *http.Request, gameID string, mode common.CertMode) {
 	data := i.AnnounceMessageData[gameID]
 	data.Mode = string(mode)
+	data.Safe = i.SafeConfigRuntime.Enabled
 	w.Header().Set(common.IdHeader, i.Id.String())
 	w.Header().Set(common.VersionHeader, strconv.Itoa(common.AnnounceVersionLatest))
 	i.JSON(&w, data)

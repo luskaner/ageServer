@@ -115,8 +115,8 @@ info:
     \ are re-signed with this key at\nstartup; when it is false the captured body\
     \ and signature are replayed\nverbatim. For short-parameter requests the signature\
     \ is served raw\n(`POST /game/item/signItems`). The `[Sign] PlatformUserIdExceptions`\n\
-    list inverts the setting per user, but only the login route resolves a\nuser,\
-    \ so the exception can be observed on that route alone.\n\n## Errors\n\n* HTTP\
+    list inverts the setting per user; the user is resolved from the login\ncontext or the session,\
+    \ so the exception is observed on every game route (the user is resolved from the session when the login context is absent).\n\n## Safe mode\n\n`[Safe] Enabled` accepts `auto`, `true` or `false`. `auto` resolves to safe\nexactly for a non-official client (`Session.Official() == false`); the other\nvalues force it. `[Safe] PlatformUserIdExceptions` inverts the result per\nplatform user, like the `[Sign]` list. A safe session receives no\nachievements, receives challenge progress as pending without persisting it,\nand has avatar-stat writes acknowledged without storing or announcing them.\n`/test/root` publishes the resolved mode so the launcher can warn before it\nchanges the machine.\n\n## Errors\n\n* HTTP\
     \ `401 Unauthorized` (plain text, from the session middleware) for a\n  missing\
     \ or unknown `sessionID`.\n* `500` (plain text) `signed asset was not loaded:\
     \ <name>` when a\n  title ships no copy of a signed catalogue.\n* PlayFab errors\
@@ -8911,7 +8911,9 @@ paths:
 
         announced with an `AvatarStatsUpdatedMessage` frame carrying the
 
-        updated rows.
+        updated rows. A safe session answers `[0]` without storing or
+
+        announcing anything.
 
         '
       operationId: gameSetAvatarStatValues
@@ -9016,14 +9018,16 @@ paths:
     get:
       tags:
       - Game
-      summary: Achievements of the caller (always empty)
-      description: 'Always `[0, [[<sessionUserProfileId>, []]]]`. Serving achievements
+      summary: Achievements of the caller
+      description: 'When [Safe] resolves to false for the session, `[0, [[<sessionUserProfileId>,
 
-        to the game client would really grant them on Xbox, so the earned
+        [[achievementId, achievedDate], ...]]]]` with every non-deleted
 
-        list is always empty and `profileIDs` is ignored (the session user
+        catalogue achievement. When it resolves to true, the earned list is
 
-        is answered).
+        empty: serving achievements to the game client would really grant
+
+        them on Xbox. `profileIDs` is ignored (the session user is answered).
 
         '
       operationId: gameGetAchievements
@@ -9038,7 +9042,8 @@ paths:
       - name: resultCode
         value: 0
       - name: profiles
-        description: '[[sessionUserId, []]] — one row, empty earned list.'
+        description: '[[sessionUserId, rows]] — one row; every achievement when unsafe,
+          empty when safe.'
       security:
       - GameSession: []
       parameters:
@@ -9309,14 +9314,15 @@ paths:
       tags:
       - Game
       summary: Challenge progress (GET)
-      description: 'The progress rows of the session user. The server is meant to
-        run
+      description: 'The progress rows of the session user. Unsafe sessions get
 
-        with everything unlocked, so every record arrives completed; the
+        every record completed, as the server stores it. Safe sessions get
 
-        official service carries pending progress. A missing user answers
+        every record pending (`completionCount=0`, `progress=0`,
 
-        `[2, []]`.
+        `lastCompletedTime=null`); the stored document is not changed. A
+
+        missing user answers `[2, []]`.
 
         '
       operationId: gameGetChallengeProgressGet
@@ -9331,7 +9337,8 @@ paths:
         value: 0
       - name: progress
         row: ChallengeProgressRow
-        description: one row per catalogue definition, completed.
+        description: one row per catalogue definition, completed when unsafe and pending
+          when safe.
       security:
       - GameSession: []
       responses:
@@ -9399,8 +9406,8 @@ paths:
       tags:
       - Game
       summary: Challenge progress of another profile
-      description: The progress rows of `profile_id` (the same completed-by-default
-        encoding) or `[0, []]` for an unknown id.
+      description: The progress rows of `profile_id` (completed or pending according
+        to the caller's Safe mode) or `[0, []]` for an unknown id.
       operationId: gameGetChallengeProgressByProfileID
       x-fidelity: Different
       x-games:
@@ -9451,9 +9458,11 @@ paths:
 
         stored progress (existing fields are never erased). Answers
 
-        `[0, [], []]`; a decode/store failure answers `[2, [], []]`. The
+        `[0, [], []]`; a decode/store failure answers `[2, [], []]`. A safe
 
-        official capture echoes the updated rows in the second slot.
+        session acknowledges without writing. The official capture echoes
+
+        the updated rows in the second slot.
 
         '
       operationId: gameUpdateChallengeProgress
@@ -9514,9 +9523,11 @@ paths:
 
         targets. Because every record starts completed, a batch without
 
-        work answers `[0]` and writes nothing. A decode/store failure
+        work answers `[0]` and writes nothing. A safe session also answers
 
-        answers the bare `[2]`. The A4 client posts its fields as form
+        `[0]` without reading or writing. A decode/store failure answers
+
+        the bare `[2]`. The A4 client posts its fields as form
 
         data; other builds send the same names as a JSON body.
 

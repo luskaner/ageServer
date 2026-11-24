@@ -77,6 +77,7 @@ var _ fileLock.Locker = (*fakePidLocker)(nil)
 type fakeDialog struct {
 	confirmCalls int
 	confirm      bool
+	warnings     []string
 }
 
 func (f *fakeDialog) Name() string { return "fake" }
@@ -90,6 +91,10 @@ func (f *fakeDialog) ListCandidates([]launcher.ServerCandidate) {}
 func (f *fakeDialog) ConfirmStartServer(string, io.Reader) bool {
 	f.confirmCalls++
 	return f.confirm
+}
+
+func (f *fakeDialog) Warning(text string, _ io.Reader) {
+	f.warnings = append(f.warnings, text)
 }
 
 // captureStdout redirects os.Stdout for the duration of fn and returns what was
@@ -627,14 +632,14 @@ type runRootOverrides struct {
 	configNativeMacOsGameFnVal        func(base.Executor, bool) bool
 	configBattleServerRequiredFnVal   func(base.Executor) bool
 	newConfigFlushCacheOptionsFnVal   func(bool, string, bool, bool) *executor.ConfigFlushCacheOptions
-	discoverServersFnVal              func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, bool)
+	discoverServersFnVal              func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool)
 	netipParseAddrFnVal               func(string) (netip.Addr, error)
 	serverFilterServerIPsFnVal        func(uuid.UUID, string, string, mapset.Set[netip.Addr]) (uuid.UUID, []server.MesuredIpAddress, *commonServer.AnnounceMessageDataSupportedLatest)
 	serverGetExecutablePathFnVal      func(string) string
 	serverGenerateCertsFnVal          func(string, bool) int
 	configRunBattleServerManagerFnVal func(string, *pflag.FlagSet, *bsManager.StartValues, bool) int
 	bsManagerStartFlagSetFnVal        func([]string) (*bsManager.StartValues, *pflag.FlagSet)
-	configStartServerFnVal            func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string)
+	configStartServerFnVal            func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest)
 	serverReadCACertFnVal             func(string) *x509.Certificate
 	configMapHostsFnVal               func(string, string, bool, bool, bool, bool) int
 	serverProbeApiFnVal               func(string, bool, *x509.CertPool) (int, error)
@@ -803,8 +808,8 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	if o.discoverServersFnVal != nil {
 		discoverServersFn = o.discoverServersFnVal
 	} else {
-		discoverServersFn = func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
-			return uuid.Nil(), nil, false
+		discoverServersFn = func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool) {
+			return uuid.Nil(), nil, "", false
 		}
 	}
 	if o.netipParseAddrFnVal != nil {
@@ -842,8 +847,8 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	if o.configStartServerFnVal != nil {
 		configStartServerFn = o.configStartServerFnVal
 	} else {
-		configStartServerFn = func(s string, fs *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string) {
-			return common.ErrSuccess, "127.0.0.1"
+		configStartServerFn = func(s string, fs *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
+			return common.ErrSuccess, "127.0.0.1", nil
 		}
 	}
 	if o.serverReadCACertFnVal != nil {
@@ -1068,8 +1073,8 @@ func TestRunRootServerFoundByDiscovery(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
-			return discoveredUUID, net.ParseIP("192.168.1.100"), false
+		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool) {
+			return discoveredUUID, net.ParseIP("192.168.1.100"), "", false
 		},
 		serverReadCACertFnVal: func(host string) *x509.Certificate {
 			return &x509.Certificate{}
@@ -1308,8 +1313,8 @@ func TestRunRootStartServerFailure(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		configStartServerFnVal: func(s string, fs *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string) {
-			return common.ErrGeneral, ""
+		configStartServerFnVal: func(s string, fs *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
+			return common.ErrGeneral, "", nil
 		},
 	})
 	defer restore()
@@ -1400,8 +1405,8 @@ func TestRunRootServerNotFoundNoServerHost(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
-			return uuid.Nil(), nil, false
+		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool) {
+			return uuid.Nil(), nil, "", false
 		},
 		serverGetExecutablePathFnVal: func(s string) string { return s },
 		serverReadCACertFnVal: func(host string) *x509.Certificate {
@@ -1782,9 +1787,9 @@ func TestRunRootServerStartCanceled(t *testing.T) {
 		dialogNewFnVal: func(bool) launcher.Resolution {
 			return launcher.Resolution{Dialog: dlg, Name: "fake"}
 		},
-		configStartServerFnVal: func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string) {
+		configStartServerFnVal: func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
 			startServerCalls++
-			return common.ErrSuccess, "127.0.0.1"
+			return common.ErrSuccess, "127.0.0.1", nil
 		},
 	})
 	defer restore()
@@ -1810,9 +1815,9 @@ func TestRunRootServerStartConfirmed(t *testing.T) {
 		dialogNewFnVal: func(bool) launcher.Resolution {
 			return launcher.Resolution{Dialog: dlg, Name: "fake"}
 		},
-		configStartServerFnVal: func(_ string, _ *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string) {
+		configStartServerFnVal: func(_ string, _ *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
 			gotValues = v
-			return common.ErrSuccess, "127.0.0.1"
+			return common.ErrSuccess, "127.0.0.1", nil
 		},
 	})
 	defer restore()

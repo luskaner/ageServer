@@ -23,6 +23,7 @@ export type {
     InternetConfiguration,
     ModsConfiguration,
     ReplaysConfiguration,
+    SafeConfig,
     SignConfig,
     ValidationError
 } from "./models.js";

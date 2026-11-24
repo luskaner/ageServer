@@ -141,6 +141,23 @@ func TestConsoleConfirmStartServerPrintsPrompt(t *testing.T) {
 	}
 }
 
+func TestConsoleWarningPrintsPrompt(t *testing.T) {
+	out := captureStdout(t, func() {
+		(consoleDialog{}).Warning("Safe mode is on.", strings.NewReader("\n"))
+	})
+	if !strings.Contains(out, "Safe mode is on. Press enter to continue...") {
+		t.Errorf("output missing the warning, got:\n%s", out)
+	}
+}
+
+// EOF must not abort the launch: the warning was already shown and its only
+// answer is "continue".
+func TestConsoleWarningEOFReturns(t *testing.T) {
+	_ = captureStdout(t, func() {
+		(consoleDialog{}).Warning("Safe mode is on.", strings.NewReader(""))
+	})
+}
+
 func TestConsoleName(t *testing.T) {
 	if got := (consoleDialog{}).Name(); got != "console" {
 		t.Fatalf("Name() = %q, want %q", got, "console")

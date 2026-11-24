@@ -14,6 +14,7 @@ import {
     NumberInput,
     Radio,
     ScrollArea,
+    Select,
     Stack,
     Switch,
     Text,
@@ -45,6 +46,7 @@ import {
     IconPlus,
     IconSettings,
     IconShield,
+    IconShieldCheck,
     IconSignature,
     IconSpeakerphone,
     IconTrash,
@@ -57,6 +59,7 @@ import { GameSection } from './GameSection';
 import { IPv4Input } from './IPv4Input';
 import { InfoBar } from './InfoBar';
 import { SectionHeading } from './SectionHeading';
+import { PlatformUserIdExceptionsCard } from './PlatformUserIdExceptionsCard';
 import { SettingCard } from './SettingCard';
 import { SwitchSettingCard } from './SwitchSettingCard';
 import { UnitInput, UnitInputUnit } from './UnitInput';
@@ -83,6 +86,7 @@ function toServiceConfiguration(config: AppConfig): Configuration {
         Log: config.Log,
         GeneratePlatformUserId: config.GeneratePlatformUserId,
         Sign: { Enabled: config.Sign.Enabled, PlatformUserIdExceptions: config.Sign.PlatformUserIdExceptions },
+        Safe: { Enabled: config.Safe.Enabled, PlatformUserIdExceptions: config.Safe.PlatformUserIdExceptions },
         Authentication: config.Authentication,
         Internet: { Enabled: config.Internet.Enabled, IP: config.Internet.IP },
         Hosts: { Modern: config.Hosts.Modern, Legacy: config.Hosts.Legacy },
@@ -122,7 +126,8 @@ type StaticSectionKey =
     | 'announcement'
     | 'api'
     | 'replays'
-    | 'sign';
+    | 'sign'
+    | 'safe';
 type SectionKey = StaticSectionKey | GameSectionKey;
 const SECTION_LABELS: Record<StaticSectionKey, { title: string; subtitle: string }> = {
     general: { title: 'General', subtitle: 'Basic server configuration options.' },
@@ -135,6 +140,7 @@ const SECTION_LABELS: Record<StaticSectionKey, { title: string; subtitle: string
     api: { title: 'API', subtitle: 'Match content storage and the mods API served by this server.' },
     replays: { title: 'Replays', subtitle: 'Uploads of the replays the game records after a match.' },
     sign: { title: 'Sign', subtitle: 'Configure catalogue signing and platform user exceptions.' },
+    safe: { title: 'Safe', subtitle: 'Keep official accounts from syncing progress this server fabricates.' },
 };
 function isGameSection(section: SectionKey): section is GameSectionKey {
     return section.startsWith('game:');
@@ -189,6 +195,7 @@ const AUTH_OPTIONS = [
     if (field.startsWith('Api.')) return 'api';
     if (field.startsWith('Replays.')) return 'replays';
     if (field.startsWith('Sign.')) return 'sign';
+    if (field.startsWith('Safe.')) return 'safe';
     return 'general';
 }
 /** Splits the result of the Go validation into blocking errors and warnings. */ function splitIssues(
@@ -318,7 +325,8 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     const config = form.values;
     const [authExpanded, authExpandedHandlers] = useDisclosure(false);
     const [multicastExpanded, multicastExpandedHandlers] = useDisclosure(false);
-    const [exceptionsExpanded, exceptionsExpandedHandlers] = useDisclosure(false); // Multicast sits under the LAN announcement: switching the announcement off
+    const [exceptionsExpanded, exceptionsExpandedHandlers] = useDisclosure(false);
+    const [safeExceptionsExpanded, safeExceptionsExpandedHandlers] = useDisclosure(false); // Multicast sits under the LAN announcement: switching the announcement off
     // takes the whole card away, so its details close instead of staying open
     // behind a row that can no longer be clicked.
     const closeMulticastDetails = multicastExpandedHandlers.close;
@@ -544,11 +552,6 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
         }
     };
     const authLabel = AUTH_OPTIONS.find((option) => option.value === config.Authentication)?.label ?? 'Disabled';
-    // The exceptions are a list, so the card summarises how many there are
-    // instead of printing every id on the row.
-    const exceptionCount = (config.Sign.PlatformUserIdExceptions ?? []).length;
-    const exceptionsValue =
-        exceptionCount === 0 ? 'None' : `${exceptionCount} ${exceptionCount === 1 ? 'exception' : 'exceptions'}`;
     const section = sectionInfo(activeSection);
     // A per-game document carries only that game: the global pages belong to
     // config.toml, which is a document of its own.
@@ -562,6 +565,7 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
               { key: 'api', label: 'API', icon: <IconApi size={18} stroke={1.6} /> },
               { key: 'replays', label: 'Replays', icon: <IconMovie size={18} stroke={1.6} /> },
               { key: 'sign', label: 'Sign', icon: <IconSignature size={18} stroke={1.6} /> },
+              { key: 'safe', label: 'Safe', icon: <IconShieldCheck size={18} stroke={1.6} /> },
           ];
     const gameDocumentPage = isGameDocument
         ? AVAILABLE_GAMES.find((game) => game.id === documentGame) ?? AVAILABLE_GAMES[0]
@@ -1193,72 +1197,56 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                 ariaLabel="Sign catalogues"
                                 {...switchProps('Sign.Enabled')}
                             />
-                            <SettingCard
-                                icon={<IconId size={20} stroke={1.6} />}
-                                title="Platform user ID exceptions"
-                                // The list is the opposite of the switch, exactly
-                                // as the template documents it.
+                            <PlatformUserIdExceptionsCard
+                                ids={config.Sign.PlatformUserIdExceptions ?? []}
                                 description={
                                     config.Sign.Enabled
                                         ? 'Users listed here keep the captured signatures. One ID per line.'
                                         : 'Users listed here get this server’s signatures while everyone else keeps the captured ones. One ID per line.'
                                 }
-                                value={exceptionsValue}
                                 error={allErrors['Sign.PlatformUserIdExceptions']}
                                 expanded={exceptionsExpanded}
                                 onToggle={exceptionsExpandedHandlers.toggle}
-                                details={
-                                    <div style={{ width: '100%', maxWidth: 560 }}>
-                                        <Stack gap="xs" style={{ width: '100%' }}>
-                                            {(config.Sign.PlatformUserIdExceptions ?? []).map((id, index) => (
-                                                <Stack key={index} gap={4}>
-                                                    <Group gap="xs" wrap="nowrap" justify="space-between">
-                                                        <Input
-                                                            value={id}
-                                                            onChange={(e) => {
-                                                                const arr = [...(config.Sign.PlatformUserIdExceptions ?? [])];
-                                                                arr[index] = e.target.value;
-                                                                form.setFieldValue('Sign.PlatformUserIdExceptions', arr);
-                                                            }}
-                                                            onBlur={requestValidation}
-                                                            placeholder="Platform user ID"
-                                                            style={{ flex: 1 }}
-                                                        />
-                                                        <ActionIcon
-                                                            variant="subtle"
-                                                            color="gray"
-                                                            size="sm"
-                                                            aria-label={`Remove exception ${index + 1}`}
-                                                            disabled={(config.Sign.PlatformUserIdExceptions ?? []).length <= 1}
-                                                            onClick={() => {
-                                                                const arr = [...(config.Sign.PlatformUserIdExceptions ?? [])];
-                                                                arr.splice(index, 1);
-                                                                form.setFieldValue('Sign.PlatformUserIdExceptions', arr);
-                                                                requestValidation();
-                                                            }}
-                                                        >
-                                                            <IconTrash size={16} stroke={1.6} />
-                                                        </ActionIcon>
-                                                    </Group>
-                                                </Stack>
-                                            ))}
-                                            <Button
-                                                variant="subtle"
-                                                size="compact-sm"
-                                                w="fit-content"
-                                                leftSection={<IconPlus size={15} stroke={1.8} />}
-                                                disabled={(config.Sign.PlatformUserIdExceptions ?? []).some((id) => id === '')}
-                                                onClick={() => {
-                                                    const arr = [...(config.Sign.PlatformUserIdExceptions ?? [])];
-                                                    arr.push('');
-                                                    form.setFieldValue('Sign.PlatformUserIdExceptions', arr);
-                                                }}
-                                            >
-                                                Add exception
-                                            </Button>
-                                        </Stack>
-                                    </div>
+                                onChange={(ids) => form.setFieldValue('Sign.PlatformUserIdExceptions', ids)}
+                                onCommit={requestValidation}
+                            />
+                        </Stack>
+                    )}
+                    {/* SECTION 9: SAFE */}
+                    {activeSection === 'safe' && (
+                        <Stack gap="sm">
+                            <SettingCard
+                                icon={<IconShieldCheck size={20} stroke={1.6} />}
+                                title="Safe mode"
+                                description="Withhold achievements, challenge progress and avatar-stat writes from sessions that would sync them to Xbox. Automatic applies only to official sessions; Always and Never override that."
+                                error={allErrors['Safe.Enabled']}
+                                control={
+                                    <Select
+                                        value={config.Safe.Enabled}
+                                        onChange={(value) => {
+                                            if (!value) return;
+                                            form.setFieldValue('Safe.Enabled', value as AppConfig['Safe']['Enabled']);
+                                            requestValidation();
+                                        }}
+                                        data={[
+                                            { value: 'auto', label: 'Automatic' },
+                                            { value: 'true', label: 'Always' },
+                                            { value: 'false', label: 'Never' },
+                                        ]}
+                                        allowDeselect={false}
+                                        aria-label="Safe mode"
+                                        w={170}
+                                    />
                                 }
+                            />
+                            <PlatformUserIdExceptionsCard
+                                ids={config.Safe.PlatformUserIdExceptions ?? []}
+                                description="Users listed here invert the mode above, exactly as in Sign. One platform user ID per line."
+                                error={allErrors['Safe.PlatformUserIdExceptions']}
+                                expanded={safeExceptionsExpanded}
+                                onToggle={safeExceptionsExpandedHandlers.toggle}
+                                onChange={(ids) => form.setFieldValue('Safe.PlatformUserIdExceptions', ids)}
+                                onCommit={requestValidation}
                             />
                         </Stack>
                     )}
