@@ -120,8 +120,7 @@ type StaticSectionKey =
     | 'internet'
     | 'hosts'
     | 'announcement'
-    | 'customFiles'
-    | 'mods'
+    | 'api'
     | 'replays'
     | 'sign';
 type SectionKey = StaticSectionKey | GameSectionKey;
@@ -133,11 +132,7 @@ const SECTION_LABELS: Record<StaticSectionKey, { title: string; subtitle: string
         subtitle: 'Addresses the server binds and the certificate each one presents.',
     },
     announcement: { title: 'Announcement', subtitle: 'Configure LAN discovery and announcement settings.' },
-    customFiles: {
-        title: 'Custom files',
-        subtitle: 'Match content endpoints (/api/MatchContent/): savegames and replays uploaded by the game.',
-    },
-    mods: { title: 'Mods API', subtitle: 'Mods served by this server instead of being proxied upstream.' },
+    api: { title: 'API', subtitle: 'Match content storage and the mods API served by this server.' },
     replays: { title: 'Replays', subtitle: 'Uploads of the replays the game records after a match.' },
     sign: { title: 'Sign', subtitle: 'Configure catalogue signing and platform user exceptions.' },
 };
@@ -189,9 +184,9 @@ const AUTH_OPTIONS = [
     if (field.startsWith('Internet.')) return 'internet';
     if (field === 'Hosts' || field.startsWith('Hosts.')) return 'hosts';
     if (field.startsWith('Announcement.')) return 'announcement';
-    if (field.startsWith('CustomFiles.')) return 'customFiles';
-    if (field.startsWith('Mods.')) return 'mods';
-    if (field.startsWith('Api.')) return 'mods';
+    if (field.startsWith('CustomFiles.')) return 'api';
+    if (field.startsWith('Mods.')) return 'api';
+    if (field.startsWith('Api.')) return 'api';
     if (field.startsWith('Replays.')) return 'replays';
     if (field.startsWith('Sign.')) return 'sign';
     return 'general';
@@ -296,6 +291,11 @@ interface Screen2Props {
     embeddedDefaults?: Record<string, EmbeddedBattleServerDefaults | undefined> | undefined;
     fileName: string;
     isNew: boolean;
+    // The document this editor holds: config.toml (main) or one
+    // config.<game>.toml. Only one document is edited at a time.
+    documentKind: 'main' | 'game';
+    documentGame?: string;
+    suggestedName?: string;
     onSaved: (file: ConfigFile) => void;
     onBack: () => void;
 }
@@ -305,9 +305,15 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     embeddedDefaults,
     fileName,
     isNew,
+    documentKind,
+    documentGame,
+    suggestedName,
     onSaved,
     onBack,
 }) => {
+    // A per-game document holds only its game: the global settings and the
+    // other games belong to other files, so they are not shown here at all.
+    const isGameDocument = documentKind === 'game';
     const form = useForm<AppConfig>({ mode: 'controlled', initialValues: initialConfig });
     const config = form.values;
     const [authExpanded, authExpandedHandlers] = useDisclosure(false);
@@ -329,13 +335,14 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     const sidebarOpened = isNarrowWindow ? overlayNavbarOpened : navbarOpened;
     const toggleSidebar = isNarrowWindow ? overlayNavbarHandlers.toggle : navbarHandlers.toggle;
     const sidebarWidth = 240;
-    const [activeSection, setActiveSection] = useState<SectionKey>('general');
-    const [gamesOpened, gamesHandlers] = useDisclosure(true);
-    const activeGame = isGameSection(activeSection)
-        ? AVAILABLE_GAMES.find((game) => `game:${game.id}` === activeSection)
-        : undefined;
+    const [activeSection, setActiveSection] = useState<SectionKey>(() =>
+        isGameDocument && documentGame ? (`game:${documentGame}` as SectionKey) : 'general',
+    );
+    const activeGame =
+        isGameDocument && isGameSection(activeSection)
+            ? AVAILABLE_GAMES.find((game) => `game:${game.id}` === activeSection)
+            : undefined;
     const selectSection = (section: SectionKey) => {
-        if (isGameSection(section)) gamesHandlers.open();
         setActiveSection(section);
     }; // The file's own validation result seeds the messages shown when it opens;
     // every blur (or committed control) replaces them with the fresh result.
@@ -422,17 +429,6 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     // control was left, so a value typed right now is not in it yet. Warnings are
     // advisories and never block saving.
     const hasErrors = Object.keys(liveIssues.errors).length > 0;
-    const handleGameToggle = (gameId: string) => {
-        const enabled = [...form.values.Games.Enabled];
-        const index = enabled.indexOf(gameId);
-        if (index === -1) {
-            enabled.push(gameId);
-        } else {
-            enabled.splice(index, 1);
-        }
-        form.setFieldValue('Games.Enabled', enabled);
-        requestValidation();
-    };
     const handleHostChange = (list: 'Modern' | 'Legacy', index: number, value: string) => {
         form.setFieldValue(`Hosts.${list}.${index}`, value);
     }; // Adding and removing a host change the shape of the list, which is not
@@ -471,6 +467,11 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
         confirmRequest?.resolve(confirmed);
         setConfirmRequest(null);
     };
+    // The file this document will be written to, when it is already known:
+    // a game document opened from config.toml knows its sibling path even
+    // before it exists.
+    const knownDestination = isNew ? fileName : '';
+    const needsDestination = isNew && !knownDestination;
     const handleSave = async () => {
         if (hasErrors) return;
         try {
@@ -479,7 +480,9 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                 showSuccessToast('Configuration saved successfully.');
                 return;
             }
-            const destination = await ConfigService.SelectConfigDestination();
+            const destination =
+                knownDestination ||
+                (await ConfigService.SelectConfigSaveAsDestination(suggestedName || 'config.toml'));
             if (!destination) return;
             try {
                 const created = await ConfigService.CreateConfigFile(
@@ -547,16 +550,22 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     const exceptionsValue =
         exceptionCount === 0 ? 'None' : `${exceptionCount} ${exceptionCount === 1 ? 'exception' : 'exceptions'}`;
     const section = sectionInfo(activeSection);
-    const navItems: Array<{ key: StaticSectionKey; label: string; icon: React.ReactNode }> = [
-        { key: 'general', label: 'General', icon: <IconSettings size={18} stroke={1.6} /> },
-        { key: 'internet', label: 'Internet', icon: <IconWorld size={18} stroke={1.6} /> },
-        { key: 'hosts', label: 'Listeners', icon: <IconNetwork size={18} stroke={1.6} /> },
-        { key: 'announcement', label: 'Announcement', icon: <IconSpeakerphone size={18} stroke={1.6} /> },
-        { key: 'customFiles', label: 'Custom files', icon: <IconFiles size={18} stroke={1.6} /> },
-        { key: 'mods', label: 'Mods', icon: <IconApi size={18} stroke={1.6} /> },
-        { key: 'replays', label: 'Replays', icon: <IconMovie size={18} stroke={1.6} /> },
-        { key: 'sign', label: 'Sign', icon: <IconSignature size={18} stroke={1.6} /> },
-    ];
+    // A per-game document carries only that game: the global pages belong to
+    // config.toml, which is a document of its own.
+    const navItems: Array<{ key: StaticSectionKey; label: string; icon: React.ReactNode }> = isGameDocument
+        ? []
+        : [
+              { key: 'general', label: 'General', icon: <IconSettings size={18} stroke={1.6} /> },
+              { key: 'internet', label: 'Internet', icon: <IconWorld size={18} stroke={1.6} /> },
+              { key: 'hosts', label: 'Listeners', icon: <IconNetwork size={18} stroke={1.6} /> },
+              { key: 'announcement', label: 'Announcement', icon: <IconSpeakerphone size={18} stroke={1.6} /> },
+              { key: 'api', label: 'API', icon: <IconApi size={18} stroke={1.6} /> },
+              { key: 'replays', label: 'Replays', icon: <IconMovie size={18} stroke={1.6} /> },
+              { key: 'sign', label: 'Sign', icon: <IconSignature size={18} stroke={1.6} /> },
+          ];
+    const gameDocumentPage = isGameDocument
+        ? AVAILABLE_GAMES.find((game) => game.id === documentGame) ?? AVAILABLE_GAMES[0]
+        : undefined;
     // A page whose whole feature hangs on one switch carries it next to the
     // title, the way a game page carries the game's, so the page itself only
     // lists the settings that switch turns on.
@@ -564,10 +573,8 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
         switch (activeSection) {
             case 'announcement':
                 return { ...switchProps('Announcement.Enabled'), ariaLabel: 'LAN announcement' };
-            case 'customFiles':
-                return { ...switchProps('CustomFiles.Enabled'), ariaLabel: 'Custom files' };
-            case 'mods':
-                return { ...switchProps('Mods.Enabled'), ariaLabel: 'Mods API' };
+            case 'api':
+                return { ...switchProps('Api.Enabled'), ariaLabel: 'Age of Empires API' };
             case 'replays':
                 return { ...switchProps('Replays.Enabled'), ariaLabel: 'Replay uploads' };
             default:
@@ -631,16 +638,6 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                         </Box>
                     </Group>
                     <Group gap="md" wrap="nowrap">
-                        {activeGame && (
-                            <Switch
-                                checked={config.Games.Enabled.includes(activeGame.id)}
-                                onChange={() => handleGameToggle(activeGame.id)}
-                                label={config.Games.Enabled.includes(activeGame.id) ? 'Enabled' : 'Disabled'}
-                                labelPosition="left"
-                                aria-label={`Enable ${activeGame.name}`}
-                                withThumbIndicator={false}
-                            />
-                        )}
                         {headerToggle && (
                             <Switch
                                 checked={headerToggle.checked}
@@ -660,10 +657,12 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                 onClick={handleSave}
                                 disabled={hasErrors}
                             >
-                                {/* A new document has no path yet: saving always
-                                    asks for the destination, so the button says
-                                    what it will do. */}
-                                {isNew ? 'Save as…' : 'Save'}
+                                {/* A new document with no path yet asks for the
+                                    destination, so the button says what it will
+                                    do. One that already knows where it goes (a
+                                    game document next to config.toml) just
+                                    creates that file. */}
+                                {needsDestination ? 'Save as…' : 'Save'}
                             </Button>
                             {!isNew && (
                                 <Menu position="bottom-end" width={190}>
@@ -703,48 +702,28 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
             >
                 <style>{winuiNavItemCss}</style>
                 <AppShell.Section grow component={ScrollArea} px={12} py="sm">
-                    {navItems.slice(0, 2).map(renderStaticNavItem)}
-                    <NavLink
-                        label="Games"
-                        leftSection={<IconDeviceGamepad2 size={18} stroke={1.6} />}
-                        // Only the game itself is the selected item: the group
-                        // stays a plain, expanded container so the pane never
-                        // shows two selections at once.
-                        opened={gamesOpened}
-                        onClick={gamesHandlers.toggle}
-                        className={winuiNavItemClass}
-                        styles={{
-                            root: {
-                                borderRadius: 4,
-                                paddingBlock: 8,
-                                paddingInline: 8,
-                            },
-                        }}
-                    >
-                        {AVAILABLE_GAMES.map((game) => (
-                            <NavLink
-                                key={game.id}
-                                label={game.name}
-                                active={activeSection === `game:${game.id}`}
-                                onClick={() => selectSection(`game:${game.id}`)}
-                                className={winuiNavItemClass}
-                                styles={{
-                                    root: {
-                                        borderRadius: 4,
-                                        paddingBlock: 6,
-                                        paddingInline: 8,
-                                    },
-                                }}
-                            />
-                        ))}
-                    </NavLink>
-                    {navItems.slice(2).map(renderStaticNavItem)}
+                    {gameDocumentPage && (
+                        <NavLink
+                            label={gameDocumentPage.name}
+                            leftSection={<IconDeviceGamepad2 size={18} stroke={1.6} />}
+                            active
+                            className={winuiNavItemClass}
+                            styles={{
+                                root: {
+                                    borderRadius: 4,
+                                    paddingBlock: 8,
+                                    paddingInline: 8,
+                                },
+                            }}
+                        />
+                    )}
+                    {navItems.map(renderStaticNavItem)}
                 </AppShell.Section>
                 <AppShell.Section px={12} py="xs">
                     <Group gap={8} wrap="nowrap">
                         <Box w={8} h={8} bg="teal" style={{ borderRadius: 999, flexShrink: 0 }} />
                         <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>
-                            {fileName || 'New configuration'}
+                            {fileName || suggestedName || 'New configuration'}
                         </Text>
                         <Tooltip label="Open another configuration file" withArrow openDelay={400}>
                             <ActionIcon
@@ -880,14 +859,15 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             <InfoBar severity="info">
                                 <Text size="sm">
                                     Every listener serves every enabled game. The certificate class only changes what
-                                    the address presents: AoE IV and AoM require the modern certificate, while AoE I-III:
-                                    DE have always used the legacy one. A single 0.0.0.0 is a placeholder: the server keeps
-                                    only the class the enabled games need, and it cannot serve both classes at once, so
-                                    enabling modern and legacy games together needs a concrete address in one list.
+                                    the address presents: AoE IV and AoM require the regular certificate, while AoE I-III:
+                                    DE have always used the self-signed one. A single 0.0.0.0 is a placeholder: the server
+                                    keeps only the class the enabled games need, and it cannot serve both classes at once,
+                                    so enabling regular and self-signed games together needs a concrete address in one
+                                    list.
                                 </Text>
                             </InfoBar>
                             <ListenerCard
-                                title="Modern certificates"
+                                title="Regular certificates"
                                 description="CA-signed certificate used by Age of Empires IV and Age of Mythology: Retold."
                                 list="Modern"
                                 icon={<IconNetwork size={20} stroke={1.6} />}
@@ -899,7 +879,7 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                 onRemove={handleRemoveHost}
                             />
                             <ListenerCard
-                                title="Legacy certificates"
+                                title="Self-signed certificates"
                                 description="Self-signed certificate used by Age of Empires I-III: DE."
                                 list="Legacy"
                                 icon={<IconShield size={20} stroke={1.6} />}
@@ -914,7 +894,8 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                     )}
                     {/* SECTION 4: ONE GAME AT A TIME */}
                     {activeGame && (
-                        <GameSection
+                        <Stack gap="sm">
+                            <GameSection
                             key={activeGame.id}
                             game={activeGame}
                             config={config}
@@ -929,9 +910,10 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                 form.setFieldValue(`Games.${gameId}.EmbeddedBattleServer`, embedded)
                             }
                             onCommit={requestValidation}
-                        />
+                            />
+                        </Stack>
                     )}
-                    {/* SECTION 4: ANNOUNCEMENT */}
+                    {/* SECTION 5: ANNOUNCEMENT */}
                     {activeSection === 'announcement' && (
                         <Stack gap="sm">
                             <SettingCard
@@ -988,14 +970,19 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             />
                         </Stack>
                     )}
-                    {/* SECTION 5: CUSTOM FILES */}
-                    {activeSection === 'customFiles' && (
+                    {/* SECTION 6: API */}
+                    {activeSection === 'api' && (
                         <Stack gap="sm">
-                            <InfoBar severity="info">
-                                <Text size="sm">
-                                    These settings configure the /api/MatchContent/ endpoints of the mods API.
-                                </Text>
-                            </InfoBar>
+                            <SectionHeading level="section">
+                                Custom files
+                            </SectionHeading>
+                            <SwitchSettingCard
+                                icon={<IconFiles size={20} stroke={1.6} />}
+                                title="Custom files"
+                                description="Serve the match content endpoints the game uses to exchange savegames and replays."
+                                ariaLabel="Custom files"
+                                {...switchProps('CustomFiles.Enabled')}
+                            />
                             <AutoManualCard
                                 icon={<IconFolder size={20} stroke={1.6} />}
                                 title="Storage folder"
@@ -1059,25 +1046,15 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                     />
                                 }
                             />
-                        </Stack>
-                    )}
-                    {/* SECTION 6: MODS */}
-                    {activeSection === 'mods' && (
-                        <Stack gap="sm">
-                            <InfoBar severity="info">
-                                <Text size="sm">
-                                    The same instance serves the /api/MatchContent/ endpoints; their storage
-                                    settings stay on the Custom files page. The API runs while either feature is
-                                    enabled.
-                                </Text>
-                            </InfoBar>
+                            <SectionHeading level="section" spaced>
+                                Mods
+                            </SectionHeading>
                             <SwitchSettingCard
                                 icon={<IconApi size={20} stroke={1.6} />}
-                                title="API tree"
-                                description="Serve the Age of Empires API on its hosts. Off answers those paths with 404 instead of the embedded library or the official service; it cannot be off while the mods API is on."
-                                error={allErrors['Api.Enabled']}
-                                ariaLabel="API tree"
-                                {...switchProps('Api.Enabled')}
+                                title="Mods"
+                                description="Serve the mods of this server's library instead of proxying them to the official service."
+                                ariaLabel="Mods"
+                                {...switchProps('Mods.Enabled')}
                             />
                             <AutoManualCard
                                 icon={<IconDatabase size={20} stroke={1.6} />}

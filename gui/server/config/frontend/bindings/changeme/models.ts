@@ -27,12 +27,33 @@ export interface BattleServerConfig {
 }
 
 /**
- * ConfigFile is the bridge between Go and the React editor.
+ * ConfigFile is the bridge between Go and the React editor. One load is one
+ * document: config.toml or one config.<game>.toml, never both at once.
  */
 export interface ConfigFile {
     "path": string;
     "content": string;
-    "gameFiles": { [_ in string]?: string } | null;
+
+    /**
+     * Kind is "main" for config.toml and "game" for a config.<game>.toml.
+     */
+    "kind": string;
+
+    /**
+     * Game is the game a "game" document belongs to (empty for "main").
+     */
+    "game": string;
+
+    /**
+     * SuggestedName is the file name a new document proposes when it is saved.
+     */
+    "suggestedName": string;
+
+    /**
+     * New reports a document that is not on disk yet, even when Path already
+     * names where it will be written.
+     */
+    "new": boolean;
     "config": Configuration | null;
     "validationErrors": ValidationError[] | null;
 }
@@ -40,9 +61,9 @@ export interface ConfigFile {
 export interface Configuration {
     "Log": boolean;
     "GeneratePlatformUserId": boolean;
+    "Hosts": HostsConfiguration;
     "Sign": SignConfig;
     "Authentication": string;
-    "Hosts": HostsConfiguration;
     "Internet": InternetConfiguration;
     "Games": GamesConfiguration;
     "Announcement": AnnouncementConfig;
@@ -109,9 +130,15 @@ export interface GamesConfiguration {
     "athens": GameConfig;
 }
 
+/**
+ * HostsConfiguration is the global listener configuration: every listener
+ * serves every enabled game, and the list only selects the certificate mode it
+ * presents. The old per-game Hosts key survives in GameConfig so an existing
+ * document can still be read and migrated.
+ */
 export interface HostsConfiguration {
-    "Modern": string[];
-    "Legacy": string[];
+    "Modern": string[] | null;
+    "Legacy": string[] | null;
 }
 
 export interface InternetConfiguration {

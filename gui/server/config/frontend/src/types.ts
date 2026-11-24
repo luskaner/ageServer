@@ -134,8 +134,8 @@ export function fieldLabel(field: string): string {
   if (field === 'Sign.PlatformUserIdExceptions') return 'Platform user ID exceptions';
   if (field === 'Internet.Enabled') return 'Internet access';
   if (field === 'Hosts') return 'Listeners';
-  if (field === 'Hosts.Modern') return 'Modern listeners';
-  if (field === 'Hosts.Legacy') return 'Legacy listeners';
+  if (field === 'Hosts.Modern') return 'Regular listeners';
+  if (field === 'Hosts.Legacy') return 'Self-signed listeners';
   if (/^Hosts\.(?:Modern|Legacy)\.\d+$/.test(field)) return 'Listener address';
   if (field === 'Internet.IP') return 'Public IP address';
   if (field === 'Announcement.Port') return 'Announcement port';
@@ -150,7 +150,7 @@ export function fieldLabel(field: string): string {
   if (field === 'Replays.MaxTotalSize') return 'Replay total size limit';
   if (field === 'Replays.Expiry') return 'Replay expiry';
   if (field === 'Mods.Enabled') return 'Mods API';
-  if (field === 'Api.Enabled') return 'API tree';
+  if (field === 'Api.Enabled') return 'Age of Empires API';
   if (field === 'Mods.DBPath') return 'Mods database file';
   if (field === 'Mods.UploadDir') return 'Mods upload folder';
   if (field === 'Mods.MaxUploadSize') return 'Maximum mods request size';

@@ -106,9 +106,15 @@ export interface GameSectionProps {
     embeddedDefaults?: EmbeddedBattleServerDefaults;
     /**
      * A game the server does not load is not editable: its cards stay closed and
-     * cannot be opened until the game is enabled in the header.
+     * cannot be opened until the game is enabled in the header. The same applies
+     * to a game page shown from config.toml, whose settings live in a per-game
+     * document of their own.
      */
     disabled?: boolean;
+    /** Why the page cannot be edited here. Defaults to the disabled-game hint. */
+    disabledMessage?: string;
+    /** Action offered next to that hint, such as opening the document that owns them. */
+    disabledAction?: React.ReactNode;
     onChangeBattleServers: (gameId: string, servers: BattleServerConfig[]) => void;
     onChangeEmbeddedBattleServer: (gameId: string, config: EmbeddedBattleServerConfig) => void;
     onCommit: () => void;
@@ -131,6 +137,8 @@ export const GameSection: React.FC<GameSectionProps> = ({
     onChangeEmbeddedBattleServer,
     embeddedDefaults,
     disabled = false,
+    disabledMessage,
+    disabledAction,
     onCommit,
 }) => {
     const [serversExpanded, serversHandlers] = useDisclosure(false);
@@ -171,10 +179,13 @@ export const GameSection: React.FC<GameSectionProps> = ({
             )}
             {disabled && (
                 <InfoBar severity="info">
-                    <Text size="sm">
-                        This game is not enabled, so the server never loads its settings. Turn it on in the header to
-                        edit them.
-                    </Text>
+                    <Group justify="space-between" gap="md" wrap="wrap">
+                        <Text size="sm" style={{ flex: 1, minWidth: 240 }}>
+                            {disabledMessage ??
+                                'This game is not enabled, so the server never loads its settings. Turn it on in the header to edit them.'}
+                        </Text>
+                        {disabledAction}
+                    </Group>
                 </InfoBar>
             )}
 

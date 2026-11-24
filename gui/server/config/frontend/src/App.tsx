@@ -147,6 +147,15 @@ export function App() {
             .catch((error: unknown) => setErrorMsg(errorMessage(error)));
     };
 
+    // A per-game document is a document of its own: creating one loads only
+    // that file, and the editor never holds it together with config.toml.
+    const createGameConfigFile = (gameId: string) => {
+        setErrorMsg(null);
+        ConfigService.OpenGameTemplate(gameId)
+            .then(showLoadedFile)
+            .catch((error: unknown) => setErrorMsg(errorMessage(error)));
+    };
+
     // Try the default configuration on startup. When there is none the load
     // screen stays in place: the picker only opens when the user asks for it.
     useEffect(() => {
@@ -177,7 +186,10 @@ export function App() {
             backendValidationErrors={loadedFile.validationErrors ?? []}
             embeddedDefaults={embeddedDefaults}
             fileName={loadedFile.path}
-            isNew={!loadedFile.path}
+            isNew={loadedFile.new ?? !loadedFile.path}
+            documentKind={loadedFile.kind === 'game' ? 'game' : 'main'}
+            documentGame={loadedFile.game || undefined}
+            suggestedName={loadedFile.suggestedName || undefined}
             onSaved={showLoadedFile}
             onBack={() => setLoadedFile(null)}
         />
@@ -185,6 +197,7 @@ export function App() {
         <Screen1_FileLoad
             onSelectConfig={selectConfigFile}
             onCreateConfig={createConfigFile}
+            onCreateGameConfig={createGameConfigFile}
             errorMsg={errorMsg || undefined}
             validationErrors={[]}
         />

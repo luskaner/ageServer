@@ -19,6 +19,7 @@ export type {
     EmbeddedBattleServerDefaults,
     GameConfig,
     GamesConfiguration,
+    HostsConfiguration,
     InternetConfiguration,
     ModsConfiguration,
     ReplaysConfiguration,

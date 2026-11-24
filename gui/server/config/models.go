@@ -1,10 +1,19 @@
 package main
 
-// ConfigFile is the bridge between Go and the React editor.
+// ConfigFile is the bridge between Go and the React editor. One load is one
+// document: config.toml or one config.<game>.toml, never both at once.
 type ConfigFile struct {
-	Path             string            `json:"path"`
-	Content          string            `json:"content"`
-	GameFiles        map[string]string `json:"gameFiles"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	// Kind is "main" for config.toml and "game" for a config.<game>.toml.
+	Kind string `json:"kind"`
+	// Game is the game a "game" document belongs to (empty for "main").
+	Game string `json:"game"`
+	// SuggestedName is the file name a new document proposes when it is saved.
+	SuggestedName string `json:"suggestedName"`
+	// New reports a document that is not on disk yet, even when Path already
+	// names where it will be written.
+	New              bool              `json:"new"`
 	Config           *Configuration    `json:"config"`
 	ValidationErrors []ValidationError `json:"validationErrors"`
 }

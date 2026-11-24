@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -1252,7 +1253,7 @@ BsPort = 30003
 	if err != nil {
 		t.Fatalf("parse main configuration: %v", err)
 	}
-	if _, err := readGameFiles(path, config); err != nil {
+	if err := readGameFiles(path, config); err != nil {
 		t.Fatalf("readGameFiles returned an error: %v", err)
 	}
 	embedded := config.Games.Age2.EmbeddedBattleServer
@@ -1464,11 +1465,16 @@ func TestConfigurationDocumentKeepsEveryTemplateComment(t *testing.T) {
 	}
 }
 
-// A save writes the main document and one file per enabled game, and reading
-// the result merges both halves back into the model.
-func TestSaveConfigurationWritesGameFilesAndReloads(t *testing.T) {
+// Saving config.toml writes that document and nothing else. The per-game files
+// belong to documents of their own, so their content is left untouched.
+func TestSaveConfigurationWritesOnlyTheMainDocument(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "config.toml")
+	gamePath := filepath.Join(directory, "config.age2.toml")
+	gameContent := []byte("[Game]\n\n[[Game.BattleServers]]\n# Owned by config.age2.toml.\nRegion = 'lan'\nIPv4 = 'auto'\nBsPort = 30003\nWebSocketPort = 30004\nOutOfBandPort = 30005\n")
+	if err := os.WriteFile(gamePath, gameContent, 0600); err != nil {
+		t.Fatalf("create per-game configuration: %v", err)
+	}
 	original := []byte(`Authentication = 'disabled'
 
 [Hosts]
@@ -1495,7 +1501,7 @@ MulticastGroup = '239.31.97.8'
 		t.Fatalf("parse test configuration: %v", err)
 	}
 	configuration.Games.Age2.BattleServers = []BattleServerConfig{
-		{Region: "lan", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
+		{Region: "other", IPv4: "auto", BsPort: 30009, WebSocketPort: 30004, OutOfBandPort: 30005},
 	}
 	configuration.Games.Age2.EmbeddedBattleServer = EmbeddedBattleServerConfig{StartIfMissing: "false"}
 	service := &ConfigService{}
@@ -1506,40 +1512,26 @@ MulticastGroup = '239.31.97.8'
 	if err != nil {
 		t.Fatalf("read saved configuration: %v", err)
 	}
-	if strings.Contains(string(mainContent), "Games.age2]\nHosts") || strings.Contains(string(mainContent), "[[Games.age2.BattleServers]]") {
-		t.Fatalf("per-game settings were left in config.toml:\n%s", mainContent)
+	for _, unwanted := range []string{"[[Games.age2.BattleServers]]", "[Games.age2.EmbeddedBattleServer]"} {
+		if strings.Contains(string(mainContent), unwanted) {
+			t.Fatalf("%q was written to config.toml:\n%s", unwanted, mainContent)
+		}
 	}
-	gamePath := filepath.Join(directory, "config.age2.toml")
-	gameContent, err := os.ReadFile(gamePath)
+	if strings.Contains(string(mainContent), "Hosts = ['192.0.2.10']") {
+		t.Fatalf("the deprecated per-game hosts were kept:\n%s", mainContent)
+	}
+	savedGame, err := os.ReadFile(gamePath)
 	if err != nil {
 		t.Fatalf("read per-game configuration: %v", err)
 	}
-	for _, want := range []string{"[[Game.BattleServers]]", "Region = 'lan'", "[Game.EmbeddedBattleServer]", "StartIfMissing = 'false'"} {
-		if !strings.Contains(string(gameContent), want) {
-			t.Fatalf("%q was not written to %s:\n%s", want, gamePath, gameContent)
-		}
-	}
-
-	file, err := service.readConfigFile(path)
-	if err != nil {
-		t.Fatalf("readConfigFile returned an error: %v", err)
-	}
-	if file.GameFiles["age2"] == "" {
-		t.Fatalf("the per-game file was not returned: %#v", file.GameFiles)
-	}
-	if len(file.Config.Games.Age2.BattleServers) != 1 || file.Config.Games.Age2.BattleServers[0].Region != "lan" {
-		t.Fatalf("the per-game battle servers were not merged: %#v", file.Config.Games.Age2.BattleServers)
-	}
-	if file.Config.Games.Age2.EmbeddedBattleServer.StartIfMissing != "false" {
-		t.Fatalf("the per-game embedded server was not merged: %#v", file.Config.Games.Age2.EmbeddedBattleServer)
-	}
-	if len(file.Config.Games.Age2.Hosts) != 0 {
-		t.Fatalf("the deprecated per-game hosts were kept: %#v", file.Config.Games.Age2.Hosts)
+	if string(savedGame) != string(gameContent) {
+		t.Fatalf("saving config.toml changed the per-game document:\n%s", savedGame)
 	}
 }
 
-// Save as copies every per-game document next to the new main file.
-func TestSaveConfigurationAsCopiesGameFiles(t *testing.T) {
+// Saving a configuration somewhere else writes only that document: the
+// per-game files are not copied along with it.
+func TestSaveConfigurationAsWritesOnlyTheDestination(t *testing.T) {
 	directory := t.TempDir()
 	sourcePath := filepath.Join(directory, "source.toml")
 	destinationPath := filepath.Join(directory, "destination.toml")
@@ -1552,20 +1544,12 @@ Legacy = []
 [Games]
 Enabled = ['age2']
 `)
-	gameContent := []byte(`[Game]
-
-[[Game.BattleServers]]
-# Keep this comment.
-Region = 'lan'
-IPv4 = 'auto'
-BsPort = 30003
-WebSocketPort = 30004
-OutOfBandPort = 30005
-`)
+	gameContent := []byte("[Game]\n\n[[Game.BattleServers]]\n# Keep this comment.\nRegion = 'lan'\n")
 	if err := os.WriteFile(sourcePath, mainContent, 0600); err != nil {
 		t.Fatalf("create source configuration: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(directory, "config.age2.toml"), gameContent, 0600); err != nil {
+	gamePath := filepath.Join(directory, "config.age2.toml")
+	if err := os.WriteFile(gamePath, gameContent, 0600); err != nil {
 		t.Fatalf("create source game configuration: %v", err)
 	}
 	service := &ConfigService{}
@@ -1574,56 +1558,237 @@ OutOfBandPort = 30005
 		t.Fatalf("read source configuration: %v", err)
 	}
 	configuration := *loaded.Config
+	configuration.Hosts.Modern = []string{"192.0.2.20"}
 	file, err := service.SaveConfigurationAs(sourcePath, destinationPath, configuration, true)
 	if err != nil {
 		t.Fatalf("SaveConfigurationAs returned an error: %v", err)
 	}
-	if file.Path != destinationPath || file.GameFiles["age2"] == "" {
+	if file.Path != destinationPath {
 		t.Fatalf("unexpected saved file: %+v", file)
 	}
-	destinationGame, err := os.ReadFile(filepath.Join(directory, "config.age2.toml"))
+	destination, err := os.ReadFile(destinationPath)
 	if err != nil {
-		t.Fatalf("read copied game configuration: %v", err)
+		t.Fatalf("read destination configuration: %v", err)
 	}
-	if string(destinationGame) != string(gameContent) {
-		t.Fatalf("the per-game document was not copied:\n%s", destinationGame)
+	if !strings.Contains(string(destination), "['192.0.2.20']") {
+		t.Fatalf("the destination was not written:\n%s", destination)
 	}
-	if len(file.Config.Games.Age2.BattleServers) != 1 || file.Config.Games.Age2.BattleServers[0].Region != "lan" {
-		t.Fatalf("the copied battle servers were not loaded: %#v", file.Config.Games.Age2.BattleServers)
+	savedGame, err := os.ReadFile(gamePath)
+	if err != nil {
+		t.Fatalf("read per-game configuration: %v", err)
+	}
+	if string(savedGame) != string(gameContent) {
+		t.Fatalf("save as changed the per-game document:\n%s", savedGame)
 	}
 }
 
-// Enabling a game does not create an empty per-game file: the header comment
-// must not count as content by itself.
-func TestSaveConfigurationCreatesOnlyGamesWithContent(t *testing.T) {
+// A per-game document is its own file: reading it exposes only its game, and a
+// save rewrites that document without touching the config.toml next to it.
+func TestSaveGameConfigurationWritesOnlyThatFile(t *testing.T) {
 	directory := t.TempDir()
-	path := filepath.Join(directory, "config.toml")
-	content := []byte(`Authentication = 'disabled'
+	mainPath := filepath.Join(directory, "config.toml")
+	gamePath := filepath.Join(directory, "config.age2.toml")
+	mainContent := []byte(`Authentication = 'disabled'
 
 [Hosts]
 Modern = ['127.0.0.1']
 Legacy = []
 
 [Games]
-Enabled = ['age2', 'age3']
+Enabled = ['age2']
+
+[Games.age2.EmbeddedBattleServer]
+Region = 'inherited'
+BsPort = 30003
 `)
-	if err := os.WriteFile(path, content, 0600); err != nil {
-		t.Fatalf("create test configuration: %v", err)
+	gameContent := []byte("[Game]\n\n[[Game.BattleServers]]\nRegion = 'lan'\nIPv4 = 'auto'\nBsPort = 30003\nWebSocketPort = 30004\nOutOfBandPort = 30005\n")
+	if err := os.WriteFile(mainPath, mainContent, 0600); err != nil {
+		t.Fatalf("create main configuration: %v", err)
 	}
-	configuration, err := parseConfiguration(content)
+	if err := os.WriteFile(gamePath, gameContent, 0600); err != nil {
+		t.Fatalf("create per-game configuration: %v", err)
+	}
+	service := &ConfigService{}
+	document, err := service.readConfigFile(gamePath)
 	if err != nil {
-		t.Fatalf("parse test configuration: %v", err)
+		t.Fatalf("readConfigFile returned an error: %v", err)
 	}
-	configuration.Games.Age2.BattleServers = []BattleServerConfig{
-		{Region: "lan", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
+	if document.Kind != documentGame || document.Game != "age2" {
+		t.Fatalf("unexpected document kind: %+v", document)
 	}
-	if err := (&ConfigService{}).SaveConfiguration(path, *configuration); err != nil {
+	if document.New || document.Path != gamePath || document.SuggestedName != "config.age2.toml" {
+		t.Fatalf("unexpected document state: %+v", document)
+	}
+	if !slices.Equal(document.Config.Games.Enabled, []string{"age2"}) {
+		t.Fatalf("a per-game document enabled other games: %v", document.Config.Games.Enabled)
+	}
+
+	configuration := *document.Config
+	configuration.Games.Age2.BattleServers = append(configuration.Games.Age2.BattleServers, BattleServerConfig{
+		Region: "extra", IPv4: "auto", BsPort: 30103, WebSocketPort: 30104, OutOfBandPort: 30105,
+	})
+	if err := service.SaveConfiguration(gamePath, configuration); err != nil {
 		t.Fatalf("SaveConfiguration returned an error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(directory, "config.age2.toml")); err != nil {
-		t.Fatalf("the game with battle servers has no file: %v", err)
+	savedMain, err := os.ReadFile(mainPath)
+	if err != nil {
+		t.Fatalf("read main configuration: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(directory, "config.age3.toml")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("an empty per-game file was created: %v", err)
+	if string(savedMain) != string(mainContent) {
+		t.Fatalf("saving a per-game document changed config.toml:\n%s", savedMain)
+	}
+	savedGame, err := os.ReadFile(gamePath)
+	if err != nil {
+		t.Fatalf("read per-game configuration: %v", err)
+	}
+	if !strings.Contains(string(savedGame), "Region = 'extra'") {
+		t.Fatalf("the new battle server was not written:\n%s", savedGame)
+	}
+	if strings.Contains(string(savedGame), "Region = 'inherited'") || strings.Contains(string(savedGame), "[Game.EmbeddedBattleServer]") {
+		t.Fatalf("the per-game document pinned inherited values:\n%s", savedGame)
+	}
+}
+
+// A per-game document starts from the server defaults, inherits the embedded
+// battle server of the sibling config.toml and keeps only its own game.
+func TestReadGameDocumentInheritsFromMainConfiguration(t *testing.T) {
+	directory := t.TempDir()
+	mainPath := filepath.Join(directory, "config.toml")
+	gamePath := filepath.Join(directory, "config.age2.toml")
+	mainContent := []byte(`Authentication = 'disabled'
+
+[Games]
+Enabled = ['age2']
+
+[Games.age2.EmbeddedBattleServer]
+Region = 'inherited'
+BsPort = 30003
+`)
+	gameContent := []byte("[Game.EmbeddedBattleServer]\nStartIfMissing = 'false'\n")
+	if err := os.WriteFile(mainPath, mainContent, 0600); err != nil {
+		t.Fatalf("create main configuration: %v", err)
+	}
+	if err := os.WriteFile(gamePath, gameContent, 0600); err != nil {
+		t.Fatalf("create per-game configuration: %v", err)
+	}
+	document, err := (&ConfigService{}).readConfigFile(gamePath)
+	if err != nil {
+		t.Fatalf("readConfigFile returned an error: %v", err)
+	}
+	embedded := document.Config.Games.Age2.EmbeddedBattleServer
+	if embedded.StartIfMissing != "false" {
+		t.Fatalf("StartIfMissing = %q, want the file value", embedded.StartIfMissing)
+	}
+	if embedded.Region != "inherited" || embedded.BsPort != 30003 {
+		t.Fatalf("the per-game document dropped inherited values: %#v", embedded)
+	}
+	if document.Config.Authentication != "disabled" {
+		t.Fatalf("the per-game document did not start from the server defaults: %+v", document.Config)
+	}
+}
+
+func TestDocumentGameID(t *testing.T) {
+	cases := map[string]string{
+		"config.age2.toml":     "age2",
+		"CONFIG.Athens.toml":   "athens",
+		"config.toml":          "",
+		"config.unknown.toml":  "",
+		"other.age2.toml":      "",
+		"config.age2.yaml":     "",
+		"config.age2.toml.bak": "",
+	}
+	for name, want := range cases {
+		gameID, ok := documentGameID(filepath.Join("dir", name))
+		if want == "" {
+			if ok {
+				t.Fatalf("%q was taken as a per-game document for %q", name, gameID)
+			}
+			continue
+		}
+		if !ok || gameID != want {
+			t.Fatalf("%q: got %q (ok=%v), want %q", name, gameID, ok, want)
+		}
+	}
+}
+
+// Creating a document whose name is config.<game>.toml writes that file only.
+func TestCreateConfigFileCreatesGameDocument(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "config.age3.toml")
+	configuration := serverDefaults()
+	configuration.Games.Enabled = []string{"age3"}
+	configuration.Games.Age3.BattleServers = []BattleServerConfig{
+		{Region: "lan", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
+	}
+	document, err := (&ConfigService{}).CreateConfigFile(path, configuration, false)
+	if err != nil {
+		t.Fatalf("CreateConfigFile returned an error: %v", err)
+	}
+	if document.Kind != documentGame || document.Game != "age3" || document.New {
+		t.Fatalf("unexpected document: %+v", document)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read created configuration: %v", err)
+	}
+	for _, want := range []string{"[[Game.BattleServers]]", "Region = 'lan'"} {
+		if !strings.Contains(string(content), want) {
+			t.Fatalf("%q was not written:\n%s", want, content)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(directory, configFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("creating a per-game document created config.toml: %v", err)
+	}
+}
+
+// Opening a game document from another one targets the sibling file, and a
+// missing file becomes a new document aimed at that path instead of a failure.
+func TestOpenGameDocumentTargetsSiblingFile(t *testing.T) {
+	directory := t.TempDir()
+	mainPath := filepath.Join(directory, "config.toml")
+	if err := os.WriteFile(mainPath, []byte("Authentication = 'disabled'\n\n[Games]\nEnabled = ['age4']\n"), 0600); err != nil {
+		t.Fatalf("create main configuration: %v", err)
+	}
+	service := &ConfigService{}
+	document, err := service.OpenGameDocument(mainPath, "age4")
+	if err != nil {
+		t.Fatalf("OpenGameDocument returned an error: %v", err)
+	}
+	target := filepath.Join(directory, "config.age4.toml")
+	if !document.New || document.Path != target || document.Game != "age4" {
+		t.Fatalf("unexpected document: %+v", document)
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("OpenGameDocument created the file: %v", err)
+	}
+
+	if err := os.WriteFile(target, []byte("[Game]\n\n[[Game.BattleServers]]\nRegion = 'lan'\n"), 0600); err != nil {
+		t.Fatalf("create per-game configuration: %v", err)
+	}
+	document, err = service.OpenGameDocument(mainPath, "age4")
+	if err != nil {
+		t.Fatalf("OpenGameDocument returned an error: %v", err)
+	}
+	if document.New || document.Path != target || len(document.Config.Games.Age4.BattleServers) != 1 {
+		t.Fatalf("unexpected loaded document: %+v", document)
+	}
+}
+
+func TestOpenGameTemplate(t *testing.T) {
+	document, err := (&ConfigService{}).OpenGameTemplate("age4")
+	if err != nil {
+		t.Fatalf("OpenGameTemplate returned an error: %v", err)
+	}
+	if !document.New || document.Path != "" || document.Kind != documentGame || document.Game != "age4" {
+		t.Fatalf("unexpected document: %+v", document)
+	}
+	if document.SuggestedName != "config.age4.toml" {
+		t.Fatalf("unexpected suggested name: %q", document.SuggestedName)
+	}
+	if !slices.Equal(document.Config.Games.Enabled, []string{"age4"}) {
+		t.Fatalf("unexpected enabled games: %v", document.Config.Games.Enabled)
+	}
+	if _, err := (&ConfigService{}).OpenGameTemplate("unknown"); err == nil {
+		t.Fatal("an unknown game was accepted")
 	}
 }
