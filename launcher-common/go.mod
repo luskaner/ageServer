@@ -5,19 +5,19 @@ go 1.27.4
 require (
 	charm.land/lipgloss/v2 v2.1.1
 	github.com/charmbracelet/colorprofile v0.4.3
-	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/deckarep/golang-set/v3 v3.0.0
 	github.com/hairyhenderson/go-which v0.2.5
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.2
 	github.com/knadh/koanf/v2 v2.4.1
 	github.com/spf13/pflag v1.1.0
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 	golang.org/x/sys v0.50.0
 )
 
 require (
-	github.com/charmbracelet/ultraviolet v0.0.0-20261023060817-a45b7c86333f // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20261119151026-8ecbcf0e188c // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect

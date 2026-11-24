@@ -6,7 +6,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.4
 	github.com/deckarep/golang-set/v3 v3.0.0
 	github.com/spf13/pflag v1.1.0
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 )
 
 require (

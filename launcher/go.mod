@@ -11,8 +11,8 @@ require (
 
 require (
 	github.com/akavel/rsrc v0.10.2 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20261023060817-a45b7c86333f // indirect
-	github.com/charmbracelet/x/ansi v0.11.9 // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20261119151026-8ecbcf0e188c // indirect
+	github.com/charmbracelet/x/ansi v0.11.10 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
@@ -23,7 +23,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.31 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 // indirect
+	github.com/randall77/makefat v0.0.0-20261123224909-984af5037a54 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/xo/terminfo v1.3.1 // indirect

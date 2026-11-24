@@ -14,8 +14,8 @@ github.com/luskaner/ageServer/battle-server-broadcast v1.3.3 h1:UOV7BPI72t9HoHm5
 github.com/luskaner/ageServer/battle-server-broadcast v1.3.3/go.mod h1:yKexWi83ZAlH1TDgxytO19ZGHziggD9XZJGce2991FM=
 github.com/ncruces/zenity v0.10.15 h1:UaHekkxwt7QjoZmMWtzhqSEtQT97/Cux6FDBWwfyuqk=
 github.com/ncruces/zenity v0.10.15/go.mod h1:45d81tt+vF/UjBjlWE/vvE0oD0hWuHUQld4vPbA4VxE=
-github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 h1:m1yKMZwDSXkT5o2MKhd6ihdzb2dYb6eElNE04xjOSEY=
-github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7/go.mod h1:T1TLSfyWVBRXVGzWd0o9BI4kfoO9InEgfQe4NV3mLz8=
+github.com/randall77/makefat v0.0.0-20261123224909-984af5037a54 h1:XNi7Pn0btI6JX93ebCsiy/DJ5mbUzojjT9fZ1ohgpAY=
+github.com/randall77/makefat v0.0.0-20261123224909-984af5037a54/go.mod h1:T1TLSfyWVBRXVGzWd0o9BI4kfoO9InEgfQe4NV3mLz8=
 github.com/spf13/pflag v1.1.0 h1:6W6MbVUrnMb8PEhjkqwsVLY7ryuzRfFHF4mQd7L94ag=
 github.com/spf13/pflag v1.1.0/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
