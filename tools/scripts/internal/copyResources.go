@@ -28,7 +28,15 @@ func CopyMainConfig(module string) {
 }
 
 func CopyGameConfigs(module string) {
-	dstPath := BuildResourcePath(module)
+	CopyGameConfigsTo(module, "")
+}
+
+// CopyGameConfigsTo installs one config.<game>.toml per supported game under
+// subdir of the module's resources folder. The launcher and the battle server
+// manager read them from resources itself; the server reads them from
+// resources/config, next to config.toml, which is where the release puts them.
+func CopyGameConfigsTo(module, subdir string) {
+	dstPath := filepath.Join(BuildResourcePath(module), subdir)
 	MkdirP(dstPath)
 	src := filepath.Join(ResourcePath(module), fmt.Sprintf(c.GameConfigFileName, "game"))
 	for g := range game.SupportedGames.Iter() {

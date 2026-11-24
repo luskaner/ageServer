@@ -3,6 +3,7 @@ package internal
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -44,6 +45,43 @@ func TestCopyGameConfigsRemovesStale(t *testing.T) {
 	}
 	if _, err := os.Stat(mainFile); err != nil {
 		t.Fatalf("main config should be preserved: %v", err)
+	}
+}
+
+func TestCopyGameConfigsToSubdir(t *testing.T) {
+	// The server reads its per-game documents from resources/config, next to
+	// config.toml, not from the resources folder itself.
+	tmp := t.TempDir()
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	_ = os.Chdir(tmp)
+	module := "testmod"
+	srcDir := filepath.Join(tmp, module, "resources")
+	_ = os.MkdirAll(srcDir, 0755)
+	if err := os.WriteFile(filepath.Join(srcDir, "config.game.toml"), []byte("game"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	CopyGameConfigsTo(module, "config")
+	configDir := filepath.Join(tmp, "build", module, "resources", "config")
+	entries, err := os.ReadDir(configDir)
+	if err != nil {
+		t.Fatalf("the per-game documents were not written next to config.toml: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("no per-game document was generated")
+	}
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".toml") {
+			t.Fatalf("unexpected entry %q", entry.Name())
+		}
+	}
+	stale := filepath.Join(configDir, "config.deprecated.toml")
+	if err := os.WriteFile(stale, []byte("old"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	CopyGameConfigsTo(module, "config")
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale game config was not removed: %v", err)
 	}
 }
 

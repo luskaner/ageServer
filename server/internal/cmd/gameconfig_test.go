@@ -8,6 +8,7 @@ import (
 
 	mapset "github.com/deckarep/golang-set/v3"
 	"github.com/luskaner/ageServer/common/cmd/server"
+	"github.com/luskaner/ageServer/common/game"
 	"github.com/luskaner/ageServer/server/internal"
 	"github.com/spf13/pflag"
 )
@@ -188,6 +189,30 @@ func TestApplyGameOverridesFlagWins(t *testing.T) {
 	}
 	if got := cfg.Games.Age2.EmbeddedBattleServer.StartIfMissing; got != "true" {
 		t.Fatalf("StartIfMissing = %q, want the flag value", got)
+	}
+}
+
+// TestShippedGameConfigTemplateLoads keeps the document the release installs
+// for every game valid: it is the one users edit, so a renamed key must fail
+// here instead of at boot.
+func TestShippedGameConfigTemplateLoads(t *testing.T) {
+	path := filepath.Join("..", "..", "resources", "config.game.toml")
+	for gameID := range game.SupportedGames.Iter() {
+		cfg, found, err := loadGameConfig(internal.Game{}, gameID, "", &server.Values{GameConfig: path})
+		if err != nil {
+			t.Fatalf("%s: the shipped template does not load: %v", gameID, err)
+		}
+		if !found {
+			t.Fatalf("%s: the shipped template was not read", gameID)
+		}
+		eb := cfg.EmbeddedBattleServer
+		if eb.StartIfMissing != "true" || eb.Region != "Server" || eb.Name != "Server" ||
+			eb.IPv4 != "auto" || eb.BsPort != 0 || eb.WebSocketPort != 0 || eb.OutOfBandPort != 0 || eb.LogLevel != "info" {
+			t.Fatalf("%s: unexpected embedded battle server defaults: %#v", gameID, eb)
+		}
+		if len(cfg.BattleServers) != 0 {
+			t.Fatalf("%s: the shipped template configured %d battle servers", gameID, len(cfg.BattleServers))
+		}
 	}
 }
 
