@@ -7,6 +7,7 @@ import (
 )
 
 const configSource = `%s/resources/config.game.toml`
+const serverConfigSource = `%s/resources/config/config.game.toml`
 const scriptSource = `%s/resources/{{.BaseOS}}/%s.{{.SrcScriptExt}}`
 const gameScriptSource = `%s/resources/{{.BaseOS}}/start_{{.Game}}.{{.SrcScriptExt}}`
 const baseScriptSource = `common/resources/start.{{.SrcScriptExt}}`
@@ -40,7 +41,7 @@ func generate(currentWindowsOS OperatingSystem) error {
 	// raw copy of it would land unreplaced, and AddConfigFiles would put the
 	// generated file at resources/<game>.toml without the config/ folder.
 	serverArchive.AddSrcOsDstFile(
-		NewTemplate[FileData]("server/resources/config.game.toml"),
+		NewTemplate[FileData]("server/resources/config/config.game.toml"),
 		nil,
 		func(string) Renders[FileData] {
 			return NewTemplate[FileData]("resources/config/config.{{.Game}}.toml")

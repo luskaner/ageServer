@@ -468,8 +468,19 @@ func (a *Archive) Builds(mergedOSes ...OperatingSystem) []config.Build {
 
 func archive(name string, overrideOsName OverrideOsName, operatingSystem OperatingSystem, architecture Architecture, instructionSet string, allBuilds []config.Build, files mapset.Set[File]) *config.Archive {
 	matchingBuildIds := mapset.NewSet[string]()
+	osName := operatingSystem.Name()
+	// Build ID patterns:
+	// - Per-arch: "{path}_{osName}_{arch}" (e.g., "launcher_mac_amd64")
+	// - Merged (universal macOS): "{path}_{osName}" (e.g., "launcher_mac")
+	// - Windows with instruction set: "{path}_{osName}_{arch}_{instr}" (e.g., "server_win7_amd64_sse2")
+	osNamePattern := "_" + osName + "_"
+	osNameSuffix := "_" + osName
 	for _, b := range allBuilds {
-		if b.Tool == operatingSystem.Tool() && slices.Contains(b.Goos, operatingSystem.Goos()) && slices.Contains(b.Goarch, architecture.Goarch()) {
+		// Match by Tool, Goos, Goarch, AND OS name in build ID (to distinguish win7 vs win10)
+		// For merged builds (no arch in ID), the ID ends with "_{osName}".
+		// For per-arch builds, the ID contains "_{osName}_".
+		matchesOS := strings.Contains(b.ID, osNamePattern) || strings.HasSuffix(b.ID, osNameSuffix)
+		if b.Tool == operatingSystem.Tool() && slices.Contains(b.Goos, operatingSystem.Goos()) && slices.Contains(b.Goarch, architecture.Goarch()) && matchesOS {
 			if instructionSet == "" {
 				matchingBuildIds.Add(b.ID)
 			} else if archValues := archToValues(architecture, b); archValues.Contains(instructionSet) {

@@ -21,7 +21,7 @@ type generatedArchive struct {
 func hasGameConfig(archive generatedArchive, destination string) (bool, string) {
 	destinations := make(map[string]bool, len(archive.Files))
 	for _, file := range archive.Files {
-		if file.Source == "server/resources/config.game.toml" {
+		if file.Source == "server/resources/config/config.game.toml" {
 			destinations[file.Destination] = true
 		}
 	}
