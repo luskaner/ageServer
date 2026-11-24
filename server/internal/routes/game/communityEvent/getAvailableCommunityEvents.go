@@ -24,7 +24,9 @@ func GetAvailableCommunityEvents(w http.ResponseWriter, r *http.Request) {
 		// The AoE4 client only enables the ranked queue while a type-6 ranked
 		// season event covers the current time, so the LAN server publishes a
 		// rolling season instead of an empty event list.
-		response = aoe4CommunityEvents(g.Resources().ArrayFiles()["communityEvents.json"], time.Now())
+		now := time.Now()
+		response = aoe4CommunityEvents(g.Resources().ArrayFiles()["communityEvents.json"], now)
+		response = withMenuBackgrounds(response, g.Resources().MenuBackgrounds(), now)
 	} else {
 		response = i.A{0, i.A{}, i.A{}}
 		if title == game.AoE2 {

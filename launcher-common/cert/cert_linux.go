@@ -1,6 +1,7 @@
 package cert
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -42,6 +43,11 @@ var certStoreBundlePaths = []string{
 	"/etc/ssl/ca-bundle.pem",
 }
 
+// flushCertsFn runs the store update. It is a variable so a test that writes a
+// store file does not have to run the update binary, which needs root through
+// pkexec and is not there on a CI runner.
+var flushCertsFn = FlushCerts
+
 func FlushCerts() (result *exec.Result) {
 	binary := which.Which(updateStoreBinaries...)
 	if binary == "" {
@@ -73,84 +79,150 @@ func getCertPath() (err error, certPath string) {
 	return
 }
 
+// readStoreCertificates parses every PEM certificate the store file holds.
+// The file is ours and is a bundle: a session trusts the API server's
+// certificate first and the root server's afterwards, so the store has to
+// hold them both.
+func readStoreCertificates(certPath string) (certs []*x509.Certificate, err error) {
+	var certBytes []byte
+	certBytes, err = os.ReadFile(certPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return
+	}
+	for len(certBytes) > 0 {
+		var block *pem.Block
+		block, certBytes = pem.Decode(certBytes)
+		if block == nil {
+			break
+		}
+		var cert *x509.Certificate
+		if cert, err = x509.ParseCertificate(block.Bytes); err != nil {
+			return
+		}
+		certs = append(certs, cert)
+	}
+	return
+}
+
+// mergeCertificates keeps the store's order and appends what is not already
+// in it, so repeated passes and repeated runs do not grow the file.
+func mergeCertificates(existing []*x509.Certificate, added []*x509.Certificate) []*x509.Certificate {
+	merged := existing
+	for _, cert := range added {
+		duplicate := false
+		for _, already := range merged {
+			if bytes.Equal(already.Raw, cert.Raw) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			merged = append(merged, cert)
+		}
+	}
+	return merged
+}
+
+// writeStoreFile atomically replaces the store file with the merged bundle,
+// through the same temp-file dance as before: a rename across filesystems is
+// retried by streaming through a temp file next to the destination.
+func writeStoreFile(certPath string, certs []*x509.Certificate) (err error) {
+	var certFile *os.File
+	certFile, err = os.CreateTemp("", "*")
+	if err != nil {
+		return err
+	}
+	for _, cert := range certs {
+		if err = common.WriteAsPem(cert.Raw, certFile); err != nil {
+			_ = certFile.Close()
+			_ = os.Remove(certFile.Name())
+			return err
+		}
+	}
+	if err = certFile.Close(); err != nil {
+		_ = os.Remove(certFile.Name())
+		return err
+	}
+
+	err = os.Rename(certFile.Name(), certPath)
+	if err != nil {
+		// Likely certFile does not share filesystem with certPath
+		var certFileTmp *os.File
+		certFileTmp, err = os.CreateTemp(filepath.Dir(certPath), ".*")
+		if err != nil {
+			_ = os.Remove(certFile.Name())
+			return err
+		}
+
+		var newCertFile *os.File
+		newCertFile, err = os.Open(certFile.Name())
+		if err != nil {
+			_ = certFileTmp.Close()
+			_ = os.Remove(certFile.Name())
+			_ = os.Remove(certFileTmp.Name())
+			return err
+		}
+
+		_, err = io.Copy(certFileTmp, newCertFile)
+		_ = newCertFile.Close()
+		_ = os.Remove(newCertFile.Name())
+		if err != nil {
+			_ = certFileTmp.Close()
+			_ = os.Remove(certFileTmp.Name())
+			_ = os.Remove(certFile.Name())
+			return err
+		}
+
+		err = certFileTmp.Close()
+		if err != nil {
+			_ = os.Remove(certFileTmp.Name())
+			_ = os.Remove(certFile.Name())
+			return err
+		}
+
+		err = os.Rename(certFileTmp.Name(), certPath)
+		if err != nil {
+			_ = os.Remove(certFileTmp.Name())
+			_ = os.Remove(certFile.Name())
+			return err
+		}
+		_ = os.Remove(certFile.Name())
+	}
+
+	return os.Chmod(certPath, 0644)
+}
+
+// TrustCertificates adds the certificates to the system's trusted store: they
+// all land in one bundle file that starts from what the store already holds,
+// so the session's root pass does not replace the API pass's certificate and
+// a repeated pass does not grow the file.
 func TrustCertificates(_ bool, certs []*x509.Certificate) error {
 	err, certPath := getCertPath()
 	if err != nil {
 		return err
 	}
 
-	for _, cert := range certs {
-		var certFile *os.File
-
-		certFile, err = os.CreateTemp("", "*")
-		if err != nil {
-			return err
-		}
-
-		err = common.WriteAsPem(cert.Raw, certFile)
-
-		if err != nil {
-			_ = certFile.Close()
-			_ = os.Remove(certFile.Name())
-			return err
-		}
-
-		err = certFile.Close()
-		if err != nil {
-			return err
-		}
-
-		err = os.Rename(certFile.Name(), certPath)
-		if err != nil {
-			// Likely certFile does not share filesystem with certPath
-			var certFileTmp *os.File
-			certFileTmp, err = os.CreateTemp(filepath.Dir(certPath), ".*")
-			if err != nil {
-				_ = os.Remove(certFile.Name())
-				return err
-			}
-
-			var newCertFile *os.File
-			newCertFile, err = os.Open(certFile.Name())
-			if err != nil {
-				_ = certFileTmp.Close()
-				_ = os.Remove(certFile.Name())
-				_ = os.Remove(certFileTmp.Name())
-				return err
-			}
-
-			_, err = io.Copy(certFileTmp, newCertFile)
-			_ = newCertFile.Close()
-			_ = os.Remove(newCertFile.Name())
-			if err != nil {
-				_ = certFileTmp.Close()
-				_ = os.Remove(certFileTmp.Name())
-				return err
-			}
-
-			err = certFileTmp.Close()
-			if err != nil {
-				_ = os.Remove(certFileTmp.Name())
-				return err
-			}
-
-			err = os.Rename(certFileTmp.Name(), certPath)
-
-			if err != nil {
-				_ = os.Remove(certFileTmp.Name())
-				return err
-			}
-		}
-
-		err = os.Chmod(certPath, 0644)
-		if err != nil {
-			return err
-		}
+	var existing []*x509.Certificate
+	if existing, err = readStoreCertificates(certPath); err != nil {
+		return err
+	}
+	merged := mergeCertificates(existing, certs)
+	if len(merged) == 0 {
+		return nil
 	}
 
-	return FlushCerts().Err
+	if err = writeStoreFile(certPath, merged); err != nil {
+		return err
+	}
+
+	return flushCertsFn().Err
 }
 
+// UntrustCertificates removes the store file whole and returns every
+// certificate it held, so a restore can put the bundle back as it was.
 func UntrustCertificates(_ bool) (certs []*x509.Certificate, err error) {
 	var certPath string
 	err, certPath = getCertPath()
@@ -162,41 +234,21 @@ func UntrustCertificates(_ bool) (certs []*x509.Certificate, err error) {
 		return
 	}
 
-	var certFile *os.File
-	certFile, err = os.Open(certPath)
-
-	if err != nil {
-		return
-	}
-	defer func() {
-		_ = certFile.Close()
-	}()
-
-	var certBytes []byte
-	certBytes, err = io.ReadAll(certFile)
-
-	if err != nil {
+	if certs, err = readStoreCertificates(certPath); err != nil {
 		return
 	}
 
-	block, _ := pem.Decode(certBytes)
-	var cert *x509.Certificate
-	cert, err = x509.ParseCertificate(block.Bytes)
-
-	if err != nil {
+	if err = os.Remove(certPath); err != nil {
 		return
 	}
 
-	err = os.Remove(certFile.Name())
-	if err != nil {
-		return
+	if err = flushCertsFn().Err; err != nil {
+		// The update never ran, so the caller can put the file back whole.
+		return certs, err
 	}
 
-	err = FlushCerts().Err
-	if err != nil {
-		certs = []*x509.Certificate{cert}
-	}
-
+	// The certificates are returned even on success: a revert interrupted after
+	// this point has to be able to trust them again, as on Windows and macOS.
 	return
 }
 

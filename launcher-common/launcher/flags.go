@@ -95,6 +95,7 @@ func BindFlags(fs *pflag.FlagSet, v Values) error {
 	fs.StringSliceP("serverAnnouncePorts", "n", []string{strconv.Itoa(common.AnnouncePort)}, `Announce ports to listen to. If not including the default port, default configured 'servers' will not get discovered.`)
 	fs.StringSliceP("serverAnnounceMulticastGroups", "g", []string{common.AnnounceMulticastGroup}, `Announce multicast groups to join. If not including the default group, default configured 'servers' will not get discovered via Multicast.`)
 	fs.StringP("server", "s", "", `Hostname of the server to connect to. If not absent, serverStart will be assumed to be false. Ignored otherwise`)
+	fs.String("serverApi", netip.IPv4Unspecified().String(), `Host of the server that answers the Age of Empires API, "0.0.0.0" uses the one embedded in the server, any other host or IPv4 address uses a standalone API server on port 443.`)
 	fs.Bool("serverSingleAutoSelect", false, `Auto-select the server when a single one is discovered.`)
 	serverExe := executables.NativeFileName(false, executables.Server)
 	fs.StringP("serverPath", "z", autoValue, fmt.Sprintf(`The executable path of the server, "auto", will be try to execute in this order "./%s/%s", "../%s" and finally "../%s/%s", otherwise set the path (relative or absolute).`, executables.Server, serverExe, serverExe, executables.Server, serverExe))
@@ -128,7 +129,7 @@ func BindFlags(fs *pflag.FlagSet, v Values) error {
 	}
 	clientExeTip += " to use the default launcher."
 	fs.StringP("clientExe", "l", autoValue, clientExeTip)
-	fs.StringP("clientExeArgs", "i", "", "The arguments to pass to the client launcher if it is custom. You may use environment variables and '{HostFilePath}'/'{CertFilePath}'/'{SigKeyFilePath}' replacement variables."+pathNamesInfo)
+	fs.StringP("clientExeArgs", "i", "", "The arguments to pass to the client launcher if it is custom. You may use environment variables and '{HostFilePath}'/'{CertFilePath}'/'{ApiCertFilePath}'/'{SigKeyFilePath}' replacement variables."+pathNamesInfo)
 
 	return nil
 }
@@ -161,6 +162,7 @@ func defaultLayers() map[string]any {
 		"Server.Executable":                         autoValue,
 		"Server.ExecutableArgs":                     []string{"-e", "{Game}", "--id", "{Id}"},
 		"Server.Host":                               netip.IPv4Unspecified().String(),
+		"Server.Api.Host":                           netip.IPv4Unspecified().String(),
 		"Server.AnnouncePorts":                      []int{common.AnnouncePort},
 		"Server.AnnounceMulticastGroups":            []string{common.AnnounceMulticastGroup},
 		"Server.BattleServerManager.Run":            "false",
@@ -198,6 +200,7 @@ func flagBindings() map[string]string {
 		"serverAnnouncePorts":           "Server.AnnouncePorts",
 		"serverAnnounceMulticastGroups": "Server.AnnounceMulticastGroups",
 		"server":                        "Server.Host",
+		"serverApi":                     "Server.Api.Host",
 		"serverPath":                    "Server.Executable",
 		"serverPathArgs":                "Server.ExecutableArgs",
 		"clientExe":                     "Client.Executable",

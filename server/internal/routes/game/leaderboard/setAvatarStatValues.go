@@ -38,6 +38,11 @@ func SetAvatarStatValues(w http.ResponseWriter, r *http.Request) {
 		i.JSON(&w, i.A{2})
 		return
 	}
+	if models.SafeForRequest(r) {
+		logger.Printf("leaderboard.setAvatarStatValues: user=%d skipped (safe mode)\n", u.GetId())
+		i.JSON(&w, i.A{0})
+		return
+	}
 	var encodedAvatarStats i.A
 	var currentGameFixedAvatarNames mapset.Set[string]
 	var avatarStatDefinitions models.AvatarStatDefinitions

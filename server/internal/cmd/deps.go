@@ -32,7 +32,6 @@ var (
 	cacheNetworkInterfacesFn = models.CacheNetworkInterfaces
 	uuidParseFn              = uuid.Parse
 	initConfigFn             = initConfig
-	resolveHostsFn           = ip.ResolveHosts
 	initializeGameFn         = initializer.InitializeGame
 	certificatePairFolderFn  = common.CertificatePairFolder
 	// Checked at startup for the same reason the TLS material is: without it the

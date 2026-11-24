@@ -29,5 +29,5 @@ func GetChallengeProgressByProfileID(w http.ResponseWriter, r *http.Request) {
 		i.JSON(&w, i.A{0, i.A{}})
 		return
 	}
-	i.JSON(&w, i.A{0, shared.GetChallengeProgressData(user)})
+	i.JSON(&w, i.A{0, shared.GetChallengeProgressData(user, models.SafeForRequest(r))})
 }

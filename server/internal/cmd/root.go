@@ -13,12 +13,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v3"
 	"github.com/knadh/koanf/parsers/toml/v2"
+	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"github.com/luskaner/ageServer/common/cmd/server"
 	"github.com/luskaner/ageServer/common/executables"
@@ -92,6 +94,9 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 	if !internal.CanUseInternet {
 		logger.Warn("No internet connectivity, some features will fallback gracefully.")
 	}
+	// The domain map is built from the generated release domains, so the flag has
+	// to be set before it is built and before the games resolve their hosts.
+	common.SetUseInternet(internal.CanUseInternet)
 	if !authenticationValues.ContainsOne(cfg.Authentication) {
 		logger.Fail("Invalid authentication value: %s", cfg.Authentication)
 		exitCode = internal.ErrInvalidAuthentication
@@ -146,18 +151,15 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		for _, f := range closables {
 			_ = f.Close()
 		}
-		// Stop the custom-file sweepers. Their payloads stay in the system temp
-		// folder until CustomFiles.Expiry removes them, so a restart within the
-		// TTL is not what discards a pending savegame.
+		// Stop the replay sweepers and release the cloud roots. The uploaded
+		// replays stay on disk: the TTL is what removes them.
 		for _, g := range initializer.Games {
-			if cf := g.CustomFiles(); cf != nil {
-				cf.Close()
-			}
-			// Stop the replay sweeper and release the cloud root. The uploaded
-			// replays stay on disk: the TTL is what removes them.
 			if store := g.Resources().CloudFiles(); store != nil {
 				store.Close()
 			}
+		}
+		if internal.ModsAPI != nil {
+			_ = internal.ModsAPI.Shutdown(context.Background())
 		}
 		_ = fileLockUnlockFn(lock)
 	}()
@@ -183,6 +185,13 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 			return
 		}
 	}
+	if err = applyGameOverrides(cfg, usedFile, fs, values, gameSet); err != nil {
+		logger.Fail("Invalid game configuration: %s", err)
+		exitCode = common.ErrConfigParse
+		return
+	}
+	gameIds := gameSet.ToSlice()
+	slices.Sort(gameIds)
 	if isAdminFn() {
 		logger.Warn("Running as administrator, this is not recommended for security reasons.")
 		if runtime.GOOS == "linux" {
@@ -230,6 +239,17 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 	internal.GeneratePlatformUserId = cfg.GeneratePlatformUserId
 	internal.SignConfigRuntime.Enabled = cfg.Sign.Enabled
 	internal.SignConfigRuntime.PlatformUserIdExceptions = cfg.Sign.PlatformUserIdExceptions
+	if err = applySafeConfig(cfg); err != nil {
+		logger.Fail("Invalid Safe configuration: %s", err)
+		exitCode = internal.ErrSafe
+		return
+	}
+	internal.ApiEnabled = cfg.Api.Enabled
+	if !cfg.Api.Enabled && cfg.Mods.Enabled {
+		logger.Fail("Mods.Enabled is true but Api.Enabled is false: the mods API lives in the API tree that is turned off.")
+		exitCode = internal.ErrApiDisabledWithMods
+		return
+	}
 	if err = applyCustomFilesConfig(cfg); err != nil {
 		logger.Fail("Invalid CustomFiles configuration: %s", err)
 		exitCode = internal.ErrCustomFiles
@@ -240,13 +260,40 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		exitCode = internal.ErrReplays
 		return
 	}
+	if err = applyModsConfig(cfg); err != nil {
+		logger.Fail("Invalid Mods configuration: %s", err)
+		exitCode = internal.ErrMods
+		return
+	}
+	// One library instance serves both trees: the mods API and MatchContent.
+	// It is built when either feature is on, so turning mods off does not take
+	// the savegame endpoints with it.
+	if internal.ModsEnabled || internal.CustomFilesConfig.Enabled {
+		var mods internal.ModsServer
+		if mods, err = newModsServerFn(internal.ModsConfig); err != nil {
+			logger.Fail("Failed to start the embedded Age API: %s", err)
+			if internal.ModsEnabled {
+				exitCode = internal.ErrMods
+			} else {
+				exitCode = internal.ErrCustomFiles
+			}
+			return
+		}
+		internal.ModsAPI = mods
+		if internal.ModsEnabled {
+			logger.Ok("Mods API ready (%s)", internal.ModsConfig.DBPath)
+		}
+		if internal.CustomFilesConfig.Enabled {
+			logger.Ok("MatchContent ready")
+		}
+	}
 	var servers []*http.Server
 	internal.InitializeStopSignal()
 
 	// Start embedded battle servers for each game before initializing the game.
 	// Auto-enable embedded battle server if no other battle server (config or discovered) exists.
 	var embeddedInstances []*embedded.Instance
-	for gameId := range gameSet.Iter() {
+	for _, gameId := range gameIds {
 		// Check if there are any configured battle servers in config.toml
 		configBattleServers := cfg.GetGameBattleServers(gameId)
 		// Check if there are any battle servers discovered by battle-server-manager
@@ -261,18 +308,9 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		ebs := cfg.GetGameEmbeddedBattleServer(gameId)
 
 		// StartIfMissing controls auto-start behavior when no external battle server exists.
-		// Values: "true" (default), "false", "required" (true for age4/athens, false for others).
-		// First check CLI flag (applies to all games), then config file.
-		startIfMissing := strings.ToLower(strings.TrimSpace(values.StartBsIfMissing))
-		hasExplicitStartIfMissing := strings.TrimSpace(values.StartBsIfMissing) != ""
-
-		// If not set via CLI, check config file
-		if !hasExplicitStartIfMissing {
-			startIfMissing = strings.ToLower(strings.TrimSpace(ebs.StartIfMissing))
-			hasExplicitStartIfMissing = strings.TrimSpace(ebs.StartIfMissing) != ""
-		}
-
-		if !hasExplicitStartIfMissing {
+		// applyGameOverrides has already resolved the per-game file and the flag.
+		startIfMissing := strings.ToLower(strings.TrimSpace(ebs.StartIfMissing))
+		if startIfMissing == "" {
 			startIfMissing = "true"
 		}
 
@@ -297,6 +335,12 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		}
 
 		shouldStart := shouldAutoStart && !hasExternalBattleServer
+		// Equivalent to the launcher's best-effort warning: with the value now
+		// living in config.<game>.toml, the server is the only place that can
+		// still know it. It does not block the start.
+		if !hasExternalBattleServer && !shouldStart && (gameId == game.AoE4 || gameId == game.AoM) {
+			logger.Warn("%s needs a battle server and StartIfMissing resolves to false: make sure one is running and configured, or the game cannot start a match", gameId)
+		}
 
 		if shouldStart {
 			// Use configured values or defaults matching battle-server-manager
@@ -336,21 +380,16 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 				return
 			}
 			embeddedInstances = append(embeddedInstances, inst)
-			if !hasExplicitStartIfMissing {
-				logger.Info("Auto-started embedded battle server for %s (StartIfMissing=%s, no external battle server found)", gameId, startIfMissing)
-			}
+			logger.Info("Auto-started embedded battle server for %s (StartIfMissing=%s, no external battle server found)", gameId, startIfMissing)
 		}
 	}
 
-	for gameId := range gameSet.Iter() {
+	// Phase A: initialise every game and build its mux. No listener is opened
+	// yet, so a configuration error cannot leave half the process bound.
+	gameMuxes := make(map[string]http.Handler, len(gameIds))
+	gameModels := make(map[string]models.Game, len(gameIds))
+	for _, gameId := range gameIds {
 		ui.Section("Game " + gameId)
-		hosts := cfg.GetGameHosts(gameId)
-		addrs := resolveHostsFn(mapset.NewThreadUnsafeSet[string](hosts...))
-		if addrs.IsEmpty() {
-			logger.Fail("Failed to resolve host (or it was an IPv6 address)")
-			exitCode = internal.ErrResolveHost
-			return
-		}
 		if err = initializeGameFn(gameId, cfg.GetGameBattleServers(gameId)); err != nil {
 			logger.Fail("Failed to initialize game: %s", err)
 			exitCode = internal.ErrGame
@@ -371,11 +410,9 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		} else {
 			gameLogRoot = filepath.Join(gameLogRoot, gameId)
 		}
-		customLoggerWriters := []io.Writer{os.Stderr}
 		if commonLogger.FileLogger == nil {
 			writer = os.Stdout
 		} else {
-			customLoggerWriters = append(customLoggerWriters, &commonLogger.Buf)
 			var f *os.File
 			if err, root = commonLogger.NewFile(gameLogRoot, "", true); err != nil {
 				logger.Fail("Failed to prepare log folder: %s", err)
@@ -389,23 +426,20 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 			closables = append(closables, f)
 			writer = f
 		}
-		customLogger := log.New(
-			&internal.CustomWriter{OriginalWriter: io.MultiWriter(customLoggerWriters...)},
-			"|SERVER| ",
-			log.Ltime|log.Lmicroseconds,
-		)
 		internal.AnnounceMessageData[gameId] = internal.AnnounceMessageDataLatest{
 			GameTitle: gameId,
 			Version:   Version,
 		}
-		general := &router.General{Writer: writer}
-		mux := general.InitializeRoutes(gameId, router.HostMiddleware(gameId, writer))
-		mux = router.TitleMiddleware(gameId, mux)
+		// Request order: MaxBodySize -> Logging -> Title -> Host. Title has to
+		// be outside Host so models.Game exists before Playfab, the API trees,
+		// the CDN, community and the game routes read models.G.
+		mux := router.TitleMiddleware(gameId, router.HostMiddleware(gameId, writer))
 		if root != nil {
 			var f *os.File
 			if f, err = root.Open(filePrefix + "communication_log"); err != nil {
 				logger.Fail("Failed to open communication log file: %s", err)
 				exitCode = internal.ErrCreateLogFile
+				return
 			} else {
 				closables = append(closables, logger.NewBuffer(f))
 				mux = router.NewLoggingMiddleware(mux)
@@ -413,50 +447,101 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		}
 		// 1 MB limit
 		mux = router.MaxBodySizeMiddleware(1<<20, mux)
-		for addr := range addrs.Iter() {
-			var certFile string
-			var keyFile string
-			if common.SelfSignedCertGame(gameId) {
-				certFile = filepath.Join(certificatePairFolder, common.SelfSignedCert)
-				keyFile = filepath.Join(certificatePairFolder, common.SelfSignedKey)
-			} else {
-				certFile = filepath.Join(certificatePairFolder, common.Cert)
-				keyFile = filepath.Join(certificatePairFolder, common.Key)
-			}
-			var listenConns []*net.UDPConn
-			if announceEnabled {
-				err, listenConns = queryConnectionsFn(addr, multicastGroups, announcePort)
-				if err != nil {
-					logger.Fail("Failed to listen to UDP connections for address %s", addr)
-					exitCode = internal.ErrAnnounce
-					return
-				}
-			}
-			s := newHTTPServerFn(addr.String()+":443", mux)
-			s.ErrorLog = customLogger
-			s.IdleTimeout = time.Second * 30
-			s.ReadTimeout = time.Second * 5
-			s.WriteTimeout = time.Second * 30
-			s.MaxHeaderValueCount = 64
+		gameMuxes[gameId] = mux
+		gameModels[gameId] = initializer.Games[gameId]
+	}
 
-			logger.Ok("Listening on %s", s.Addr)
-			go func() {
-				if len(listenConns) > 0 {
-					for _, conn := range listenConns {
-						logger.Detail("Listening for query connections on %s", conn.LocalAddr())
-					}
-					listenQueryConnectionsFn(listenConns)
-				}
-				err = s.ListenAndServeTLS(certFile, keyFile)
-				if err != nil && !errors.Is(err, http.ErrServerClosed) {
-					logger.Fail("Failed to start server")
-					logger.Fault("%s", err)
-					exitCode = internal.ErrStartServer
-					return
-				}
-			}()
-			servers = append(servers, s)
+	// Phase B: one listener per address, shared by every game. The certificate
+	// pair of each listener is the one its list names; the template's 0.0.0.0
+	// placeholder is replaced by the class of the enabled games.
+	modernHosts, legacyHosts, hostsErr := defaultListenerHosts(cfg.Hosts.Modern, cfg.Hosts.Legacy, gameIds)
+	if hostsErr != nil {
+		logger.Fail("%s", hostsErr)
+		exitCode = common.ErrConfigParse
+		return
+	}
+	modernAddrs, resolveErr := resolveConfiguredHosts(modernHosts, "Modern")
+	if resolveErr != nil {
+		logger.Fail("Failed to resolve hosts: %s", resolveErr)
+		exitCode = internal.ErrResolveHost
+		return
+	}
+	legacyAddrs, resolveErr := resolveConfiguredHosts(legacyHosts, "Legacy")
+	if resolveErr != nil {
+		logger.Fail("Failed to resolve hosts: %s", resolveErr)
+		exitCode = internal.ErrResolveHost
+		return
+	}
+	if validateErr := validateListenerSets(modernAddrs, legacyAddrs); validateErr != nil {
+		logger.Fail("Invalid listener configuration: %s", validateErr)
+		exitCode = common.ErrConfigParse
+		return
+	}
+	if modernAddrs.IsEmpty() && legacyAddrs.IsEmpty() {
+		logger.Fail("No addresses to listen on: set [Hosts] Modern and/or Legacy")
+		exitCode = internal.ErrResolveHost
+		return
+	}
+	specs := listenerSpecs(modernAddrs, legacyAddrs)
+	resolver := router.NewGameResolver(gameSet, cfg.Api.Enabled, gameModels)
+	dispatcher := router.NewDispatcher(gameMuxes, resolver)
+
+	rootLogWriter := io.Writer(os.Stderr)
+	if commonLogger.FileLogger != nil {
+		rootLogWriter = io.MultiWriter(os.Stderr, &commonLogger.Buf)
+	}
+	rootLogger := log.New(
+		&internal.CustomWriter{OriginalWriter: rootLogWriter},
+		"|ROOT| ",
+		log.Ltime|log.Lmicroseconds,
+	)
+	var udpConns []*net.UDPConn
+	for _, spec := range specs {
+		certFile := filepath.Join(certificatePairFolder, common.Cert)
+		keyFile := filepath.Join(certificatePairFolder, common.Key)
+		if spec.Mode == common.CertModeLegacy {
+			certFile = filepath.Join(certificatePairFolder, common.SelfSignedCert)
+			keyFile = filepath.Join(certificatePairFolder, common.SelfSignedKey)
 		}
+		var listenConns []*net.UDPConn
+		if announceEnabled {
+			err, listenConns = queryConnectionsFn(spec.Addr, multicastGroups, announcePort)
+			if err != nil {
+				logger.Fail("Failed to listen to UDP connections for address %s", spec.Addr)
+				exitCode = internal.ErrAnnounce
+				return
+			}
+			udpConns = append(udpConns, listenConns...)
+		}
+		s := newHTTPServerFn(spec.String(), router.RootRoutes(spec.Mode, nil, dispatcher, resolver.Resolve))
+		s.ErrorLog = rootLogger
+		s.IdleTimeout = time.Second * 30
+		s.ReadTimeout = time.Second * 5
+		s.WriteTimeout = time.Second * 30
+		s.MaxHeaderValueCount = 64
+
+		logger.Ok("Listening on %s (certificates: %s)", s.Addr, spec.Mode)
+		go func(spec listenerSpec, s *http.Server, certFile, keyFile string, listenConns []*net.UDPConn) {
+			if len(listenConns) > 0 {
+				for _, conn := range listenConns {
+					logger.Detail("Listening for query connections on %s", conn.LocalAddr())
+				}
+				listenQueryConnectionsFn(listenConns)
+			}
+			serveErr := s.ListenAndServeTLS(certFile, keyFile)
+			if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+				logger.Fail("Failed to start server")
+				logger.Fault("%s", serveErr)
+				exitCode = internal.ErrStartServer
+				return
+			}
+		}(spec, s, certFile, keyFile, listenConns)
+		servers = append(servers, s)
+	}
+
+	// Phase C: say what is listening and how each game stands against it.
+	for _, line := range buildListenerReport(specs, gameIds) {
+		logger.Println(line)
 	}
 
 	<-internal.StopSignal
@@ -477,6 +562,13 @@ func runRoot(fs *pflag.FlagSet) (err error, exitCode int) {
 		})
 	}
 	wg.Wait()
+
+	// Close the announce sockets explicitly: their read loops close them when
+	// they see the error, and this is what makes the second start of the test
+	// not find "address already in use".
+	for _, conn := range udpConns {
+		_ = conn.Close()
+	}
 
 	// Stop embedded battle servers.
 	for _, inst := range embeddedInstances {
@@ -511,6 +603,8 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"GeneratePlatformUserId":        false,
 		"Sign.Enabled":                  false,
 		"Sign.PlatformUserIdExceptions": []string{},
+		"Safe.Enabled":                  "auto",
+		"Safe.PlatformUserIdExceptions": []string{},
 		"Authentication":                "disabled",
 		"Internet.Enabled":              true,
 		"Internet.IP":                   "auto",
@@ -519,8 +613,10 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"Announcement.MulticastGroup":   common.AnnounceMulticastGroup,
 		"Announcement.Port":             common.AnnouncePort,
 		"Games.Enabled":                 []string{},
+		"Hosts.Modern":                  []string{netip.IPv4Unspecified().String()},
+		"Hosts.Legacy":                  []string{},
 		"CustomFiles.Enabled":           true,
-		"CustomFiles.Folder":            "auto",
+		"CustomFiles.Folder":            "resources/custom-files",
 		"CustomFiles.MaxFileSize":       "32MB",
 		"CustomFiles.MaxTotalSize":      "256MB",
 		"CustomFiles.Expiry":            "12h",
@@ -528,10 +624,15 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		"Replays.MaxFileSize":           "32MB",
 		"Replays.MaxTotalSize":          "1GB",
 		"Replays.Expiry":                "-1s",
+		"Mods.Enabled":                  true,
+		"Api.Enabled":                   true,
+		"Mods.DBPath":                   "resources/mods/mods.db",
+		"Mods.UploadDir":                "resources/mods/uploads",
+		"Mods.MaxUploadSize":            "256MB",
+		"Mods.RequireAuthForRead":       false,
 		"Automatch.AssumeQueue":         "",
 	}
 	for g := range game.SupportedGames.Iter() {
-		defaults[fmt.Sprintf("Games.%s.Hosts", g)] = []string{netip.IPv4Unspecified().String()}
 		defaults[fmt.Sprintf("Games.%s.EmbeddedBattleServer.StartIfMissing", g)] = "true"
 	}
 	bindings := map[string]string{
@@ -560,6 +661,9 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 	if values.CfgFile != "" && usedFile == "" {
 		logger.Warn("No config file found, using defaults.")
 	}
+	// An unquoted `Enabled = true` arrives as a bool; canonicalize it before
+	// decoding so mapstructure does not turn it into "1".
+	normalizeSafeEnabled(k)
 	// The file this run is using is named by the summary at the top, and only
 	// there: announced once, from one place.
 
@@ -568,7 +672,78 @@ func initConfig(fs *pflag.FlagSet) (*internal.Configuration, string) {
 		logger.Fail("Unable to decode configuration: %s", err)
 		os.Exit(common.ErrConfigParse)
 	}
+	if err := migrateHosts(usedFile, &c); err != nil {
+		logger.Fail("%s", err)
+		os.Exit(common.ErrConfigParse)
+	}
 	return &c, usedFile
+}
+
+// migrateHosts moves the old Games.<game>.Hosts lists to the global [Hosts]
+// section. A silent union would change the binding model, so differing lists
+// stop the boot with the migration instruction instead.
+func migrateHosts(usedFile string, c *internal.Configuration) error {
+	fileHasHosts := false
+	if usedFile != "" {
+		fk := koanf.New(".")
+		if err := fk.Load(file.Provider(usedFile), toml.Parser()); err == nil {
+			fileHasHosts = fk.Exists("Hosts")
+		}
+	}
+	if fileHasHosts {
+		for _, gameID := range c.Games.Enabled {
+			if g := c.Games.Get(gameID); g != nil && len(g.Hosts) > 0 {
+				logger.Warn("%s: [Games.%s.Hosts] is deprecated; use [Hosts] Modern/Legacy", usedFile, gameID)
+			}
+		}
+		return nil
+	}
+	var migrated []string
+	var firstGame string
+	for _, gameID := range c.Games.Enabled {
+		g := c.Games.Get(gameID)
+		if g == nil || len(g.Hosts) == 0 {
+			continue
+		}
+		if firstGame == "" {
+			firstGame = gameID
+			migrated = slices.Clone(g.Hosts)
+			continue
+		}
+		if !slices.Equal(migrated, g.Hosts) {
+			return fmt.Errorf("Games.%s.Hosts %v and Games.%s.Hosts %v differ; hosts are global now: remove them and set [Hosts] Modern/Legacy", firstGame, migrated, gameID, g.Hosts)
+		}
+	}
+	if firstGame != "" {
+		// The destination is the certificate class of the enabled set: a v2.0
+		// document only serves age1-3, whose clients may reject the CA-signed
+		// leaf, so migrating them to Modern would break them. Moving to one
+		// class empties the other: the default would otherwise keep listening
+		// on both.
+		allLegacy, allModern := true, true
+		for _, gameID := range c.Games.Enabled {
+			if common.GameCertMode(gameID) == common.CertModeLegacy {
+				allModern = false
+			} else {
+				allLegacy = false
+			}
+		}
+		switch {
+		case allLegacy:
+			c.Hosts.Legacy = migrated
+			c.Hosts.Modern = nil
+			logger.Warn("Games.<game>.Hosts is deprecated; migrated to [Hosts] Legacy (every enabled game is legacy class)")
+		case allModern:
+			c.Hosts.Modern = migrated
+			c.Hosts.Legacy = nil
+			logger.Warn("Games.<game>.Hosts is deprecated; migrated to [Hosts] Modern (every enabled game is modern class)")
+		default:
+			c.Hosts.Modern = migrated
+			c.Hosts.Legacy = nil
+			logger.Warn("Games.<game>.Hosts is deprecated; migrated to [Hosts] Modern; age1-3 acceptance of CA-signed certificates depends on the M0 spike")
+		}
+	}
+	return nil
 }
 
 // sizeLimits are the parsed MaxFileSize/MaxTotalSize/Expiry triple shared by the
@@ -609,10 +784,20 @@ func resolveSizeLimits(maxFileSizeRaw, maxTotalSizeRaw, expiryRaw string) (sizeL
 }
 
 // applyCustomFilesConfig validates the CustomFiles section and publishes the
-// resolved values in the internal runtime globals.
+// resolved values. The embedded ageAPIServer library serves the endpoints now,
+// so the values are handed to it when it is constructed.
 func applyCustomFilesConfig(cfg *internal.Configuration) error {
-	internal.CustomFilesEnabled = cfg.CustomFiles.Enabled
-	internal.CustomFilesFolder = cfg.CustomFiles.Folder
+	// The default lives under the server's resources directory, as the mods
+	// paths do. 'auto' and an empty value resolve there too, so documents
+	// written before the default was explicit keep working.
+	folder := cfg.CustomFiles.Folder
+	if folder == "" || folder == "auto" {
+		folder = filepath.Join(paths.ResourcesDir, "custom-files")
+	}
+	internal.CustomFilesConfig = internal.CustomFilesConfiguration{
+		Enabled: cfg.CustomFiles.Enabled,
+		Folder:  folder,
+	}
 	if !cfg.CustomFiles.Enabled {
 		// Nothing reads the limits or the TTL while the endpoints are off, so a
 		// typo in them must not stop a server that does not use the feature.
@@ -625,9 +810,9 @@ func applyCustomFilesConfig(cfg *internal.Configuration) error {
 	if limits.expiry <= 0 {
 		return fmt.Errorf("expiry must be greater than zero")
 	}
-	internal.CustomFilesMaxFileSize = limits.maxFileSize
-	internal.CustomFilesMaxTotalSize = limits.maxTotalSize
-	internal.CustomFilesExpiry = limits.expiry
+	internal.CustomFilesConfig.MaxFileSize = limits.maxFileSize
+	internal.CustomFilesConfig.MaxTotalSize = limits.maxTotalSize
+	internal.CustomFilesConfig.Expiry = limits.expiry
 	return nil
 }
 

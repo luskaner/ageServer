@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/common/bytesize"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
@@ -22,6 +23,32 @@ import (
 )
 
 const configFileName = "config.toml"
+
+// Document kinds. One load is one document, and a save writes only that one:
+// either the global config.toml or a single config.<game>.toml.
+const (
+	documentMain = "main"
+	documentGame = "game"
+)
+
+const gameConfigPrefix = "config."
+
+// documentGameID returns the game a path names as a per-game document.
+func documentGameID(path string) (string, bool) {
+	base := strings.ToLower(filepath.Base(path))
+	if !strings.HasPrefix(base, gameConfigPrefix) || !strings.HasSuffix(base, ".toml") {
+		return "", false
+	}
+	gameID := strings.TrimSuffix(strings.TrimPrefix(base, gameConfigPrefix), ".toml")
+	if !slices.Contains(supportedGameIDs(), gameID) {
+		return "", false
+	}
+	return gameID, true
+}
+
+func gameConfigFileName(gameID string) string {
+	return gameConfigPrefix + gameID + ".toml"
+}
 
 type ConfigService struct{}
 
@@ -84,9 +111,70 @@ func (s *ConfigService) OpenTemplate() (*ConfigFile, error) {
 	}
 	return &ConfigFile{
 		Content:          string(content),
+		Kind:             documentMain,
+		SuggestedName:    configFileName,
+		New:              true,
 		Config:           config,
-		ValidationErrors: validateConfiguration(config),
+		ValidationErrors: validateMainDocument(config),
 	}, nil
+}
+
+// OpenGameTemplate loads a new per-game document for the given game. It is
+// unsaved, so its save asks for the destination, with config.<game>.toml as
+// the proposed name.
+func (s *ConfigService) OpenGameTemplate(gameID string) (*ConfigFile, error) {
+	config, err := newGameDocumentConfiguration(gameID)
+	if err != nil {
+		return nil, err
+	}
+	return &ConfigFile{
+		Kind:             documentGame,
+		Game:             gameID,
+		SuggestedName:    gameConfigFileName(gameID),
+		New:              true,
+		Config:           config,
+		ValidationErrors: validateGameDocument(config, gameID),
+	}, nil
+}
+
+// OpenGameDocument opens the config.<game>.toml next to path, or a new document
+// already aimed at that path when the file does not exist yet. It is the only
+// way one document leads to another: the editor never holds two at once.
+func (s *ConfigService) OpenGameDocument(path string, gameID string) (*ConfigFile, error) {
+	if path == "" {
+		return nil, errors.New("configuration path is empty")
+	}
+	config, err := newGameDocumentConfiguration(gameID)
+	if err != nil {
+		return nil, err
+	}
+	target := gameFilePath(path, gameID)
+	if _, statErr := os.Stat(target); statErr == nil {
+		return s.readConfigFile(target)
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return nil, fmt.Errorf("check game configuration %q: %w", target, statErr)
+	}
+	return &ConfigFile{
+		Path:             target,
+		Kind:             documentGame,
+		Game:             gameID,
+		SuggestedName:    gameConfigFileName(gameID),
+		New:              true,
+		Config:           config,
+		ValidationErrors: validateGameDocument(config, gameID),
+	}, nil
+}
+
+// newGameDocumentConfiguration is the model a new per-game document starts
+// from: the server defaults with only its game enabled and empty tables.
+func newGameDocumentConfiguration(gameID string) (*Configuration, error) {
+	if !slices.Contains(supportedGameIDs(), gameID) {
+		return nil, fmt.Errorf("unknown game %q", gameID)
+	}
+	config := serverDefaults()
+	config.Games.Enabled = []string{gameID}
+	setGameConfig(&config, gameID, GameConfig{})
+	return &config, nil
 }
 
 // SelectConfigDestination opens the native dialog used for a new configuration.
@@ -125,8 +213,35 @@ func (s *ConfigService) SelectConfigSaveAsDestination(fileName string) (string, 
 // custom files storage folder. Closing the picker is a normal answer: the empty
 // path it returns leaves the setting as it is.
 func (s *ConfigService) SelectCustomFilesFolder() (string, error) {
+	return selectFolder("Select custom files folder")
+}
+
+// SelectModsUploadFolder opens the native directory picker used for the mods
+// upload folder. Closing the picker is a normal answer: the empty path it
+// returns leaves the setting as it is.
+func (s *ConfigService) SelectModsUploadFolder() (string, error) {
+	return selectFolder("Select mods upload folder")
+}
+
+// SelectModsDatabasePath opens the native save dialog used for the mods SQLite
+// file. Closing the picker is a normal answer: the empty path it returns keeps
+// the setting as it is.
+func (s *ConfigService) SelectModsDatabasePath() (string, error) {
+	path, err := application.Get().Dialog.SaveFile().
+		SetMessage("Choose the mods database file").
+		SetFilename("mods.db").
+		AddFilter("SQLite database", "*.db").
+		PromptForSingleSelection()
+	if err != nil {
+		return "", nil
+	}
+	return path, nil
+}
+
+// selectFolder opens a native directory picker. Closing it is a normal answer.
+func selectFolder(title string) (string, error) {
 	path, err := application.Get().Dialog.OpenFile().
-		SetTitle("Select custom files folder").
+		SetTitle(title).
 		CanChooseFiles(false).
 		CanChooseDirectories(true).
 		PromptForSingleSelection()
@@ -136,12 +251,10 @@ func (s *ConfigService) SelectCustomFilesFolder() (string, error) {
 	return path, nil
 }
 
-// CreateConfigFile validates a new document and creates it at the requested path.
+// CreateConfigFile validates a new document and creates it at the requested
+// path. The file name decides the kind: config.<game>.toml creates a per-game
+// document, anything else the global configuration.
 func (s *ConfigService) CreateConfigFile(path string, configuration Configuration, overwrite bool) (*ConfigFile, error) {
-	template, err := s.OpenTemplate()
-	if err != nil {
-		return nil, err
-	}
 	if path == "" {
 		return nil, errors.New("configuration destination cannot be empty")
 	}
@@ -150,22 +263,44 @@ func (s *ConfigService) CreateConfigFile(path string, configuration Configuratio
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("check configuration destination %q: %w", path, err)
 	}
+	if gameID, isGame := documentGameID(path); isGame {
+		document, err := gameDocumentContent(path, gameID, nil, &configuration)
+		if err != nil {
+			return nil, fmt.Errorf("create configuration file %q: %w", path, err)
+		}
+		if err := writeDocument(path, document, overwrite); err != nil {
+			return nil, err
+		}
+		return s.readConfigFile(path)
+	}
+	template, err := s.OpenTemplate()
+	if err != nil {
+		return nil, err
+	}
 	updated, err := prepareConfigurationDocument([]byte(template.Content), configuration)
 	if err != nil {
 		return nil, fmt.Errorf("create configuration file %q: %w", path, err)
 	}
-	if overwrite {
-		if err := writeConfigFile(path, updated); err != nil {
-			return nil, err
-		}
-	} else if err := writeNewConfigFile(path, updated); err != nil {
+	if err := writeDocument(path, updated, overwrite); err != nil {
 		return nil, err
 	}
 	return s.readConfigFile(path)
 }
 
-// SaveConfiguration validates and saves all editable configuration fields.
+// SaveConfiguration validates and saves the loaded document. It writes exactly
+// one file: the per-game document the path names, or the global configuration.
 func (s *ConfigService) SaveConfiguration(path string, configuration Configuration) error {
+	if gameID, isGame := documentGameID(path); isGame {
+		existing, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read configuration file %q: %w", path, err)
+		}
+		document, err := gameDocumentContent(path, gameID, existing, &configuration)
+		if err != nil {
+			return fmt.Errorf("edit configuration file %q: %w", path, err)
+		}
+		return writeConfigFile(path, document)
+	}
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read configuration file %q: %w", path, err)
@@ -181,10 +316,32 @@ func (s *ConfigService) SaveConfiguration(path string, configuration Configurati
 	return writeConfigFile(path, updated)
 }
 
-// SaveConfigurationAs validates and saves an edited configuration to a new path.
+// SaveConfigurationAs validates and saves an edited document to a new path.
+// The destination's file name decides what is written, so a game document can
+// be copied next to another configuration without touching its config.toml.
 func (s *ConfigService) SaveConfigurationAs(sourcePath string, destination string, configuration Configuration, overwrite bool) (*ConfigFile, error) {
 	if sourcePath == "" || destination == "" {
 		return nil, errors.New("configuration source and destination are required")
+	}
+	if gameID, isGame := documentGameID(destination); isGame {
+		// Only a per-game document is a base for another one: a config.toml is
+		// not edited here.
+		var base []byte
+		if _, sourceIsGame := documentGameID(sourcePath); sourceIsGame {
+			content, err := os.ReadFile(sourcePath)
+			if err != nil {
+				return nil, fmt.Errorf("read configuration file %q: %w", sourcePath, err)
+			}
+			base = content
+		}
+		document, err := gameDocumentContent(destination, gameID, base, &configuration)
+		if err != nil {
+			return nil, fmt.Errorf("edit configuration file %q: %w", sourcePath, err)
+		}
+		if err := writeDocument(destination, document, overwrite); err != nil {
+			return nil, err
+		}
+		return s.readConfigFile(destination)
 	}
 	content, err := os.ReadFile(sourcePath)
 	if err != nil {
@@ -198,26 +355,60 @@ func (s *ConfigService) SaveConfigurationAs(sourcePath string, destination strin
 		return nil, fmt.Errorf("edit configuration file %q: %w", sourcePath, err)
 	}
 
-	if _, err := os.Stat(destination); err == nil && !overwrite {
-		return nil, fmt.Errorf("configuration file %q already exists; confirmation required", destination)
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("check configuration destination %q: %w", destination, err)
-	}
-	if overwrite {
-		if err := writeConfigFile(destination, updated); err != nil {
-			return nil, err
-		}
-	} else if err := writeNewConfigFile(destination, updated); err != nil {
+	if err := writeDocument(destination, updated, overwrite); err != nil {
 		return nil, err
 	}
 	return s.readConfigFile(destination)
 }
 
+// gameDocumentContent validates the per-game part of the model and builds the
+// document for one game. The embedded battle server is written as a delta
+// against the sibling config.toml, which is only read.
+func gameDocumentContent(path string, gameID string, existing []byte, configuration *Configuration) ([]byte, error) {
+	if issues := errorValidationIssues(validateGameDocument(configuration, gameID)); len(issues) > 0 {
+		return nil, fmt.Errorf("configuration is invalid: %s", issues[0].Message)
+	}
+	game := GameConfig{BattleServers: gameBattleServers(configuration, gameID)}
+	if embedded := gameEmbeddedBattleServer(configuration, gameID); embedded != nil {
+		game.EmbeddedBattleServer = *embedded
+	}
+	document, err := gameDocumentWithBase(gameID, existing, game, inheritedEmbedded(path, gameID))
+	if err != nil {
+		return nil, err
+	}
+	if document == nil {
+		// A brand-new document with nothing but inherited values still needs a
+		// [Game] table to be a document at all.
+		document = []byte(gameDocumentHeader(gameID))
+	}
+	return document, nil
+}
+
+// writeDocument writes a whole document, replacing it only when the caller has
+// already accepted the overwrite.
+func writeDocument(path string, content []byte, overwrite bool) error {
+	if _, err := os.Stat(path); err == nil {
+		if !overwrite {
+			return fmt.Errorf("configuration file %q already exists; confirmation required", path)
+		}
+		return writeConfigFile(path, content)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check configuration destination %q: %w", path, err)
+	}
+	return writeNewConfigFile(path, content)
+}
+
 // prepareConfigurationDocument validates and transforms a configuration document
 // into its final form, centralising the logic shared by every save/preview path.
 func prepareConfigurationDocument(content []byte, configuration Configuration) ([]byte, error) {
-	if validationErrors := errorValidationIssues(validateConfiguration(&configuration)); len(validationErrors) > 0 {
+	if validationErrors := errorValidationIssues(validateMainDocument(&configuration)); len(validationErrors) > 0 {
 		return nil, fmt.Errorf("configuration is invalid: %s", validationErrors[0].Message)
+	}
+	// A document with differing per-game host lists and no [Hosts] cannot be
+	// saved: dropping the lists would lose the addresses, and merging them
+	// would silently change the binding model.
+	if err := validateHostMigration(content); err != nil {
+		return nil, err
 	}
 	updated, err := configurationDocument(content, configuration)
 	if err != nil {
@@ -225,6 +416,189 @@ func prepareConfigurationDocument(content []byte, configuration Configuration) (
 	}
 	if _, err := parseConfiguration(updated); err != nil {
 		return nil, fmt.Errorf("validate configuration document: %w", err)
+	}
+	return updated, nil
+}
+
+// inheritedEmbedded is the [Games.<game>.EmbeddedBattleServer] of the config.toml
+// next to a per-game document, which that document inherits field by field.
+// The main file is never written from a per-game document.
+func inheritedEmbedded(configPath string, gameID string) EmbeddedBattleServerConfig {
+	content, err := os.ReadFile(filepath.Join(filepath.Dir(configPath), configFileName))
+	if err != nil {
+		return EmbeddedBattleServerConfig{}
+	}
+	config, err := parseConfiguration(content)
+	if err != nil {
+		return EmbeddedBattleServerConfig{}
+	}
+	if embedded := gameEmbeddedBattleServer(config, gameID); embedded != nil {
+		return *embedded
+	}
+	return EmbeddedBattleServerConfig{}
+}
+
+// legacyBattleServers are the [Games.<game>.BattleServers] of the sibling
+// config.toml, the fallback the server uses when the per-game file lists none.
+func legacyBattleServers(configPath string, gameID string) []BattleServerConfig {
+	content, err := os.ReadFile(filepath.Join(filepath.Dir(configPath), configFileName))
+	if err != nil {
+		return nil
+	}
+	config, err := parseConfiguration(content)
+	if err != nil {
+		return nil
+	}
+	return gameBattleServers(config, gameID)
+}
+
+// documentHostsTable reports whether a document declares the global [Hosts]
+// table. Its absence is what tells an old per-game document from a migrated one.
+func documentHostsTable(content []byte) (bool, error) {
+	tables, err := documentTables(content)
+	if err != nil {
+		return false, err
+	}
+	for _, table := range tables {
+		if table.path == "Hosts" && !table.arrayTable {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// migrateGameHosts moves the deprecated Games.<game>.Hosts lists into the
+// global [Hosts] model when the document has none yet, using the same
+// certificate-class destination as the server. Differing lists are left alone:
+// validateHostMigration refuses that save with an instruction instead.
+func migrateGameHosts(content []byte, config *Configuration) error {
+	hasHosts, err := documentHostsTable(content)
+	if err != nil || hasHosts {
+		return err
+	}
+	var migrated []string
+	firstGame := ""
+	for _, gameID := range supportedGameIDs() {
+		if !slices.Contains(config.Games.Enabled, gameID) {
+			continue
+		}
+		hosts, _ := gameHosts(config, gameID)
+		if len(hosts) == 0 {
+			continue
+		}
+		if firstGame == "" {
+			firstGame = gameID
+			migrated = slices.Clone(hosts)
+			continue
+		}
+		if !slices.Equal(migrated, hosts) {
+			return nil
+		}
+	}
+	if firstGame == "" {
+		return nil
+	}
+	allLegacy := true
+	for _, gameID := range config.Games.Enabled {
+		if common.GameCertMode(gameID) != common.CertModeLegacy {
+			allLegacy = false
+		}
+	}
+	// Moving to one class empties the other: the default Modern list would
+	// otherwise keep listening on both.
+	config.Hosts.Modern = []string{}
+	config.Hosts.Legacy = []string{}
+	if allLegacy {
+		config.Hosts.Legacy = migrated
+	} else {
+		config.Hosts.Modern = migrated
+	}
+	return nil
+}
+
+// validateHostMigration refuses a document that still holds differing per-game
+// host lists and no [Hosts] table.
+func validateHostMigration(content []byte) error {
+	hasHosts, err := documentHostsTable(content)
+	if err != nil || hasHosts {
+		return err
+	}
+	config, err := parseConfiguration(content)
+	if err != nil {
+		return err
+	}
+	firstGame := ""
+	var firstList []string
+	for _, gameID := range supportedGameIDs() {
+		if !slices.Contains(config.Games.Enabled, gameID) {
+			continue
+		}
+		hosts, _ := gameHosts(config, gameID)
+		if len(hosts) == 0 {
+			continue
+		}
+		if firstGame == "" {
+			firstGame, firstList = gameID, hosts
+			continue
+		}
+		if !slices.Equal(firstList, hosts) {
+			return fmt.Errorf("Games.%s.Hosts %v and Games.%s.Hosts %v differ: hosts are global in [Hosts].Modern/Legacy now, so set one list there and remove the per-game ones before saving", firstGame, firstList, gameID, hosts)
+		}
+	}
+	return nil
+}
+
+// gameDocument edits one per-game file without an inherited base: it is the
+// form the tests and a new file use, where the server defaults are the base.
+func gameDocument(gameID string, existing []byte, game GameConfig) ([]byte, error) {
+	return gameDocumentWithBase(gameID, existing, game, EmbeddedBattleServerConfig{})
+}
+
+// gameDocumentWithBase edits one per-game file. It creates a small header when
+// the file does not exist yet, and reports nil when there is nothing worth
+// creating: an empty file would make the server load a document that says
+// nothing. base is the [Games.<game>.EmbeddedBattleServer] of config.toml: only
+// the keys that differ from it are written, so an inherited port is not pinned
+// to a zero the document never chose.
+func gameDocumentWithBase(gameID string, existing []byte, game GameConfig, base EmbeddedBattleServerConfig) ([]byte, error) {
+	content := existing
+	created := len(content) == 0
+	if created {
+		content = []byte(gameDocumentHeader(gameID))
+	}
+	var err error
+	if content, err = ensureGameSection(content); err != nil {
+		return nil, err
+	}
+	// [Game.Hosts] is the per-game key the server ignores: the GUI migrates it
+	// to [Hosts] and does not keep it in the per-game document.
+	updated, _, err := removeDocumentValue(content, "Game", "Hosts")
+	if err != nil {
+		return nil, fmt.Errorf("remove Game.Hosts: %w", err)
+	}
+	updated, err = rewriteBattleServersSection(updated, "Game", gameID, game.BattleServers)
+	if err != nil {
+		return nil, fmt.Errorf("edit Game.BattleServers: %w", err)
+	}
+	updated, err = rewriteEmbeddedBattleServerSection(updated, "Game", gameID, &game.EmbeddedBattleServer, base)
+	if err != nil {
+		return nil, fmt.Errorf("edit Game.EmbeddedBattleServer: %w", err)
+	}
+	if created {
+		tables, err := documentTables(updated)
+		if err != nil {
+			return nil, err
+		}
+		hasGameTable := false
+		for _, table := range tables {
+			if strings.HasPrefix(table.path, "Game.") {
+				hasGameTable = true
+				break
+			}
+		}
+		if !hasGameTable {
+			return nil, nil
+		}
 	}
 	return updated, nil
 }
@@ -241,14 +615,13 @@ func configurationDocument(content []byte, configuration Configuration) ([]byte,
 		{"", "GeneratePlatformUserId", strconv.FormatBool(configuration.GeneratePlatformUserID)},
 		{"Sign", "Enabled", strconv.FormatBool(configuration.Sign.Enabled)},
 		{"Sign", "PlatformUserIdExceptions", tomlArray(configuration.Sign.PlatformUserIdExceptions)},
+		{"Safe", "Enabled", tomlString(safeModeString(configuration.Safe.Enabled))},
+		{"Safe", "PlatformUserIdExceptions", tomlArray(configuration.Safe.PlatformUserIdExceptions)},
 		{"Internet", "Enabled", strconv.FormatBool(configuration.Internet.Enabled)},
 		{"Internet", "IP", tomlString(configuration.Internet.IP)},
 		{"Games", "Enabled", tomlArray(configuration.Games.Enabled)},
-		{"Games.age1", "Hosts", tomlArray(configuration.Games.Age1.Hosts)},
-		{"Games.age2", "Hosts", tomlArray(configuration.Games.Age2.Hosts)},
-		{"Games.age3", "Hosts", tomlArray(configuration.Games.Age3.Hosts)},
-		{"Games.age4", "Hosts", tomlArray(configuration.Games.Age4.Hosts)},
-		{"Games.athens", "Hosts", tomlArray(configuration.Games.Athens.Hosts)},
+		{"Hosts", "Modern", tomlArray(configuration.Hosts.Modern)},
+		{"Hosts", "Legacy", tomlArray(configuration.Hosts.Legacy)},
 		{"Announcement", "Enabled", strconv.FormatBool(configuration.Announcement.Enabled)},
 		{"Announcement", "Multicast", strconv.FormatBool(configuration.Announcement.Multicast)},
 		{"Announcement", "Port", strconv.Itoa(configuration.Announcement.Port)},
@@ -262,6 +635,12 @@ func configurationDocument(content []byte, configuration Configuration) ([]byte,
 		{"Replays", "MaxFileSize", tomlString(configuration.Replays.MaxFileSize)},
 		{"Replays", "MaxTotalSize", tomlString(configuration.Replays.MaxTotalSize)},
 		{"Replays", "Expiry", tomlString(configuration.Replays.Expiry)},
+		{"Mods", "Enabled", strconv.FormatBool(configuration.Mods.Enabled)},
+		{"Mods", "DBPath", tomlString(configuration.Mods.DBPath)},
+		{"Mods", "UploadDir", tomlString(configuration.Mods.UploadDir)},
+		{"Mods", "MaxUploadSize", tomlString(configuration.Mods.MaxUploadSize)},
+		{"Mods", "RequireAuthForRead", strconv.FormatBool(configuration.Mods.RequireAuthForRead)},
+		{"Api", "Enabled", strconv.FormatBool(configuration.Api.Enabled)},
 	}
 	// The server reads Authentication at the root level. The shipped template
 	// used to keep it under [Internet], so an existing copy there is kept in
@@ -282,19 +661,43 @@ func configurationDocument(content []byte, configuration Configuration) ([]byte,
 			return nil, fmt.Errorf("edit %s.%s: %w", replacement.section, replacement.key, err)
 		}
 	}
+	// Hosts moved to the global [Hosts] table. The old per-game keys are removed
+	// on save instead of being written with a stale value the server ignores.
 	for _, gameID := range supportedGameIDs() {
-		updated, err = rewriteBattleServers(updated, gameID, gameBattleServers(&configuration, gameID))
+		updated, _, err = removeDocumentValue(updated, "Games."+gameID, "Hosts")
 		if err != nil {
-			return nil, fmt.Errorf("edit Games.%s.BattleServers: %w", gameID, err)
-		}
-	}
-	for _, gameID := range supportedGameIDs() {
-		updated, err = rewriteEmbeddedBattleServer(updated, gameID, gameEmbeddedBattleServer(&configuration, gameID))
-		if err != nil {
-			return nil, fmt.Errorf("edit Games.%s.EmbeddedBattleServer: %w", gameID, err)
+			return nil, fmt.Errorf("remove Games.%s.Hosts: %w", gameID, err)
 		}
 	}
 	return updated, nil
+}
+
+// gameDocumentHeader introduces a per-game file the editor creates.
+func gameDocumentHeader(gameID string) string {
+	return "# Configuration for " + gameID + ".\n" +
+		"# Only [Game.BattleServers] and [Game.EmbeddedBattleServer] belong here.\n" +
+		"# Hosts are global in [Hosts] of config.toml.\n\n" +
+		"[Game]\n"
+}
+
+// ensureGameSection makes sure a per-game document has the [Game] table its
+// subtables are inserted after. A document with only comments has none.
+func ensureGameSection(content []byte) ([]byte, error) {
+	tables, err := documentTables(content)
+	if err != nil {
+		return nil, err
+	}
+	for _, table := range tables {
+		if table.path == "Game" && !table.arrayTable {
+			return content, nil
+		}
+	}
+	return append([]byte("[Game]\n\n"), content...), nil
+}
+
+// gameFilePath is the per-game document next to the main configuration file.
+func gameFilePath(configPath string, gameID string) string {
+	return filepath.Join(filepath.Dir(configPath), "config."+gameID+".toml")
 }
 
 // tomlString formats a value as a TOML string, preferring the literal form the
@@ -315,11 +718,16 @@ func tomlArray(values []string) string {
 	return "[" + strings.Join(quoted, ", ") + "]"
 }
 
-// readConfigFile reads, parses and validates a configuration file from disk.
+// readConfigFile reads, parses and validates one document from disk. The file
+// name decides what it is: config.<game>.toml is a per-game document, anything
+// else is the global configuration.
 func (s *ConfigService) readConfigFile(path string) (*ConfigFile, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read configuration file %q: %w", path, err)
+	}
+	if gameID, isGame := documentGameID(path); isGame {
+		return readGameDocument(path, content, gameID)
 	}
 	config, err := parseConfiguration(content)
 	if err != nil {
@@ -332,12 +740,168 @@ func (s *ConfigService) readConfigFile(path string) (*ConfigFile, error) {
 	if !hasFields {
 		return nil, fmt.Errorf("configuration file %q does not contain supported configuration fields", path)
 	}
+	if err := readGameFiles(path, config); err != nil {
+		return nil, err
+	}
+	// An old document without [Hosts] keeps its bindings in the per-game keys:
+	// migrate them into the model before the editor shows (and saves) defaults
+	// that would drop them.
+	if err := migrateGameHosts(content, config); err != nil {
+		return nil, fmt.Errorf("inspect configuration file %q: %w", path, err)
+	}
 	return &ConfigFile{
 		Path:             path,
 		Content:          string(content),
+		Kind:             documentMain,
+		SuggestedName:    configFileName,
 		Config:           config,
-		ValidationErrors: validateConfiguration(config),
+		ValidationErrors: validateMainDocument(config),
 	}, nil
+}
+
+// readGameDocument reads one config.<game>.toml. Its battle servers and embedded
+// battle server start from the server defaults, then inherit field by field from
+// the config.toml next to it and finally take the keys the file assigns.
+func readGameDocument(path string, content []byte, gameID string) (*ConfigFile, error) {
+	game, err := parseGameConfiguration(content)
+	if err != nil {
+		return nil, fmt.Errorf("parse configuration file %q: %w", path, err)
+	}
+	keys, err := gameEmbeddedKeys(content)
+	if err != nil {
+		return nil, fmt.Errorf("parse configuration file %q: %w", path, err)
+	}
+	embedded := mergeEmbeddedBattleServer(inheritedEmbedded(path, gameID), game.EmbeddedBattleServer, keys)
+	servers := game.BattleServers
+	if !hasGameBattleServers(content) {
+		servers = legacyBattleServers(path, gameID)
+	}
+	config := serverDefaults()
+	config.Games.Enabled = []string{gameID}
+	setGameConfig(&config, gameID, GameConfig{BattleServers: servers, EmbeddedBattleServer: embedded})
+	return &ConfigFile{
+		Path:             path,
+		Content:          string(content),
+		Kind:             documentGame,
+		Game:             gameID,
+		SuggestedName:    gameConfigFileName(gameID),
+		Config:           &config,
+		ValidationErrors: validateGameDocument(&config, gameID),
+	}, nil
+}
+
+// readGameFiles loads the per-game documents that exist next to the main one
+// and merges their battle servers into the model, so the global document holds
+// what the server would actually use. They are read-only here: each one is
+// edited by opening it, which is a document of its own.
+func readGameFiles(configPath string, config *Configuration) error {
+	enabled := make(map[string]bool, len(config.Games.Enabled))
+	for _, gameID := range config.Games.Enabled {
+		enabled[gameID] = true
+	}
+	for _, gameID := range supportedGameIDs() {
+		if !enabled[gameID] {
+			continue
+		}
+		path := gameFilePath(configPath, gameID)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("read game configuration file %q: %w", path, err)
+		}
+		game, err := parseGameConfiguration(content)
+		if err != nil {
+			return fmt.Errorf("parse game configuration file %q: %w", path, err)
+		}
+		// The file overrides field by field, as the server does: a key it does
+		// not carry keeps the value inherited from config.toml.
+		keys, err := gameEmbeddedKeys(content)
+		if err != nil {
+			return fmt.Errorf("parse game configuration file %q: %w", path, err)
+		}
+		merged := EmbeddedBattleServerConfig{}
+		if base := gameEmbeddedBattleServer(config, gameID); base != nil {
+			merged = *base
+		}
+		merged = mergeEmbeddedBattleServer(merged, game.EmbeddedBattleServer, keys)
+		servers := game.BattleServers
+		if !hasGameBattleServers(content) {
+			servers = gameBattleServers(config, gameID)
+		}
+		setGameConfig(config, gameID, GameConfig{BattleServers: servers, EmbeddedBattleServer: merged})
+	}
+	return nil
+}
+
+// gameEmbeddedKeys reports which keys of [Game.EmbeddedBattleServer] the
+// per-game document actually assigns, so only those override config.toml.
+func gameEmbeddedKeys(content []byte) (map[string]bool, error) {
+	keys := make(map[string]bool, len(gameEmbeddedKeyNames))
+	for _, key := range gameEmbeddedKeyNames {
+		found, err := hasDocumentValue(content, "Game.EmbeddedBattleServer", key)
+		if err != nil {
+			return nil, err
+		}
+		keys[key] = found
+	}
+	return keys, nil
+}
+
+var gameEmbeddedKeyNames = []string{
+	"StartIfMissing", "Region", "Name", "IPv4", "BsPort", "WebSocketPort", "OutOfBandPort", "LogLevel",
+}
+
+// mergeEmbeddedBattleServer overlays the keys the file assigns onto the values
+// inherited from config.toml.
+func mergeEmbeddedBattleServer(base, file EmbeddedBattleServerConfig, keys map[string]bool) EmbeddedBattleServerConfig {
+	if keys["StartIfMissing"] {
+		base.StartIfMissing = file.StartIfMissing
+	}
+	if keys["Region"] {
+		base.Region = file.Region
+	}
+	if keys["Name"] {
+		base.Name = file.Name
+	}
+	if keys["IPv4"] {
+		base.IPv4 = file.IPv4
+	}
+	if keys["BsPort"] {
+		base.BsPort = file.BsPort
+	}
+	if keys["WebSocketPort"] {
+		base.WebSocketPort = file.WebSocketPort
+	}
+	if keys["OutOfBandPort"] {
+		base.OutOfBandPort = file.OutOfBandPort
+	}
+	if keys["LogLevel"] {
+		base.LogLevel = file.LogLevel
+	}
+	return base
+}
+
+// hasGameBattleServers reports whether a per-game document defines the battle
+// server list, inline or as [[Game.BattleServers]] tables.
+func hasGameBattleServers(content []byte) bool {
+	if found, err := hasDocumentValue(content, "Game", "BattleServers"); err == nil && found {
+		return true
+	}
+	blocks, err := tableBlocks(content, "Game.BattleServers", true)
+	return err == nil && len(blocks) > 0
+}
+
+// parseGameConfiguration decodes the [Game] table of a per-game document.
+func parseGameConfiguration(content []byte) (GameConfig, error) {
+	var document struct {
+		Game GameConfig `toml:"Game"`
+	}
+	if err := toml.Unmarshal(content, &document); err != nil {
+		return GameConfig{}, fmt.Errorf("invalid TOML or configuration type: %w", err)
+	}
+	return document.Game, nil
 }
 
 // containsConfigurationField reports whether a TOML document contains a field
@@ -377,6 +941,12 @@ func isConfigurationField(section string, key string) bool {
 			return true
 		}
 	}
+	if section == "Safe" {
+		switch key {
+		case "Enabled", "PlatformUserIdExceptions":
+			return true
+		}
+	}
 	if section == "Internet" {
 		switch key {
 		case "Enabled", "IP", "Authentication":
@@ -385,6 +955,12 @@ func isConfigurationField(section string, key string) bool {
 	}
 	if section == "Games" && key == "Enabled" {
 		return true
+	}
+	if section == "Hosts" {
+		switch key {
+		case "Modern", "Legacy":
+			return true
+		}
 	}
 	if section == "Announcement" {
 		switch key {
@@ -403,6 +979,15 @@ func isConfigurationField(section string, key string) bool {
 		case "Enabled", "MaxFileSize", "MaxTotalSize", "Expiry":
 			return true
 		}
+	}
+	if section == "Mods" {
+		switch key {
+		case "Enabled", "DBPath", "UploadDir", "MaxUploadSize", "RequireAuthForRead":
+			return true
+		}
+	}
+	if section == "Api" {
+		return key == "Enabled"
 	}
 	if strings.HasPrefix(section, "Games.") {
 		if key == "Hosts" {
@@ -428,9 +1013,17 @@ func serverDefaults() Configuration {
 			Enabled:                  false,
 			PlatformUserIdExceptions: []string{},
 		},
+		Safe: SafeConfig{
+			Enabled:                  "auto",
+			PlatformUserIdExceptions: []string{},
+		},
 		Internet: InternetConfiguration{
 			Enabled: true,
 			IP:      "auto",
+		},
+		Hosts: HostsConfiguration{
+			Modern: []string{"0.0.0.0"},
+			Legacy: []string{},
 		},
 		Games: GamesConfiguration{
 			Enabled: []string{},
@@ -439,11 +1032,11 @@ func serverDefaults() Configuration {
 			// fills the region and name with "Server" at runtime. Inventing a
 			// region here would make the editor show a value the server never
 			// uses, and write it on the next save.
-			Age1:   GameConfig{Hosts: []string{"0.0.0.0"}, EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
-			Age2:   GameConfig{Hosts: []string{"0.0.0.0"}, EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
-			Age3:   GameConfig{Hosts: []string{"0.0.0.0"}, EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
-			Age4:   GameConfig{Hosts: []string{"0.0.0.0"}, EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
-			Athens: GameConfig{Hosts: []string{"0.0.0.0"}, EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
+			Age1:   GameConfig{EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
+			Age2:   GameConfig{EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
+			Age3:   GameConfig{EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
+			Age4:   GameConfig{EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
+			Athens: GameConfig{EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "true"}},
 		},
 		Announcement: AnnouncementConfig{
 			Enabled:        true,
@@ -453,7 +1046,7 @@ func serverDefaults() Configuration {
 		},
 		CustomFiles: CustomFilesConfiguration{
 			Enabled:      true,
-			Folder:       "auto",
+			Folder:       "resources/custom-files",
 			MaxFileSize:  "32MB",
 			MaxTotalSize: "256MB",
 			Expiry:       "12h",
@@ -464,7 +1057,41 @@ func serverDefaults() Configuration {
 			MaxTotalSize: "1GB",
 			Expiry:       "-1s",
 		},
+		Mods: ModsConfiguration{
+			Enabled:       true,
+			DBPath:        "resources/mods/mods.db",
+			UploadDir:     "resources/mods/uploads",
+			MaxUploadSize: "256MB",
+		},
+		Api: ApiConfiguration{
+			Enabled: true,
+		},
 	}
+}
+
+// normalizeSafeMode accepts the bool TOML also permits for [Safe] Enabled and
+// returns the canonical string. An empty value means the default.
+func normalizeSafeMode(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return "auto"
+	case bool:
+		if typed {
+			return "true"
+		}
+		return "false"
+	case string:
+		return strings.ToLower(strings.TrimSpace(typed))
+	default:
+		return fmt.Sprint(typed)
+	}
+}
+
+func safeModeString(value any) string {
+	if mode := normalizeSafeMode(value); mode != "" {
+		return mode
+	}
+	return "auto"
 }
 
 // parseConfiguration decodes TOML into the public configuration model.
@@ -473,8 +1100,15 @@ func parseConfiguration(content []byte) (*Configuration, error) {
 	if err := toml.Unmarshal(content, &config); err != nil {
 		return nil, fmt.Errorf("invalid TOML or configuration type: %w", err)
 	}
+	config.Safe.Enabled = safeModeString(config.Safe.Enabled)
 	if config.Games.Enabled == nil {
 		config.Games.Enabled = []string{}
+	}
+	if config.Hosts.Modern == nil {
+		config.Hosts.Modern = []string{}
+	}
+	if config.Hosts.Legacy == nil {
+		config.Hosts.Legacy = []string{}
 	}
 	return &config, nil
 }
@@ -794,6 +1428,37 @@ func replaceConfigFile(path string, temporaryPath string) error {
 	return nil
 }
 
+// validateMainDocument validates config.toml on its own. The battle servers and
+// the embedded battle server belong to the per-game documents, which this file
+// does not edit, so their rules must not block saving it: those tables are only
+// a read-only view of files that another document owns.
+func validateMainDocument(config *Configuration) []ValidationError {
+	trimmed := *config
+	for _, gameID := range supportedGameIDs() {
+		setGameConfig(&trimmed, gameID, GameConfig{})
+	}
+	return validateConfiguration(&trimmed)
+}
+
+// validateGameDocument validates one config.<game>.toml: only the rules about
+// the game it holds, because the global settings live in another document.
+func validateGameDocument(config *Configuration, gameID string) []ValidationError {
+	trimmed := *config
+	for _, otherID := range supportedGameIDs() {
+		if otherID != gameID {
+			setGameConfig(&trimmed, otherID, GameConfig{})
+		}
+	}
+	trimmed.Games.Enabled = []string{gameID}
+	var gameIssues []ValidationError
+	for _, issue := range validateConfiguration(&trimmed) {
+		if strings.HasPrefix(issue.Field, "Games.") {
+			gameIssues = append(gameIssues, issue)
+		}
+	}
+	return gameIssues
+}
+
 // validateConfiguration checks the semantic rules currently supported by the GUI.
 func validateConfiguration(config *Configuration) []ValidationError {
 	var validationErrors []ValidationError
@@ -814,6 +1479,12 @@ func validateConfiguration(config *Configuration) []ValidationError {
 		validationErrors = append(validationErrors, ValidationError{
 			Field:   "GeneratePlatformUserId",
 			Message: "Requires Authentication to be disabled",
+		})
+	}
+	if mode := safeModeString(config.Safe.Enabled); mode != "auto" && mode != "true" && mode != "false" {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:   "Safe.Enabled",
+			Message: "Must be auto, true or false",
 		})
 	}
 	// The server refuses to start when authentication is required without
@@ -849,7 +1520,7 @@ func validateConfiguration(config *Configuration) []ValidationError {
 			Severity: severityWarning,
 		})
 	}
-	validationErrors = append(validationErrors, validateGameHosts(config)...)
+	validationErrors = append(validationErrors, validateHosts(config)...)
 	validationErrors = append(validationErrors, validateGameBattleServers(config)...)
 
 	if config.Announcement.Port < 1 || config.Announcement.Port > 65535 {
@@ -891,6 +1562,13 @@ func validateConfiguration(config *Configuration) []ValidationError {
 	}
 	validationErrors = append(validationErrors, validateCustomFiles(config)...)
 	validationErrors = append(validationErrors, validateReplays(config)...)
+	validationErrors = append(validationErrors, validateMods(config)...)
+	if !config.Api.Enabled && config.Mods.Enabled {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:   "Api.Enabled",
+			Message: "Mods cannot run while the Age of Empires API is disabled",
+		})
+	}
 	validationErrors = append(validationErrors, validateEmbeddedBattleServers(config)...)
 
 	for index := range validationErrors {
@@ -1038,6 +1716,28 @@ func validateReplays(config *Configuration) []ValidationError {
 	return validationErrors
 }
 
+// validateMods checks the mods API settings only while it is enabled: when
+// disabled the server ignores these values and does not even parse the size.
+func validateMods(config *Configuration) []ValidationError {
+	if !config.Mods.Enabled {
+		return nil
+	}
+	size, err := bytesize.Parse(config.Mods.MaxUploadSize)
+	if err != nil {
+		return []ValidationError{{
+			Field:   "Mods.MaxUploadSize",
+			Message: "Must be a size such as 256MB",
+		}}
+	}
+	if size <= 0 {
+		return []ValidationError{{
+			Field:   "Mods.MaxUploadSize",
+			Message: "Must be greater than zero",
+		}}
+	}
+	return nil
+}
+
 // validateEmbeddedBattleServers checks the embedded battle server configuration
 // for each game. Every key is optional: the server fills Region and Name with
 // "Server", reads an empty IPv4 as "auto" and an empty StartIfMissing as "true"
@@ -1097,51 +1797,76 @@ func validateEmbeddedBattleServers(config *Configuration) []ValidationError {
 	return validationErrors
 }
 
-// hostOwner is a host of a game, with the position it holds in its list.
+// hostOwner is one configured host and the list it belongs to.
 type hostOwner struct {
-	game  string
+	list  string
 	index int
 }
 
-// validateGameHosts checks the hosts of every game. An enabled game must
-// have hosts that resolve to IPv4 and cannot share an address with another
-// enabled game, as the server would not be able to bind it twice. A disabled
-// game is not bound at all, so a shared address only warns about it.
-func validateGameHosts(config *Configuration) []ValidationError {
-	var validationErrors []ValidationError
-	enabled := make(map[string]bool, len(config.Games.Enabled))
-	for _, gameID := range config.Games.Enabled {
-		enabled[gameID] = true
-	}
-
-	// The games using each address, so a conflict can be told on both sides.
-	owners := make(map[string][]hostOwner)
-
-	for _, gameID := range supportedGameIDs() {
-		hosts, supported := gameHosts(config, gameID)
-		if !supported {
+// placeholderListeners mirrors the server's listener placeholder: 0.0.0.0 in
+// either list means "follow the certificate class of the enabled games", so the
+// two lists sharing it is not a bind conflict.
+func placeholderListeners(hosts HostsConfiguration) bool {
+	lists := 0
+	for _, list := range [][]string{hosts.Modern, hosts.Legacy} {
+		if len(list) == 0 {
 			continue
 		}
-		if enabled[gameID] && len(hosts) == 0 {
-			validationErrors = append(validationErrors, ValidationError{
-				Field:   fmt.Sprintf("Games.%s.Hosts", gameID),
-				Message: "Must contain at least one host",
-			})
+		lists++
+		if len(list) != 1 || strings.TrimSpace(list[0]) != "0.0.0.0" {
+			return false
 		}
-		for index, host := range hosts {
+	}
+	return lists > 0
+}
+
+// validateHosts checks the global listener lists. A host must resolve to IPv4,
+// Modern and Legacy cannot share an address (the process would bind it twice),
+// and 0.0.0.0 cannot be combined with another address in the same list or with
+// a non-empty list of the other mode. Games are not compared with each other:
+// one listener serves all of them.
+func validateHosts(config *Configuration) []ValidationError {
+	var validationErrors []ValidationError
+	placeholder := placeholderListeners(config.Hosts)
+	lists := []struct {
+		name  string
+		hosts []string
+	}{
+		{"Modern", config.Hosts.Modern},
+		{"Legacy", config.Hosts.Legacy},
+	}
+	if len(config.Hosts.Modern) == 0 && len(config.Hosts.Legacy) == 0 {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:   "Hosts",
+			Message: "At least one listener is required: set Hosts.Modern or Hosts.Legacy",
+		})
+	}
+
+	owners := make(map[string][]hostOwner)
+	wildcard := make(map[string]int)
+	for _, list := range lists {
+		for index, host := range list.hosts {
+			field := fmt.Sprintf("Hosts.%s.%d", list.name, index)
 			addresses := resolveIPv4(host)
 			if len(addresses) == 0 {
-				if enabled[gameID] {
-					validationErrors = append(validationErrors, ValidationError{
-						Field:   fmt.Sprintf("Games.%s.Hosts.%d", gameID, index),
-						Message: "Must resolve to an IPv4 address",
-					})
-				}
+				validationErrors = append(validationErrors, ValidationError{
+					Field:   field,
+					Message: "Must resolve to an IPv4 address",
+				})
 				continue
 			}
 			for _, address := range addresses {
-				owners[address] = append(owners[address], hostOwner{game: gameID, index: index})
+				owners[address] = append(owners[address], hostOwner{list: list.name, index: index})
+				if address == "0.0.0.0" {
+					wildcard[list.name] = index
+				}
 			}
+		}
+		if index, isWildcard := wildcard[list.name]; isWildcard && len(list.hosts) > 1 {
+			validationErrors = append(validationErrors, ValidationError{
+				Field:   fmt.Sprintf("Hosts.%s.%d", list.name, index),
+				Message: "0.0.0.0 cannot be combined with another address in the same list",
+			})
 		}
 	}
 
@@ -1151,37 +1876,96 @@ func validateGameHosts(config *Configuration) []ValidationError {
 	}
 	sort.Strings(addresses)
 	for _, address := range addresses {
-		addressOwners := owners[address]
-		if len(addressOwners) < 2 {
+		if placeholder {
+			break
+		}
+		var modern, legacy []hostOwner
+		for _, owner := range owners[address] {
+			if owner.list == "Modern" {
+				modern = append(modern, owner)
+			} else {
+				legacy = append(legacy, owner)
+			}
+		}
+		if len(modern) == 0 || len(legacy) == 0 {
 			continue
 		}
-		// The enabled games are the ones the server binds: two of them cannot
-		// share an address, as it could not be bound twice.
-		var bound, unbound []hostOwner
-		for _, owner := range addressOwners {
-			if enabled[owner.game] {
-				bound = append(bound, owner)
-			} else {
-				unbound = append(unbound, owner)
+		for _, owner := range append(modern, legacy...) {
+			other := "Hosts.Legacy"
+			if owner.list == "Legacy" {
+				other = "Hosts.Modern"
 			}
-		}
-		if len(bound) > 1 {
-			for _, owner := range bound {
-				validationErrors = append(validationErrors, ValidationError{
-					Field:   fmt.Sprintf("Games.%s.Hosts.%d", owner.game, owner.index),
-					Message: fmt.Sprintf("Already used by %s", strings.Join(otherHostOwners(bound, owner), ", ")),
-				})
-			}
-		}
-		// A game that is not enabled is not bound, so it does not take the
-		// address away: it is only told about the conflict.
-		for _, owner := range unbound {
 			validationErrors = append(validationErrors, ValidationError{
-				Field:    fmt.Sprintf("Games.%s.Hosts.%d", owner.game, owner.index),
-				Message:  fmt.Sprintf("Also used by %s", strings.Join(otherHostOwners(addressOwners, owner), ", ")),
-				Severity: severityWarning,
+				Field:   fmt.Sprintf("Hosts.%s.%d", owner.list, owner.index),
+				Message: fmt.Sprintf("Already used by %s", other),
 			})
 		}
+	}
+
+	if index, ok := wildcard["Modern"]; ok && len(config.Hosts.Legacy) > 0 && !placeholder {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:   fmt.Sprintf("Hosts.Modern.%d", index),
+			Message: "0.0.0.0 leaves no address for Hosts.Legacy to bind",
+		})
+	}
+	if index, ok := wildcard["Legacy"]; ok && len(config.Hosts.Modern) > 0 && !placeholder {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:   fmt.Sprintf("Hosts.Legacy.%d", index),
+			Message: "0.0.0.0 leaves no address for Hosts.Modern to bind",
+		})
+	}
+
+	// A game whose certificate class has no listener may still connect with the
+	// other class (that is what the compatibility spike decides), so this only
+	// warns. Listing the games makes it actionable.
+	byClass := map[common.CertMode][]string{}
+	for _, gameID := range config.Games.Enabled {
+		if !slices.Contains(supportedGameIDs(), gameID) {
+			continue
+		}
+		class := common.GameCertMode(gameID)
+		byClass[class] = append(byClass[class], gameID)
+	}
+	// The placeholder resolves to the class the games need, so a list it does not
+	// name is not a missing listener.
+	if games := byClass[common.CertModeLegacy]; len(games) > 0 && len(config.Hosts.Legacy) == 0 && !placeholder {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:    "Hosts.Legacy",
+			Message:  fmt.Sprintf("No self-signed listener: %s may reject the regular certificate", strings.Join(games, ", ")),
+			Severity: severityWarning,
+		})
+	}
+	if games := byClass[common.CertModeModern]; len(games) > 0 && len(config.Hosts.Modern) == 0 && !placeholder {
+		validationErrors = append(validationErrors, ValidationError{
+			Field:    "Hosts.Modern",
+			Message:  fmt.Sprintf("No regular listener: %s may reject the self-signed certificate", strings.Join(games, ", ")),
+			Severity: severityWarning,
+		})
+	}
+	// 0.0.0.0 is a placeholder that follows the games, but it can only follow
+	// one class per address: the server refuses to start when the enabled games
+	// need both, so say it here instead of at boot.
+	if placeholder && len(byClass[common.CertModeLegacy]) > 0 && len(byClass[common.CertModeModern]) > 0 {
+		validationErrors = append(validationErrors, ValidationError{
+			Field: "Hosts.Legacy",
+			Message: fmt.Sprintf("0.0.0.0 follows the certificate class of the games, but %s need the self-signed one and %s the regular one: set one list to a concrete address or enable games of a single class",
+				strings.Join(byClass[common.CertModeLegacy], ", "), strings.Join(byClass[common.CertModeModern], ", ")),
+			Severity: severityWarning,
+		})
+	}
+
+	// The old per-game keys are read only to migrate a document. Saving drops
+	// them, so a warning here explains why they disappear.
+	for _, gameID := range supportedGameIDs() {
+		hosts, _ := gameHosts(config, gameID)
+		if len(hosts) == 0 {
+			continue
+		}
+		validationErrors = append(validationErrors, ValidationError{
+			Field:    fmt.Sprintf("Games.%s.Hosts", gameID),
+			Message:  "Deprecated: hosts are global in [Hosts].Modern/Legacy and this key is removed on save",
+			Severity: severityWarning,
+		})
 	}
 	return validationErrors
 }
@@ -1288,20 +2072,6 @@ func validateGameBattleServers(config *Configuration) []ValidationError {
 	return validationErrors
 }
 
-// otherHostOwners returns the games of the other owners of an address. Two
-// hosts of the same game resolving to the same address count as owners of each
-// other, so a duplicated host names its own game instead of an empty message.
-func otherHostOwners(owners []hostOwner, subject hostOwner) []string {
-	var others []string
-	for _, owner := range owners {
-		if owner.game == subject.game && owner.index == subject.index {
-			continue
-		}
-		others = append(others, owner.game)
-	}
-	return others
-}
-
 // supportedGameIDs returns the game identifiers the configuration knows about,
 // in the order they are shown.
 func supportedGameIDs() []string {
@@ -1323,6 +2093,29 @@ func gameHosts(config *Configuration, gameID string) ([]string, bool) {
 		return config.Games.Athens.Hosts, true
 	default:
 		return nil, false
+	}
+}
+
+// setGameConfig replaces the battle-server half of one game. Hosts are global
+// now, so the old per-game list is deliberately left untouched: it is only read
+// to migrate documents and never written back.
+func setGameConfig(config *Configuration, gameID string, game GameConfig) {
+	switch gameID {
+	case "age1":
+		config.Games.Age1.BattleServers = game.BattleServers
+		config.Games.Age1.EmbeddedBattleServer = game.EmbeddedBattleServer
+	case "age2":
+		config.Games.Age2.BattleServers = game.BattleServers
+		config.Games.Age2.EmbeddedBattleServer = game.EmbeddedBattleServer
+	case "age3":
+		config.Games.Age3.BattleServers = game.BattleServers
+		config.Games.Age3.EmbeddedBattleServer = game.EmbeddedBattleServer
+	case "age4":
+		config.Games.Age4.BattleServers = game.BattleServers
+		config.Games.Age4.EmbeddedBattleServer = game.EmbeddedBattleServer
+	case "athens":
+		config.Games.Athens.BattleServers = game.BattleServers
+		config.Games.Athens.EmbeddedBattleServer = game.EmbeddedBattleServer
 	}
 }
 
@@ -1403,62 +2196,39 @@ func (s *ConfigService) EmbeddedBattleServerDefaults() map[string]EmbeddedBattle
 	return defaults
 }
 
-// embeddedBattleServerDefaults is the embedded battle server a game gets when
-// the document has no [Games.<game>.EmbeddedBattleServer] table: the editor
-// reads it through serverDefaults, so it can tell "still the default" from
-// "configured here".
-func embeddedBattleServerDefaults(gameID string) EmbeddedBattleServerConfig {
-	games := serverDefaults().Games
-	switch gameID {
-	case "age1":
-		return games.Age1.EmbeddedBattleServer
-	case "age2":
-		return games.Age2.EmbeddedBattleServer
-	case "age3":
-		return games.Age3.EmbeddedBattleServer
-	case "age4":
-		return games.Age4.EmbeddedBattleServer
-	case "athens":
-		return games.Athens.EmbeddedBattleServer
-	default:
-		return EmbeddedBattleServerConfig{}
+// normalizeEmbedded resolves the empty spellings the server fills on its own:
+// an empty StartIfMissing is "true" and an empty IPv4 is "auto" (see the
+// evaluation in server/internal/cmd/root.go).
+func normalizeEmbedded(ebs EmbeddedBattleServerConfig) EmbeddedBattleServerConfig {
+	if strings.TrimSpace(ebs.StartIfMissing) == "" {
+		ebs.StartIfMissing = "true"
 	}
+	if strings.TrimSpace(ebs.IPv4) == "" {
+		ebs.IPv4 = "auto"
+	}
+	return ebs
 }
 
-// embeddedBattleServerIsDefault reports whether the table only repeats the
-// values the server already uses without it. Writing those out would add a
-// block to every game on the first save, and move the document away from the
-// commented example the server ships.
-//
-// The empty spellings the server resolves on its own compare equal to what
-// they resolve to: an empty IPv4 is "auto" and an empty StartIfMissing is
-// "true" (see the startIfMissing evaluation in server/internal/cmd/root.go).
-func embeddedBattleServerIsDefault(gameID string, ebs *EmbeddedBattleServerConfig) bool {
-	got := *ebs
-	want := embeddedBattleServerDefaults(gameID)
-	if strings.TrimSpace(got.IPv4) == "" {
-		got.IPv4 = "auto"
+// embeddedEntriesWrite reports whether the delta carries a value: an empty one
+// means the file inherits everything from config.toml and has nothing to say.
+func embeddedEntriesWrite(entries []tableEntry) bool {
+	for _, entry := range entries {
+		if entry.Value != "" {
+			return true
+		}
 	}
-	if strings.TrimSpace(want.IPv4) == "" {
-		want.IPv4 = "auto"
-	}
-	if strings.TrimSpace(got.StartIfMissing) == "" {
-		got.StartIfMissing = "true"
-	}
-	if strings.TrimSpace(want.StartIfMissing) == "" {
-		want.StartIfMissing = "true"
-	}
-	return got == want
+	return false
 }
 
-// rewriteEmbeddedBattleServer rewrites the embedded battle server of one game
-// as a single inline table [Games.<game>.EmbeddedBattleServer]. When disabled or
-// empty, the definition is removed.
+// rewriteEmbeddedBattleServerSection rewrites the embedded battle server table
+// of a per-game file. Only the keys that differ from base (the values inherited
+// from config.toml) are written; a key that matches the inherited value is
+// removed, so a port inherited as 30003 is not pinned to a zero the document
+// never chose. With nothing left to say the definition is removed.
 //
 // An existing table is edited key by key, so the comments it holds (and any key
 // this editor does not know about) stay where the user wrote them.
-func rewriteEmbeddedBattleServer(content []byte, gameID string, ebs *EmbeddedBattleServerConfig) ([]byte, error) {
-	section := "Games." + gameID
+func rewriteEmbeddedBattleServerSection(content []byte, section, gameID string, ebs *EmbeddedBattleServerConfig, base EmbeddedBattleServerConfig) ([]byte, error) {
 	path := section + ".EmbeddedBattleServer"
 
 	updated, _, err := removeDocumentValue(content, section, "EmbeddedBattleServer")
@@ -1477,13 +2247,14 @@ func rewriteEmbeddedBattleServer(content []byte, gameID string, ebs *EmbeddedBat
 	if err != nil {
 		return nil, err
 	}
-	if ebs == nil || embeddedBattleServerIsDefault(gameID, ebs) {
+	entries := embeddedBattleServerEntries(gameID, ebs, base)
+	if ebs == nil || !embeddedEntriesWrite(entries) {
 		return removeTableBlocks(updated, blocks), nil
 	}
 	if len(blocks) == 0 {
-		return insertInlineTable(updated, section, embeddedBattleServerDocumentValue(gameID, ebs))
+		return insertInlineTable(updated, section, embeddedBattleServerDocumentValueSection(section, ebs, base, gameID))
 	}
-	rewritten, err := writeTableKeys(updated[blocks[0].start:blocks[0].end], path, embeddedBattleServerEntries(gameID, ebs))
+	rewritten, err := writeTableKeys(updated[blocks[0].start:blocks[0].end], path, entries)
 	if err != nil {
 		return nil, err
 	}
@@ -1511,7 +2282,12 @@ func rewriteEmbeddedBattleServer(content []byte, gameID string, ebs *EmbeddedBat
 // being recreated, so their comments and any extra key stay in place; only the
 // blocks the document has too many of are dropped.
 func rewriteBattleServers(content []byte, gameID string, servers []BattleServerConfig) ([]byte, error) {
-	section := "Games." + gameID
+	return rewriteBattleServersSection(content, "Games."+gameID, gameID, servers)
+}
+
+// rewriteBattleServersSection is rewriteBattleServers for any section: the main
+// document uses Games.<id>, a per-game file uses Game.
+func rewriteBattleServersSection(content []byte, section, gameID string, servers []BattleServerConfig) ([]byte, error) {
 	path := section + ".BattleServers"
 
 	updated, _, err := removeDocumentValue(content, section, "BattleServers")
@@ -1546,7 +2322,7 @@ func rewriteBattleServers(content []byte, gameID string, servers []BattleServerC
 	}
 	// The servers the document did not describe yet go after the last block of
 	// the game, before the comments that close it.
-	block := battleServersDocumentValue(gameID, extra)
+	block := battleServersDocumentValueSection(section, gameID, extra)
 	if len(blocks) == 0 {
 		return insertArrayTables(updated, section, block)
 	}
@@ -1819,16 +2595,16 @@ func insertArrayTables(content []byte, section string, block string) ([]byte, er
 	return updated, nil
 }
 
-// battleServersDocumentValue formats the battle servers of a game as the TOML
-// array of tables the server documents.
-func battleServersDocumentValue(gameID string, servers []BattleServerConfig) string {
+// battleServersDocumentValueSection formats the tables under any section: the
+// main document uses Games.<id>, a per-game file uses Game.
+func battleServersDocumentValueSection(section string, gameID string, servers []BattleServerConfig) string {
 	var builder strings.Builder
 	for index, server := range servers {
 		if index > 0 {
 			builder.WriteByte('\n')
 		}
-		builder.WriteString("[[Games.")
-		builder.WriteString(gameID)
+		builder.WriteString("[[")
+		builder.WriteString(section)
 		builder.WriteString(".BattleServers]]\n")
 		builder.WriteString("Region = ")
 		builder.WriteString(tomlString(server.Region))
@@ -1884,85 +2660,65 @@ func battleServerEntries(gameID string, server BattleServerConfig) []tableEntry 
 	return entries
 }
 
-// embeddedBattleServerEntries is the key set [Games.<game>.EmbeddedBattleServer]
-// holds, in the documented order.
-func embeddedBattleServerEntries(gameID string, ebs *EmbeddedBattleServerConfig) []tableEntry {
+// embeddedBattleServerEntries is the delta of one per-game table against the
+// values inherited from config.toml, in the documented order. A key equal to
+// the inherited value is left empty: it is removed from the document, so the
+// inherited value keeps applying instead of being pinned to a copy.
+func embeddedBattleServerEntries(gameID string, ebs *EmbeddedBattleServerConfig, base EmbeddedBattleServerConfig) []tableEntry {
+	got := normalizeEmbedded(*ebs)
+	inherited := normalizeEmbedded(base)
 	entries := []tableEntry{
 		{Key: "StartIfMissing"},
 		{Key: "Region"},
 		{Key: "Name"},
 		{Key: "IPv4"},
-		{Key: "BsPort", Value: strconv.Itoa(ebs.BsPort)},
-		{Key: "WebSocketPort", Value: strconv.Itoa(ebs.WebSocketPort)},
+		{Key: "BsPort"},
+		{Key: "WebSocketPort"},
 		{Key: "OutOfBandPort"},
 		{Key: "LogLevel"},
 	}
-	if ebs.StartIfMissing != "" {
-		entries[0].Value = tomlString(ebs.StartIfMissing)
+	if got.StartIfMissing != inherited.StartIfMissing {
+		entries[0].Value = tomlString(got.StartIfMissing)
 	}
-	if ebs.Region != "" {
-		entries[1].Value = tomlString(ebs.Region)
+	if got.Region != inherited.Region {
+		entries[1].Value = tomlString(got.Region)
 	}
-	if ebs.Name != "" {
-		entries[2].Value = tomlString(ebs.Name)
+	if got.Name != inherited.Name {
+		entries[2].Value = tomlString(got.Name)
 	}
-	if ebs.IPv4 != "" {
-		entries[3].Value = tomlString(ebs.IPv4)
+	if got.IPv4 != inherited.IPv4 {
+		entries[3].Value = tomlString(got.IPv4)
 	}
-	if gameSupportsOutOfBandPort(gameID) {
-		entries[6].Value = strconv.Itoa(ebs.OutOfBandPort)
+	if got.BsPort != inherited.BsPort {
+		entries[4].Value = strconv.Itoa(got.BsPort)
 	}
-	if ebs.LogLevel != "" {
-		entries[7].Value = tomlString(ebs.LogLevel)
+	if got.WebSocketPort != inherited.WebSocketPort {
+		entries[5].Value = strconv.Itoa(got.WebSocketPort)
+	}
+	if gameSupportsOutOfBandPort(gameID) && got.OutOfBandPort != inherited.OutOfBandPort {
+		entries[6].Value = strconv.Itoa(got.OutOfBandPort)
+	}
+	if got.LogLevel != inherited.LogLevel {
+		entries[7].Value = tomlString(got.LogLevel)
 	}
 	return entries
 }
 
-// embeddedBattleServerDocumentValue formats the embedded battle server of a game
-// as a single inline TOML table the server documents. Keys the server resolves
-// on its own are only written when they carry a value, so an empty Region keeps
-// meaning "Server" and an empty IPv4 keeps meaning "auto" instead of being
-// pinned to a spelling the user never chose.
-func embeddedBattleServerDocumentValue(gameID string, ebs *EmbeddedBattleServerConfig) string {
+// embeddedBattleServerDocumentValueSection formats a new per-game table with
+// only the delta entries that carry a value: the rest stays inherited from
+// config.toml.
+func embeddedBattleServerDocumentValueSection(section string, ebs *EmbeddedBattleServerConfig, base EmbeddedBattleServerConfig, gameID string) string {
 	var builder strings.Builder
-	builder.WriteString("[Games.")
-	builder.WriteString(gameID)
+	builder.WriteString("[")
+	builder.WriteString(section)
 	builder.WriteString(".EmbeddedBattleServer]\n")
-	if ebs.StartIfMissing != "" {
-		builder.WriteString("StartIfMissing = ")
-		builder.WriteString(tomlString(ebs.StartIfMissing))
-		builder.WriteByte('\n')
-	}
-	if ebs.Region != "" {
-		builder.WriteString("Region = ")
-		builder.WriteString(tomlString(ebs.Region))
-		builder.WriteByte('\n')
-	}
-	if ebs.Name != "" {
-		builder.WriteString("Name = ")
-		builder.WriteString(tomlString(ebs.Name))
-		builder.WriteByte('\n')
-	}
-	if ebs.IPv4 != "" {
-		builder.WriteString("IPv4 = ")
-		builder.WriteString(tomlString(ebs.IPv4))
-		builder.WriteByte('\n')
-	}
-	builder.WriteString("BsPort = ")
-	builder.WriteString(strconv.Itoa(ebs.BsPort))
-	builder.WriteByte('\n')
-	builder.WriteString("WebSocketPort = ")
-	builder.WriteString(strconv.Itoa(ebs.WebSocketPort))
-	builder.WriteByte('\n')
-	// AoE: DE has no out-of-band port; omit the key for age1
-	if gameID != "age1" {
-		builder.WriteString("OutOfBandPort = ")
-		builder.WriteString(strconv.Itoa(ebs.OutOfBandPort))
-		builder.WriteByte('\n')
-	}
-	if ebs.LogLevel != "" {
-		builder.WriteString("LogLevel = ")
-		builder.WriteString(tomlString(ebs.LogLevel))
+	for _, entry := range embeddedBattleServerEntries(gameID, ebs, base) {
+		if entry.Value == "" {
+			continue
+		}
+		builder.WriteString(entry.Key)
+		builder.WriteString(" = ")
+		builder.WriteString(entry.Value)
 		builder.WriteByte('\n')
 	}
 	return builder.String()

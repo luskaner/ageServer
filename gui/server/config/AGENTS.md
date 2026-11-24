@@ -1,9 +1,35 @@
 # Configurator — agent notes
 
-This Go + React (Wails v3) application edits the server's `config.toml` in place.
+This Go + React (Wails v3) application edits the server's configuration in
+place: `config.toml` or a single `config.<game>.toml`, one document per load.
 The server is the source of truth: the editor must read and write the same keys,
 with the same defaults, that `server/internal/config.go` and
 `server/internal/cmd/root.go` use.
+
+## One document per load
+
+`ConfigFile.Kind` says what the loaded file is: `main` for `config.toml`, `game`
+for `config.<game>.toml` (`ConfigFile.Game` names the game, and the file name —
+`documentGameID` — is what decides it when a file is opened or created). Saving
+writes that one document and nothing else, so the editor never holds two files
+at once:
+
+- a `main` document edits only the global settings and `[Hosts]`; it has no
+  game page, because every game is a document of its own. The per-game files
+  are read only to merge them into the model the editor shows, and are opened
+  through `OpenGameDocument` (a missing file becomes a new document already
+  aimed at its sibling path). `validateMainDocument` clears the game tables
+  before validating, so a broken per-game file cannot block saving
+  `config.toml`;
+- a `game` document edits only its game (`[[Game.BattleServers]]` and
+  `[Game.EmbeddedBattleServer]`), starts from `serverDefaults()` with just that
+  game enabled, and inherits field by field from the `config.toml` next to it
+  (`inheritedEmbedded`), which it never writes. `validateGameDocument` keeps
+  only the `Games.*` issues;
+- a new document comes from `OpenTemplate` (main) or `OpenGameTemplate`/
+  `OpenGameDocument` (game, `New` with the proposed `SuggestedName`), and
+  `CreateConfigFile`/`SaveConfigurationAs` write it where its name says.
+
 
 ## Configuration contract
 
@@ -19,10 +45,14 @@ The model in `models.go` mirrors `server/internal/config.go`. Do not invent keys
 | `[Internet] Enabled` | Allow DNS check, authentication and public IP lookup. |
 | `[Internet] IP` | `'auto'` or an IPv4 address. |
 | `[Games] Enabled` | `age1`, `age2`, `age3`, `age4`, `athens`. |
-| `[Games.<game>] Hosts` | IPv4 addresses the server binds for that game; must be unique among enabled games. |
+| `[Hosts] Modern/Legacy` | IPv4 addresses the server binds, shared by every enabled game. `Modern` presents the CA-signed leaf (AoE IV/AoM), `Legacy` the self-signed one (AoE I-III: DE); the editor calls them **Regular** and **Self-signed** certificates, while the keys keep their names. |
+| `[Games.<game>] Hosts` | **Deprecated.** Read only to migrate an old document; the editor removes it on save and validates it as a warning. |
+| `config.<game>.toml` | Optional per-game document next to `config.toml`: `[[Game.BattleServers]]` and `[Game.EmbeddedBattleServer]`. It is opened and saved as a document of its own, never together with `config.toml`. |
 | `[[Games.<game>.BattleServers]]` | One table per battle server. See below. |
 | `[Announcement]` | `Enabled`, `Multicast`, `Port`, `MulticastGroup`. |
-| `[CustomFiles]` | `Enabled`, `Folder`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. |
+| `[CustomFiles]` | `Enabled`, `Folder`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. These are the `/api/MatchContent/` endpoints; `Folder` defaults to `resources/custom-files`, relative to the server directory. |
+| `[Mods]` | `Enabled`, `DBPath`, `UploadDir`, `MaxUploadSize`, `RequireAuthForRead`. The same library instance serves `/api/MatchContent/`, configured by `[CustomFiles]`; `DBPath` and `UploadDir` default under `resources/mods`. |
+| `[Api]` | `Enabled`, the master switch of the Age of Empires API tree. Off, those paths answer 404 here instead of the embedded library or the official service. It cannot be off while `[Mods] Enabled` is true. |
 | `[Replays]` | Replays uploaded by the game: `Enabled`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. They are always stored under `<resources>/responses/cloud/<game>/replays`, so there is no `Folder`. `Expiry` `<= 0` keeps replays forever. |
 
 ### Battle servers
@@ -39,23 +69,36 @@ WebSocketPort = 30004
 OutOfBandPort = 30005   # not written for age1
 ```
 
-`configurationDocument` rewrites every game through `rewriteBattleServers`:
+The battle servers and the embedded battle server live in one document per
+game, `config.<game>.toml`, written by `gameDocumentContent` through
+`gameDocumentWithBase` when that document is the one being edited;
+`configurationDocument` only touches `config.toml` (global settings and
+`[Hosts]`). For the edited game:
 
 - removes an old inline `BattleServers = [...]` key and every
-  `[[Games.<game>.BattleServers]]` block;
+  `[[Game.BattleServers]]` block before writing the canonical tables;
 - writes the canonical tables back only when the list has entries, so a save
   never appends empty `BattleServers` and a second save is a no-op;
 - keeps the rest of the document (comments, unknown keys) untouched.
 
-Both `rewriteBattleServers` and `rewriteEmbeddedBattleServer` edit the tables
-they find **key by key** (`writeTableKeys`) instead of deleting and recreating
-them: a key that is already there keeps its line, its inline comment and its
-position, a missing key is appended after the last one, and a key the editor
-does not know is left alone. Only a block the game no longer has is removed, and
-even then a comment run separated from the block by a blank line stays in the
-document (`blockCutEnd`), because it closes the section that follows. A whole
-table the document is missing is added next to its siblings (`[Games.age3]` with
-the other games), not at the end of the file.
+Both `rewriteBattleServersSection` and `rewriteEmbeddedBattleServerSection` edit
+the tables they find **key by key** (`writeTableKeys`) instead of deleting and
+recreating them: a key that is already there keeps its line, its inline comment
+and its position, a missing key is appended after the last one, and a key the
+editor does not know is left alone. Only a block the game no longer has is
+removed, and even then a comment run separated from the block by a blank line
+stays in the document (`blockCutEnd`), because it closes the section that
+follows. A whole table the document is missing is added after the `[Game]`
+header, not at the end of the file.
+
+The per-game embedded table is a **delta** against
+`[Games.<game>.EmbeddedBattleServer]` of `config.toml`: only the keys whose
+value differs from the inherited one are written, and a key that matches it is
+removed from the per-game file. An inherited `BsPort = 30003` therefore stays
+inherited after an open and save instead of being pinned to `0`. Reading is the
+mirror image: `readGameDocument` overlays only the keys the file assigns onto
+the inherited base, and `readGameFiles` does the same for the read-only game
+pages of `config.toml`.
 
 `TestConfigurationDocumentKeepsEveryTemplateComment` asserts that every comment
 of the shipped template survives a save that changes values across the document;
@@ -69,14 +112,39 @@ locally (region required and unique, IPv4 `auto` or valid, ports in range)
 before it reaches the form. The IPv4 field reuses the app's `AutoManualCard`:
 automatic (`auto`) by default, manual with the four-octet `IPv4Input`.
 
-### Game pages
+### API page
 
-Each game is its own sub-item under **Games** in the sidebar. The page title is
-the game name and the header carries its enabled switch. The page holds the
-**Hosts** card and then a **Battle servers** section with two cards:
+**API** groups the two features of the embedded API as inline sections of one
+page, one after the other with a `SectionHeading level="section"` and never as
+separate sidebar rows or tabs: **Custom files** and **Mods**. The header carries
+the **Age of Empires API** switch for the page, `[Api] Enabled`, the master
+switch of the whole API tree; each inline section then carries its own switch
+card.
 
-- **Hosts**: the right side lists the hosts separated by commas; expanding shows
-  one IPv4 input per host with add and delete buttons.
+**Custom files** edits `[CustomFiles]`: the storage folder takes a path from the
+native picker, and the sizes and the expiry use the unit inputs.
+
+**Mods** edits `[Mods]`: the database file and the upload folder default to
+`resources/mods/mods.db` and `resources/mods/uploads` (relative paths) and take
+another path from the native picker, `MaxUploadSize` uses the size input, and
+`RequireAuthForRead` is a switch. The page does not repeat the relationship
+between the two sections: it is part of the configuration contract, not a tip.
+
+### Listeners page
+
+**Listeners** edits the global `[Hosts]` table, not a game: every address serves
+every enabled game. Two cards, **Regular certificates** and **Self-signed
+certificates**, each list their addresses as a comma-separated summary;
+expanding shows one IPv4 input per address with add and delete buttons. The page
+says once that the certificate class only changes what the address presents.
+
+### Game page
+
+A `config.<game>.toml` document is a single page: its only sidebar row is the
+game itself, and the global pages belong to `config.toml`. The page title is
+the game name and the page holds a
+**Battle servers** section with two cards:
+
 - **Standalone**: the battle servers this document announces. The right side
   lists their regions separated by commas (the region is unique within the
   game); expanding lists each server's region/name, address and ports with a
@@ -94,13 +162,10 @@ The section says, once, that the server also uses the battle servers the
 battle-server-manager finds on the PC: neither card above describes the whole
 picture, and a user must not read "None" as "no battle server at all".
 
-A game that is not in `Games.Enabled` is read-only: its three cards are passed
+A game that is not in `Games.Enabled` is read-only: its two cards are passed
 `disabled`, so they keep their summary but cannot be opened, and the page says
-why. Only the header switch (and the sidebar) lead to them.
-
-In the sidebar only the game is the selected item, never the **Games** group it
-lives in: the group is a container, and two highlighted rows would say the same
-thing twice.
+why. A per-game document always carries its game in `Games.Enabled`, so its page
+is editable.
 
 ### Embedded battle server defaults
 
@@ -125,11 +190,11 @@ neither the document nor the editor has a key for it.
 `ConfigService.EmbeddedBattleServerDefaults()` returns that right-hand column to
 the frontend, which shows it as placeholders and hints: the editor must not
 carry its own copy of those values. An empty `Region` is valid, and
-`rewriteEmbeddedBattleServer` only writes the keys that carry a value, so an
-empty region keeps meaning "Server".
+`embeddedBattleServerEntries` only writes keys whose value differs from the
+inherited one, so an empty region keeps meaning "Server".
 
-`rewriteEmbeddedBattleServer` writes the table only when it *differs* from the
-config defaults (an empty `IPv4` compares equal to `"auto"` and an empty
+`embeddedBattleServerEntries` also normalises the values the server resolves on
+its own (an empty `IPv4` compares equal to `"auto"` and an empty
 `StartIfMissing` to `"true"`): a document without an embedded section saves back
 unchanged instead of gaining one block per game. A save that only touches other
 settings must stay byte-identical.
@@ -139,9 +204,14 @@ settings must stay byte-identical.
 `serverDefaults()` replicates the defaults in `server/internal/cmd/root.go`:
 `Authentication = 'disabled'`, `Sign.Enabled = false`, `Internet.Enabled = true`,
 `Internet.IP = 'auto'`, `Announcement` enabled with port `31978` and group
-`239.31.97.8`, `CustomFiles` enabled with `auto`/`32MB`/`256MB`/`12h`, and
-`Hosts = ['0.0.0.0']` for every game. `Replays` defaults to enabled with
-`32MB`/`1GB`/`-1s`.
+`239.31.97.8`, `CustomFiles` enabled with
+`resources/custom-files`/`32MB`/`256MB`/`12h`, `Mods` enabled with
+`resources/mods/mods.db`/`resources/mods/uploads`/`256MB` and
+`RequireAuthForRead = false`, and `Hosts.Modern = ['0.0.0.0']` with an empty
+`Hosts.Legacy` (the listener placeholder, see below).
+`Replays` defaults to enabled with `32MB`/`1GB`/`-1s`, and `Api.Enabled` defaults
+to `true`. The default folders are relative paths resolved against the server's
+working directory, where `resources` lives.
 
 ## Validation
 
@@ -150,9 +220,23 @@ it through `ConfigService.ValidateConfiguration`. Errors block saving; warnings
 do not. It mirrors what the server would do at startup:
 
 - authentication values and the `GeneratePlatformUserId`/Internet combinations;
-- supported games, and at least one host for an enabled game;
-- hosts must resolve to IPv4 and not be shared by two enabled games (disabled
-  games only warn);
+- supported games;
+- `Hosts.Modern`/`Hosts.Legacy` cannot both be empty; every host must resolve to
+  IPv4; the two lists cannot share an address; `0.0.0.0` cannot be combined with
+  another address in the same list or with a non-empty list of the other class;
+  the exception is the server's placeholder (0.0.0.0 alone in one list, or in
+  both), which is accepted and warns when the enabled games need both classes,
+  because the server refuses to start with both classes on one address;
+- an enabled game whose certificate class has no listener only warns, because the
+  other class may still work (the 0.0.0.0 placeholder is exempt: it resolves to
+  the class the games need); a deprecated `Games.<game>.Hosts` also warns;
+- a `main` document without `[Hosts]` that still holds `Games.<game>.Hosts` is migrated
+  when it opens: equal lists go to the class of the enabled games (all legacy →
+  `Hosts.Legacy`, otherwise `Hosts.Modern`, emptying the other list). Differing
+  lists are not guessed: saving such a document fails with both games and lists
+  named;
+- the per-game files are parsed when a `main` document opens, so an invalid
+  `config.<game>.toml` fails with its path (opening that file reports it too);
 - enabled `age4` and `athens` need a battle server, and an embedded one that is
   allowed to start counts (`validateGameBattleServers`): the server starts the
   embedded instance before initializing the game and registers it with the rest
@@ -166,7 +250,12 @@ do not. It mirrors what the server would do at startup:
   ports `0..65535` and `LogLevel` one of the six levels;
 - announcement port/group, custom file sizes/duration (sizes accept
   `B/KB/MB/GB`, durations are Go durations), and replay sizes/duration with the
-  same rules (`Expiry` may be `0` or negative to keep replays forever).
+  same rules (`Expiry` may be `0` or negative to keep replays forever);
+- the mods request size (`MaxUploadSize`) while `[Mods]` is enabled, with the
+  same size rules. A disabled `[Mods]` section is ignored by the server, so it
+  does not block saving;
+- `Api.Enabled = false` while `[Mods] Enabled` is true: the mods API lives in
+  the tree the switch turns off, and the server refuses to boot with both.
 
 ## Look and feel
 
@@ -181,14 +270,16 @@ element always looks the same way:
   for a setting that belongs to another card: a card is never nested in a card.
 - A page whose feature has a single master switch keeps it in the header, next
   to the title, as a game page does with the game's switch; the page body only
-  lists what that switch turns on (Announcement, Custom files, Replays). Sign
-  and Internet are the exceptions: their switches stay on the page as cards of
-  their own.
+  lists what that switch turns on (Announcement, Replays, and the API tree's
+  master switch). Sign and Internet are the exceptions: their switches stay on
+  the page as cards of their own. API's inline sections carry their own switch
+  cards under that header switch.
 - A control that a master switch turns off is disabled **through its card**, not
   only through the input: `SettingCard` gets `disabled`, so the whole row dims
   the same way everywhere (the card cannot be opened either).
-- The save button reads "Save" when the document has a path and "Save as…" when
-  it does not, because a new document always asks for the destination.
+- The save button reads "Save" when the document's destination is known and
+  "Save as…" when it is not: a new game document opened from `config.toml`
+  already knows its sibling path, so it is saved straight there.
 - `InfoBar` is the only inline message: severity tint, hairline stroke and the
   severity icon. Page warnings, validation errors and the notes inside a card
   all go through it, never a bare icon-and-text group or a Mantine `Alert`.

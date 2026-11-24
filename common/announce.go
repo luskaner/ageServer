@@ -1,6 +1,18 @@
 package common
 
 const AnnouncePort = 31978
+
+// AnnouncePath is the announcement probe the server answers on every host of a
+// title, the route the launcher queries to tell whether the host is up. It is
+// one of the server's own routes, under /test so the probe and the API
+// library's diagnostics share one namespace.
+const AnnouncePath = "test/root"
+
+// ApiTestPath is the liveness probe of the API server, the library's own route.
+// A standalone API server answers it on port 443 and it is what the launcher
+// checks before trusting its certificate.
+const ApiTestPath = "test"
+
 const AnnounceMulticastGroup = "239.31.97.8"
 const AnnounceHeader = Name
 const IdHeader = "X-Id"
@@ -12,7 +24,7 @@ const (
 	AnnounceVersion0 = iota
 	// AnnounceVersion1 : v1.5.X - v1.10.X
 	AnnounceVersion1
-	// AnnounceVersion2 (v1.11.X and higher) no longer sends any extra data, '/test' is supposed to be queried to get it
+	// AnnounceVersion2 (v1.11.X and higher) no longer sends any extra data, '/test/root' is supposed to be queried to get it
 	AnnounceVersion2
 )
 
@@ -31,9 +43,15 @@ type AnnounceMessageData001 struct {
 	GameTitles []string
 }
 
-// AnnounceMessageData002 sends a single game title (as announcements are separated by game) and version
+// AnnounceMessageData002 sends a single game title (as announcements are separated by game), version
+// and the certificate mode of the listener that answered. Mode is empty when an
+// older server does not send it; older launchers ignore the extra field.
 // v1.11.X and higher
 type AnnounceMessageData002 struct {
 	GameTitle string
 	Version   string
+	Mode      string `json:",omitempty"`
+	// Safe is the configured [Safe] mode: "auto", "true" or "false". It is
+	// empty from servers that predate the field; older launchers ignore it.
+	Safe string `json:",omitempty"`
 }

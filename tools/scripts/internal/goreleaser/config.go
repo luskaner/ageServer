@@ -7,6 +7,7 @@ import (
 )
 
 const configSource = `%s/resources/config.game.toml`
+const serverConfigSource = `%s/resources/config/config.game.toml`
 const scriptSource = `%s/resources/{{.BaseOS}}/%s.{{.SrcScriptExt}}`
 const gameScriptSource = `%s/resources/{{.BaseOS}}/start_{{.Game}}.{{.SrcScriptExt}}`
 const baseScriptSource = `common/resources/start.{{.SrcScriptExt}}`
@@ -36,6 +37,16 @@ func generate(currentWindowsOS OperatingSystem) error {
 	serverArchive.AddDocFiles("docs", nil, nil, "LICENSE", "server/README.md", "server/BattleServers.md")
 	serverArchive.AddSrcDstFile("server/resources/responses", "resources/responses")
 	serverArchive.AddSrcDstFile("server/resources/config", "resources/config")
+	// The per-game template lives outside the copied directory on purpose: a
+	// raw copy of it would land unreplaced, and AddConfigFiles would put the
+	// generated file at resources/<game>.toml without the config/ folder.
+	serverArchive.AddSrcOsDstFile(
+		NewTemplate[FileData]("server/resources/config/config.game.toml"),
+		nil,
+		func(string) Renders[FileData] {
+			return NewTemplate[FileData]("resources/config/config.{{.Game}}.toml")
+		},
+		nil, 0, true)
 	serverArchive.AddSrcDstFile("server/resources/etc", "resources/etc")
 	serverArchive.AddScriptFiles("", NewTemplate[FileData](baseScriptSource), nil, nil, false, false)
 	serverArchive.AddScriptFiles("", NewTemplate[FileData](fmt.Sprintf(gameScriptSource, `server`)), nil, nil, true, true)

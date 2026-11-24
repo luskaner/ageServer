@@ -15,6 +15,8 @@ var (
 	trustCertsFn   = cert.TrustCertificates
 	untrustCertsFn = cert.UntrustCertificates
 	addHostsFn     = launcherCommonHosts.AddHosts
+	addApiHostsFn  = launcherCommonHosts.AddApiHosts
+	addRootHostsFn = launcherCommonHosts.AddRootHosts
 	removeHostsFn  = hosts.RemoveHosts
 	flushDnsFn     = hosts.FlushDns
 	flushCertsFn   = cert.FlushCerts

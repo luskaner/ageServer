@@ -2,6 +2,7 @@ package models
 
 import (
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/luskaner/ageServer/server/internal"
@@ -13,6 +14,10 @@ type Session interface {
 	GetClientLibVersion() uint16
 	AddMessage(message internal.A)
 	WaitForMessages(ackNum uint) (uint, []internal.A)
+	// Official reports whether this session was opened by an official
+	// platform login (Xbox Live, or a Steam ticket that is not plaintext).
+	Official() bool
+	SetOfficial(official bool)
 }
 
 const sessionDuration = 5 * time.Minute
@@ -34,6 +39,9 @@ type SessionData struct {
 	clientLibVersion uint16
 	userId           int32
 	messageChan      chan internal.A
+	// official is set by Platformlogin: true for Xbox Live and for Steam
+	// unless the last Steam ticket was plaintext (emulated).
+	official atomic.Bool
 }
 
 func (s *SessionData) Id() SessionKey {
@@ -46,6 +54,14 @@ func (s *SessionData) GetUserId() int32 {
 
 func (s *SessionData) GetClientLibVersion() uint16 {
 	return s.clientLibVersion
+}
+
+func (s *SessionData) Official() bool {
+	return s.official.Load()
+}
+
+func (s *SessionData) SetOfficial(official bool) {
+	s.official.Store(official)
 }
 
 func (s *SessionData) AddMessage(message internal.A) {

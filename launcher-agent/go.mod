@@ -15,7 +15,7 @@ require (
 	github.com/go-webgpu/goffi v0.6.8 // indirect
 	github.com/godbus/dbus/v5 v5.2.4 // indirect
 	github.com/josephspurrier/goversioninfo v1.7.0 // indirect
-	github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 // indirect
+	github.com/randall77/makefat v0.0.0-20261123224909-984af5037a54 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/image v0.48.0 // indirect

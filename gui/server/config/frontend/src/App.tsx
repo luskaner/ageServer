@@ -43,8 +43,16 @@ function toEditorConfig(config: Configuration): AppConfig {
         Log: config.Log,
         GeneratePlatformUserId: config.GeneratePlatformUserId,
         Sign: { Enabled: config.Sign.Enabled, PlatformUserIdExceptions: config.Sign.PlatformUserIdExceptions ?? [] },
+        Safe: {
+            Enabled: config.Safe?.Enabled ?? 'auto',
+            PlatformUserIdExceptions: config.Safe?.PlatformUserIdExceptions ?? [],
+        },
         Authentication: config.Authentication as AppConfig['Authentication'],
         Internet: config.Internet,
+        Hosts: {
+            Modern: config.Hosts?.Modern ?? ['0.0.0.0'],
+            Legacy: config.Hosts?.Legacy ?? [],
+        },
         Games: {
             Enabled: config.Games.Enabled ?? [],
             age1: game(config.Games.age1.Hosts, config.Games.age1.BattleServers, config.Games.age1.EmbeddedBattleServer),
@@ -64,6 +72,16 @@ function toEditorConfig(config: Configuration): AppConfig {
             MaxFileSize: '32MB',
             MaxTotalSize: '1GB',
             Expiry: '-1s',
+        },
+        Api: {
+            Enabled: config.Api?.Enabled ?? true,
+        },
+        Mods: {
+            Enabled: config.Mods?.Enabled ?? true,
+            DBPath: config.Mods?.DBPath ?? 'resources/mods/mods.db',
+            UploadDir: config.Mods?.UploadDir ?? 'resources/mods/uploads',
+            MaxUploadSize: toEditorSize(config.Mods?.MaxUploadSize ?? '256MB'),
+            RequireAuthForRead: config.Mods?.RequireAuthForRead ?? false,
         },
     };
 }
@@ -133,6 +151,15 @@ export function App() {
             .catch((error: unknown) => setErrorMsg(errorMessage(error)));
     };
 
+    // A per-game document is a document of its own: creating one loads only
+    // that file, and the editor never holds it together with config.toml.
+    const createGameConfigFile = (gameId: string) => {
+        setErrorMsg(null);
+        ConfigService.OpenGameTemplate(gameId)
+            .then(showLoadedFile)
+            .catch((error: unknown) => setErrorMsg(errorMessage(error)));
+    };
+
     // Try the default configuration on startup. When there is none the load
     // screen stays in place: the picker only opens when the user asks for it.
     useEffect(() => {
@@ -163,7 +190,10 @@ export function App() {
             backendValidationErrors={loadedFile.validationErrors ?? []}
             embeddedDefaults={embeddedDefaults}
             fileName={loadedFile.path}
-            isNew={!loadedFile.path}
+            isNew={loadedFile.new ?? !loadedFile.path}
+            documentKind={loadedFile.kind === 'game' ? 'game' : 'main'}
+            documentGame={loadedFile.game || undefined}
+            suggestedName={loadedFile.suggestedName || undefined}
             onSaved={showLoadedFile}
             onBack={() => setLoadedFile(null)}
         />
@@ -171,6 +201,7 @@ export function App() {
         <Screen1_FileLoad
             onSelectConfig={selectConfigFile}
             onCreateConfig={createConfigFile}
+            onCreateGameConfig={createGameConfigFile}
             errorMsg={errorMsg || undefined}
             validationErrors={[]}
         />

@@ -5,8 +5,6 @@ import (
 
 	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/common/game"
-	"github.com/luskaner/ageServer/server/internal/routes/apiAgeOfEmpires/textmoderation"
-	"github.com/luskaner/ageServer/server/internal/routes/matchcontent"
 )
 
 type ApiAgeOfEmpires struct {
@@ -23,14 +21,14 @@ func (a *ApiAgeOfEmpires) Initialize(_ string) bool {
 }
 
 func (a *ApiAgeOfEmpires) InitializeRoutes(gameId string, next http.Handler) http.Handler {
-	a.Proxy = NewProxy(a.Name(), func(_ string, _ http.Handler) http.Handler {
-		a.group.HandleFunc("POST", "/textmoderation", textmoderation.TextModeration)
-		a.group.HandleFunc("POST", "/api/MatchContent/", matchcontent.Upload)
-		a.group.HandleFunc("GET", "/api/MatchContent/{matchId}", matchcontent.Download)
-		a.group.HandleFunc("GET", "/api/MatchContent/{matchId}/file/{hash}", matchcontent.DownloadFile)
-		return a.group.mux
-	})
-	return a.Proxy.InitializeRoutes(gameId, next)
+	a.Proxy = NewProxy(a.Name(), nil)
+	// The embedded library is mounted once, around the whole host handler, so
+	// every tree it owns (mods and MatchContent) is handled before the proxy
+	// fallback instead of being registered prefix by prefix. Its ops routes are
+	// exposed under this server's namespace (withLibraryOps) instead of at the
+	// bare /test and /cacert.pem.
+	host := withAgeAPIServer(a.Proxy.InitializeRoutes(gameId, next), gameId, a.Proxy.Upstream(), true)
+	return withLibraryOps(host)
 }
 
 func NewApiAgeOfEmpires() *ApiAgeOfEmpires {

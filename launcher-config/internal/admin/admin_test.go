@@ -2,6 +2,7 @@ package admin
 
 import (
 	"crypto/x509"
+	"encoding/gob"
 	"errors"
 	"io"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/common/executor/exec"
 	commonLogger "github.com/luskaner/ageServer/common/logger"
+	commonIpc "github.com/luskaner/ageServer/launcher-common/ipc"
 	"github.com/luskaner/ageServer/launcher-config/internal"
 )
 
@@ -33,7 +35,7 @@ func newTestAdmin(t *testing.T) *Admin {
 func TestRunSetUpCertParseFailure(t *testing.T) {
 	a := newTestAdmin(t)
 	a.deps.bytesToCertificate = func([]byte) *x509.Certificate { return nil }
-	_, exitCode := a.RunSetUp("age2", "", net.ParseIP("127.0.0.1"), false, []byte("bad"), false)
+	_, exitCode := a.RunSetUp("age2", "", net.ParseIP("127.0.0.1"), false, []byte("bad"), false, false, false)
 	if exitCode != internal.ErrUserCertAddParse {
 		t.Fatalf("exitCode = %d, want %d", exitCode, internal.ErrUserCertAddParse)
 	}
@@ -44,7 +46,7 @@ func TestRunSetUpNewFileFailure(t *testing.T) {
 	a.deps.newFile = func(string, string, bool) (error, *commonLogger.Root) {
 		return errors.New("new file fail"), nil
 	}
-	_, exitCode := a.RunSetUp("age2", "/tmp/log", nil, false, nil, true)
+	_, exitCode := a.RunSetUp("age2", "/tmp/log", nil, false, nil, true, false, false)
 	if exitCode != common.ErrFileLog {
 		t.Fatalf("exitCode = %d, want ErrFileLog %d", exitCode, common.ErrFileLog)
 	}
@@ -52,10 +54,10 @@ func TestRunSetUpNewFileFailure(t *testing.T) {
 
 func TestRunSetUpSuccessNoLog(t *testing.T) {
 	a := newTestAdmin(t)
-	a.deps.runSetUp = func(string, net.IP, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
+	a.deps.runSetUp = func(string, net.IP, bool, bool, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
 		return &exec.Result{ExitCode: common.ErrSuccess}
 	}
-	_, exitCode := a.RunSetUp("age2", "", net.ParseIP("127.0.0.1"), false, nil, true)
+	_, exitCode := a.RunSetUp("age2", "", net.ParseIP("127.0.0.1"), false, nil, true, false, false)
 	if exitCode != common.ErrSuccess {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
@@ -67,10 +69,10 @@ func TestRunSetUpSuccessWithLog(t *testing.T) {
 	a.deps.newFile = func(root, gameId string, finalRoot bool) (error, *commonLogger.Root) {
 		return commonLogger.NewFile(tmp, "", true)
 	}
-	a.deps.runSetUp = func(string, net.IP, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
+	a.deps.runSetUp = func(string, net.IP, bool, bool, bool, bool, *x509.Certificate, string, io.Writer, func(*exec.Options)) *exec.Result {
 		return &exec.Result{ExitCode: common.ErrSuccess}
 	}
-	_, exitCode := a.RunSetUp("age2", tmp, net.ParseIP("127.0.0.1"), false, nil, true)
+	_, exitCode := a.RunSetUp("age2", tmp, net.ParseIP("127.0.0.1"), false, nil, true, false, false)
 	if exitCode != common.ErrSuccess {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
@@ -265,3 +267,61 @@ func (m *mockConn) RemoteAddr() net.Addr               { return nil }
 func (m *mockConn) SetDeadline(_ time.Time) error      { return nil }
 func (m *mockConn) SetReadDeadline(_ time.Time) error  { return nil }
 func (m *mockConn) SetWriteDeadline(_ time.Time) error { return nil }
+
+// The host-set halves have to reach the agent unchanged: a SetupCommand that
+// dropped Api made the API pass map the whole game at the API address, and
+// until RootOnly existed there was no way to run the server's pass without
+// overwriting the API domains back.
+func TestRunSetUpAgentForwardsApiAndRootOnly(t *testing.T) {
+	a := newTestAdmin(t)
+	client, server := net.Pipe()
+	defer func() {
+		_ = client.Close()
+		_ = server.Close()
+	}()
+	a.ipc = client
+	a.enc = gob.NewEncoder(client)
+	a.dec = gob.NewDecoder(client)
+	var got commonIpc.SetupCommand
+	// One agent goroutine serves both passes: a gob stream carries the type
+	// definition of a struct only once, so a second fresh decoder on the same
+	// connection would fail to read the second SetupCommand and strand the
+	// test waiting for an exit code that never arrives.
+	agentDone := make(chan struct{})
+	go func() {
+		defer close(agentDone)
+		dec := gob.NewDecoder(server)
+		enc := gob.NewEncoder(server)
+		for _, want := range []struct{ api, rootOnly bool }{{true, false}, {false, true}} {
+			var action byte
+			if err := dec.Decode(&action); err != nil {
+				return
+			}
+			_ = enc.Encode(common.ErrSuccess) // acknowledge the command type
+			// gob omits zero-valued fields on the wire, so decoding into the
+			// previous pass's value would leak its true flags into this one.
+			got = commonIpc.SetupCommand{}
+			if err := dec.Decode(&got); err != nil {
+				return
+			}
+			_ = enc.Encode(common.ErrSuccess) // the setup's exit code
+			if want.api != got.Api || want.rootOnly != got.RootOnly {
+				t.Errorf("pass travelled as Api=%v RootOnly=%v, want Api=%v RootOnly=%v",
+					got.Api, got.RootOnly, want.api, want.rootOnly)
+			}
+		}
+	}()
+	err, exitCode := a.RunSetUp("age2", "", net.ParseIP("1.2.3.4"), false, nil, true, true, false)
+	if err != nil || exitCode != common.ErrSuccess {
+		t.Fatalf("RunSetUp api pass: err=%v exitCode=%d, want nil/%d", err, exitCode, common.ErrSuccess)
+	}
+	err, exitCode = a.RunSetUp("age2", "", net.ParseIP("1.2.3.5"), false, nil, true, false, true)
+	if err != nil || exitCode != common.ErrSuccess {
+		t.Fatalf("RunSetUp root pass: err=%v exitCode=%d, want nil/%d", err, exitCode, common.ErrSuccess)
+	}
+	select {
+	case <-agentDone:
+	case <-time.After(time.Second):
+		t.Fatal("agent goroutine did not finish")
+	}
+}

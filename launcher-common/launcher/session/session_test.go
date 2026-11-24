@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"strings"
@@ -76,6 +77,7 @@ var _ fileLock.Locker = (*fakePidLocker)(nil)
 type fakeDialog struct {
 	confirmCalls int
 	confirm      bool
+	warnings     []string
 }
 
 func (f *fakeDialog) Name() string { return "fake" }
@@ -89,6 +91,10 @@ func (f *fakeDialog) ListCandidates([]launcher.ServerCandidate) {}
 func (f *fakeDialog) ConfirmStartServer(string, io.Reader) bool {
 	f.confirmCalls++
 	return f.confirm
+}
+
+func (f *fakeDialog) Warning(text string, _ io.Reader) {
+	f.warnings = append(f.warnings, text)
 }
 
 // captureStdout redirects os.Stdout for the duration of fn and returns what was
@@ -116,6 +122,34 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatalf("close pipe: %v", err)
 	}
 	return <-done
+}
+
+func TestResolveServerStop(t *testing.T) {
+	cases := []struct {
+		name     string
+		cfgAuto  bool
+		resolved string
+		multi    bool
+		want     string
+		warn     bool
+	}{
+		{"auto starter multi", true, "true", true, "false", true},
+		{"auto reuse multi", true, "false", true, "false", false},
+		{"explicit true multi", false, "true", true, "true", true},
+		{"explicit false multi", false, "false", true, "false", false},
+		{"auto starter single", true, "true", false, "true", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, warnings := resolveServerStop(tc.cfgAuto, tc.resolved, tc.multi)
+			if got != tc.want {
+				t.Fatalf("resolveServerStop = %q, want %q", got, tc.want)
+			}
+			if (len(warnings) > 0) != tc.warn {
+				t.Fatalf("warnings = %v, want warn=%v", warnings, tc.warn)
+			}
+		})
+	}
 }
 
 func TestRunRootInvalidGame(t *testing.T) {
@@ -598,20 +632,25 @@ type runRootOverrides struct {
 	configNativeMacOsGameFnVal        func(base.Executor, bool) bool
 	configBattleServerRequiredFnVal   func(base.Executor) bool
 	newConfigFlushCacheOptionsFnVal   func(bool, string, bool, bool) *executor.ConfigFlushCacheOptions
-	discoverServersFnVal              func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, bool)
+	discoverServersFnVal              func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool)
 	netipParseAddrFnVal               func(string) (netip.Addr, error)
 	serverFilterServerIPsFnVal        func(uuid.UUID, string, string, mapset.Set[netip.Addr]) (uuid.UUID, []server.MesuredIpAddress, *commonServer.AnnounceMessageDataSupportedLatest)
 	serverGetExecutablePathFnVal      func(string) string
 	serverGenerateCertsFnVal          func(string, bool) int
 	configRunBattleServerManagerFnVal func(string, *pflag.FlagSet, *bsManager.StartValues, bool) int
 	bsManagerStartFlagSetFnVal        func([]string) (*bsManager.StartValues, *pflag.FlagSet)
-	configStartServerFnVal            func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string)
+	configStartServerFnVal            func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest)
 	serverReadCACertFnVal             func(string) *x509.Certificate
-	configMapHostsFnVal               func(string, string, bool, bool, bool) int
-	configAddCertFnVal                func(string, uuid.UUID, *x509.Certificate, string, bool, bool) int
+	configMapHostsFnVal               func(string, string, bool, bool, bool, bool) int
+	serverProbeApiFnVal               func(string, bool, *x509.CertPool) (int, error)
+	serverReadApiCACertFnVal          func(string) *x509.Certificate
+	configMapApiHostsFnVal            func(string, string, bool, bool, bool) int
+	configAddApiCertFnVal             func(string, *x509.Certificate, string, bool, bool) int
+	configAddCertFnVal                func(string, uuid.UUID, *x509.Certificate, string, bool, bool, bool) int
 	configAddSigKeyFnVal              func(string) int
 	configIsolateUserDataFnVal        func(bool, bool, string) int
-	configAddCACertToGameFnVal        func(string, uuid.UUID, *x509.Certificate, string, string, bool, bool) int
+	configAddCACertToGameFnVal        func(string, uuid.UUID, *x509.Certificate, string, string, bool, bool, bool) int
+	configAddApiCACertToGameFnVal     func(string, *x509.Certificate, string, string, bool, bool) int
 	configLaunchAgentAndGameFnVal     func(base.Executor, custom.Exec, []string, string, string, string) int
 	uuidParseFnVal                    func(string) (uuid.UUID, error)
 	uuidMustParseFnVal                func(string) uuid.UUID
@@ -657,6 +696,7 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	origServerReadCACert := serverReadCACertFn
 	origConfigMapHosts := configMapHostsFn
 	origConfigAddCert := configAddCertFn
+	origConfigAddApiCACertToGame := configAddApiCACertToGameFn
 	origConfigAddSigKey := configAddSigKeyFn
 	origConfigIsolateUserData := configIsolateUserDataFn
 	origConfigAddCACertToGame := configAddCACertToGameFn
@@ -768,8 +808,8 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	if o.discoverServersFnVal != nil {
 		discoverServersFn = o.discoverServersFnVal
 	} else {
-		discoverServersFn = func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
-			return uuid.Nil(), nil, false
+		discoverServersFn = func(string, bool, mapset.Set[netip.Addr], mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool) {
+			return uuid.Nil(), nil, "", false
 		}
 	}
 	if o.netipParseAddrFnVal != nil {
@@ -807,8 +847,8 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	if o.configStartServerFnVal != nil {
 		configStartServerFn = o.configStartServerFnVal
 	} else {
-		configStartServerFn = func(s string, fs *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string) {
-			return common.ErrSuccess, "127.0.0.1"
+		configStartServerFn = func(s string, fs *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
+			return common.ErrSuccess, "127.0.0.1", nil
 		}
 	}
 	if o.serverReadCACertFnVal != nil {
@@ -819,12 +859,39 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	if o.configMapHostsFnVal != nil {
 		configMapHostsFn = o.configMapHostsFnVal
 	} else {
-		configMapHostsFn = func(s1, s2 string, b1, b2, b3 bool) int { return common.ErrSuccess }
+		configMapHostsFn = func(s1, s2 string, b1, b2, b3, b4 bool) int { return common.ErrSuccess }
+	}
+	if o.serverProbeApiFnVal != nil {
+		serverProbeApiFn = o.serverProbeApiFnVal
+	} else {
+		serverProbeApiFn = func(string, bool, *x509.CertPool) (int, error) { return http.StatusOK, nil }
+	}
+	if o.serverReadApiCACertFnVal != nil {
+		serverReadApiCACertFn = o.serverReadApiCACertFnVal
+	} else {
+		serverReadApiCACertFn = func(string) *x509.Certificate { return &x509.Certificate{} }
+	}
+	if o.configMapApiHostsFnVal != nil {
+		configMapApiHostsFn = o.configMapApiHostsFnVal
+	} else {
+		configMapApiHostsFn = func(s1, s2 string, b1, b2, b3 bool) int { return common.ErrSuccess }
+	}
+	if o.configAddApiCertFnVal != nil {
+		configAddApiCertFn = o.configAddApiCertFnVal
+	} else {
+		configAddApiCertFn = func(s string, c *x509.Certificate, s2 string, b1, b2 bool) int { return common.ErrSuccess }
 	}
 	if o.configAddCertFnVal != nil {
 		configAddCertFn = o.configAddCertFnVal
 	} else {
-		configAddCertFn = func(s1 string, u uuid.UUID, c *x509.Certificate, s2 string, b1, b2 bool) int {
+		configAddCertFn = func(s1 string, u uuid.UUID, c *x509.Certificate, s2 string, b1, b2, b3 bool) int {
+			return common.ErrSuccess
+		}
+	}
+	if o.configAddApiCACertToGameFnVal != nil {
+		configAddApiCACertToGameFn = o.configAddApiCACertToGameFnVal
+	} else {
+		configAddApiCACertToGameFn = func(s1 string, c *x509.Certificate, s2, s3 string, b1, b2 bool) int {
 			return common.ErrSuccess
 		}
 	}
@@ -841,7 +908,7 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 	if o.configAddCACertToGameFnVal != nil {
 		configAddCACertToGameFn = o.configAddCACertToGameFnVal
 	} else {
-		configAddCACertToGameFn = func(s1 string, u uuid.UUID, c *x509.Certificate, s2, s3 string, b1, b2 bool) int {
+		configAddCACertToGameFn = func(s1 string, u uuid.UUID, c *x509.Certificate, s2, s3 string, b1, b2, b3 bool) int {
 			return common.ErrSuccess
 		}
 	}
@@ -933,6 +1000,7 @@ func applyOverrides(t *testing.T, o runRootOverrides) func() {
 		serverReadCACertFn = origServerReadCACert
 		configMapHostsFn = origConfigMapHosts
 		configAddCertFn = origConfigAddCert
+		configAddApiCACertToGameFn = origConfigAddApiCACertToGame
 		configAddSigKeyFn = origConfigAddSigKey
 		configIsolateUserDataFn = origConfigIsolateUserData
 		configAddCACertToGameFn = origConfigAddCACertToGame
@@ -1005,8 +1073,8 @@ func TestRunRootServerFoundByDiscovery(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
-			return discoveredUUID, net.ParseIP("192.168.1.100"), false
+		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool) {
+			return discoveredUUID, net.ParseIP("192.168.1.100"), "", false
 		},
 		serverReadCACertFnVal: func(host string) *x509.Certificate {
 			return &x509.Certificate{}
@@ -1121,7 +1189,7 @@ func TestRunRootMapHostsFailure(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		configMapHostsFnVal: func(s1, s2 string, b1, b2, b3 bool) int {
+		configMapHostsFnVal: func(s1, s2 string, b1, b2, b3, b4 bool) int {
 			return common.ErrGeneral
 		},
 	})
@@ -1138,7 +1206,7 @@ func TestRunRootAddCertFailure(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		configAddCertFnVal: func(s1 string, u uuid.UUID, c *x509.Certificate, s2 string, b1, b2 bool) int {
+		configAddCertFnVal: func(s1 string, u uuid.UUID, c *x509.Certificate, s2 string, b1, b2, b3 bool) int {
 			return common.ErrGeneral
 		},
 	})
@@ -1245,8 +1313,8 @@ func TestRunRootStartServerFailure(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		configStartServerFnVal: func(s string, fs *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string) {
-			return common.ErrGeneral, ""
+		configStartServerFnVal: func(s string, fs *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
+			return common.ErrGeneral, "", nil
 		},
 	})
 	defer restore()
@@ -1337,8 +1405,8 @@ func TestRunRootServerNotFoundNoServerHost(t *testing.T) {
 		gameId:        "age2",
 		isAdmin:       false,
 		gameSupported: true,
-		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
-			return uuid.Nil(), nil, false
+		discoverServersFnVal: func(gameTitle string, single bool, mc mapset.Set[netip.Addr], ports mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool) {
+			return uuid.Nil(), nil, "", false
 		},
 		serverGetExecutablePathFnVal: func(s string) string { return s },
 		serverReadCACertFnVal: func(host string) *x509.Certificate {
@@ -1719,9 +1787,9 @@ func TestRunRootServerStartCanceled(t *testing.T) {
 		dialogNewFnVal: func(bool) launcher.Resolution {
 			return launcher.Resolution{Dialog: dlg, Name: "fake"}
 		},
-		configStartServerFnVal: func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string) {
+		configStartServerFnVal: func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
 			startServerCalls++
-			return common.ErrSuccess, "127.0.0.1"
+			return common.ErrSuccess, "127.0.0.1", nil
 		},
 	})
 	defer restore()
@@ -1747,9 +1815,9 @@ func TestRunRootServerStartConfirmed(t *testing.T) {
 		dialogNewFnVal: func(bool) launcher.Resolution {
 			return launcher.Resolution{Dialog: dlg, Name: "fake"}
 		},
-		configStartServerFnVal: func(_ string, _ *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string) {
+		configStartServerFnVal: func(_ string, _ *pflag.FlagSet, v *cmdServer.Values, b bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
 			gotValues = v
-			return common.ErrSuccess, "127.0.0.1"
+			return common.ErrSuccess, "127.0.0.1", nil
 		},
 	})
 	defer restore()
@@ -1962,5 +2030,137 @@ func TestRunRunsTheRealSetupCommand(t *testing.T) {
 	}
 	if !said {
 		t.Errorf("the setup command's own failure was never reported, faults: %q", rec.faults)
+	}
+}
+
+// With a standalone API server the session runs its API pass first — probe,
+// certificate, mapping — and the server's own afterwards, both server passes
+// marked as the split's root half, and the game's bundle receiving both
+// certificates.
+func TestRunRootApiSeparateRunsItsPassesFirstAndSplit(t *testing.T) {
+	var order []string
+	record := func(step string) string {
+		order = append(order, step)
+		return step
+	}
+	apiCert := &x509.Certificate{}
+	restore := applyOverrides(t, runRootOverrides{
+		gameId:        "age2",
+		isAdmin:       false,
+		gameSupported: true,
+		cfg: func() *launcher.Configuration {
+			c := validLauncherConfig()
+			c.Server.Start = "false"
+			c.Server.Host = "192.168.1.50"
+			c.Server.Api.Host = "10.1.2.3"
+			return c
+		},
+		serverFilterServerIPsFnVal: func(id uuid.UUID, name, game string, addrs mapset.Set[netip.Addr]) (uuid.UUID, []server.MesuredIpAddress, *commonServer.AnnounceMessageDataSupportedLatest) {
+			record("resolve-server")
+			return uuid.New(), []server.MesuredIpAddress{{Ip: net.ParseIP("192.168.1.50")}}, &commonServer.AnnounceMessageDataSupportedLatest{}
+		},
+		serverProbeApiFnVal: func(string, bool, *x509.CertPool) (int, error) {
+			record("probe-api")
+			return http.StatusOK, nil
+		},
+		serverReadApiCACertFnVal: func(string) *x509.Certificate {
+			record("read-api-cert")
+			return apiCert
+		},
+		configMapApiHostsFnVal: func(string, string, bool, bool, bool) int {
+			record("map-api-hosts")
+			return common.ErrSuccess
+		},
+		configAddApiCertFnVal: func(string, *x509.Certificate, string, bool, bool) int {
+			record("add-api-cert")
+			return common.ErrSuccess
+		},
+		configMapHostsFnVal: func(s1, s2 string, b1, b2, b3, b4 bool) int {
+			record("map-hosts")
+			if !b4 {
+				t.Error("the server's host pass ran without knowing the API is separate")
+			}
+			return common.ErrSuccess
+		},
+		configAddCertFnVal: func(s1 string, u uuid.UUID, c *x509.Certificate, s2 string, b1, b2, b3 bool) int {
+			record("add-cert")
+			if !b3 {
+				t.Error("the server's certificate pass ran without knowing the API is separate")
+			}
+			return common.ErrSuccess
+		},
+		configAddCACertToGameFnVal: func(string, uuid.UUID, *x509.Certificate, string, string, bool, bool, bool) int {
+			record("add-game-ca")
+			return common.ErrSuccess
+		},
+		configAddApiCACertToGameFnVal: func(string, *x509.Certificate, string, string, bool, bool) int {
+			record("add-game-api-ca")
+			return common.ErrSuccess
+		},
+		configLaunchAgentAndGameFnVal: func(base.Executor, custom.Exec, []string, string, string, string) int {
+			record("launch")
+			return common.ErrSuccess
+		},
+	})
+	defer restore()
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	_, exitCode := Run(context.Background(), fs)
+	if exitCode != common.ErrSuccess {
+		t.Fatalf("expected a successful run with a separate API server, got %d", exitCode)
+	}
+	want := []string{
+		"probe-api", "read-api-cert", "map-api-hosts", "add-api-cert",
+		"resolve-server", "map-hosts", "add-cert", "add-game-ca", "add-game-api-ca", "launch",
+	}
+	if len(order) != len(want) {
+		t.Fatalf("the session ran %v, want %v", order, want)
+	}
+	for i, step := range want {
+		if order[i] != step {
+			t.Fatalf("step %d was %s, want %s (full order %v)", i, order[i], step, order)
+		}
+	}
+}
+
+// A probe that does not answer 200 stops the run before anything touches the
+// machine: the API server is the first thing configured and its failure ends
+// the run with the API error.
+func TestRunRootApiProbeFailureRunsNothingElse(t *testing.T) {
+	restore := applyOverrides(t, runRootOverrides{
+		gameId:        "age2",
+		isAdmin:       false,
+		gameSupported: true,
+		cfg: func() *launcher.Configuration {
+			c := validLauncherConfig()
+			c.Server.Start = "false"
+			c.Server.Host = "192.168.1.50"
+			c.Server.Api.Host = "10.1.2.3"
+			return c
+		},
+		serverProbeApiFnVal: func(string, bool, *x509.CertPool) (int, error) {
+			return http.StatusServiceUnavailable, nil
+		},
+		serverReadApiCACertFnVal: func(string) *x509.Certificate {
+			t.Error("the API certificate was read although the probe did not answer 200")
+			return &x509.Certificate{}
+		},
+		configMapApiHostsFnVal: func(string, string, bool, bool, bool) int {
+			t.Error("the API domains were mapped although the probe did not answer 200")
+			return common.ErrSuccess
+		},
+		configAddApiCertFnVal: func(string, *x509.Certificate, string, bool, bool) int {
+			t.Error("the API certificate was trusted although the probe did not answer 200")
+			return common.ErrSuccess
+		},
+		configMapHostsFnVal: func(string, string, bool, bool, bool, bool) int {
+			t.Error("the root domains were mapped although the probe did not answer 200")
+			return common.ErrSuccess
+		},
+	})
+	defer restore()
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	_, exitCode := Run(context.Background(), fs)
+	if exitCode != launcher.ErrApiServerUnreachable {
+		t.Fatalf("expected %d for an API probe that does not answer 200, got %d", launcher.ErrApiServerUnreachable, exitCode)
 	}
 }

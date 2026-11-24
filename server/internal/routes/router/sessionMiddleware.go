@@ -18,9 +18,10 @@ var sessAnonymousPaths = map[string]bool{
 }
 
 // sessAnonymousPrefixes are path prefixes served without a session. The game
-// does not send sessionID on custom-file (savegame/replay) requests, exactly
-// like it does not on cloudfiles.
-var sessAnonymousPrefixes = []string{"/cloudfiles/", "/api/MatchContent/"}
+// does not send sessionID on replay uploads, exactly like it does not on
+// cloudfiles. MatchContent does not need an entry: it is served by the library
+// wrapper before this middleware runs.
+var sessAnonymousPrefixes = []string{"/cloudfiles/"}
 
 func isAnonymousPath(path string) bool {
 	if sessAnonymousPaths[path] {

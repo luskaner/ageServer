@@ -2,9 +2,13 @@ package session
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
+	"maps"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"os/signal"
@@ -36,6 +40,7 @@ import (
 	"github.com/luskaner/ageServer/common/game/executor/custom"
 	commonLogger "github.com/luskaner/ageServer/common/logger"
 	commonProcess "github.com/luskaner/ageServer/common/process"
+	commonServer "github.com/luskaner/ageServer/common/server"
 	launcherCommon "github.com/luskaner/ageServer/launcher-common"
 	"github.com/luskaner/ageServer/launcher-common/launcher"
 	"github.com/luskaner/ageServer/launcher-common/launcher/executor"
@@ -247,7 +252,7 @@ var (
 	executablesNativeFileNameFn  = executables.NativeFileName
 	configRunSetupCommandFn      = config.RunSetupCommand
 	netipParseAddrFn             = netip.ParseAddr
-	discoverServersFn            = func(gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (uuid.UUID, net.IP, bool) {
+	discoverServersFn            = func(gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (uuid.UUID, net.IP, string, bool) {
 		return ops.DiscoverServersAndSelectBestIpAddr(reportOrDiscard(), promptInput(), gameTitle, singleAutoSelect, multicastGroups, targetPorts)
 	}
 	serverGetExecutablePathFn = server.GetExecutablePath
@@ -257,8 +262,13 @@ var (
 	configRunBattleServerManagerFn  = config.RunBattleServerManager
 	configStartServerFn             = config.StartServer
 	serverReadCACertFn              = server.ReadCACertificateFromServer
+	serverReadApiCACertFn           = server.ReadApiCACertificateFromServer
+	serverProbeApiFn                = commonServer.ProbeApiServer
 	configMapHostsFn                = config.MapHosts
+	configMapApiHostsFn             = config.MapApiHosts
+	configAddApiCertFn              = config.AddApiCert
 	configAddCertFn                 = config.AddCert
+	configAddApiCACertToGameFn      = config.AddApiCACertToGame
 	configAddSigKeyFn               = config.AddSigKey
 	configIsolateUserDataFn         = config.IsolateUserData
 	configAddCACertToGameFn         = config.AddCACertToGame
@@ -275,6 +285,28 @@ var (
 	signalNotifyFn                  = signal.Notify
 	signalStopFn                    = signal.Stop
 )
+
+// resolveServerStop decides whether this launcher stops the server on exit. A
+// multi-game server is shared, so the launcher that started it must not stop it
+// when it exits unless the user asked for that explicitly: only 'auto' is
+// overridden, and an explicit true is honoured with a warning. cfgStopIsAuto is
+// the configured intent, not the value 'auto' was already resolved to.
+func resolveServerStop(cfgStopIsAuto bool, resolvedStop string, multiGame bool) (string, []string) {
+	if !multiGame {
+		return resolvedStop, nil
+	}
+	switch {
+	case cfgStopIsAuto && resolvedStop == launcher.ModeTrue:
+		return launcher.ModeFalse, []string{"Server.Games has more than one game: the server will not be stopped when this launcher exits; stop it manually or set Server.Stop = true if you really want the first launcher to stop it"}
+	case cfgStopIsAuto:
+		// Already false: a launcher that reuses a server has nothing to stop.
+		return launcher.ModeFalse, nil
+	case resolvedStop == launcher.ModeTrue:
+		return resolvedStop, []string{"Server.Games has more than one game and Server.Stop = true: stopping the server when this launcher exits can cut off the other games"}
+	default:
+		return resolvedStop, nil
+	}
+}
 
 func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	// Resolved once, here, and read through for the rest of the run: the options
@@ -419,6 +451,17 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		return
 	}
 	serverStop := cfg.Server.Stop
+	// The configured intent, kept because 'auto' is resolved below and the
+	// multi-game rule has to tell "auto" from an explicit true.
+	stopWasAuto := serverStop == launcher.ModeAuto
+	// Trimmed once, here: validation can be lenient about surrounding spaces,
+	// but everything below (the /test probe, the mapping) works on this value
+	// as it is and a padded host would simply fail to resolve.
+	serverApiHost := strings.TrimSpace(cfg.Server.Api.Host)
+	if ec := launcher.ValidateApiHostValue(reportOrDiscard(), serverApiHost); ec != common.ErrSuccess {
+		atomicExitCode.Store(int32(ec))
+		return
+	}
 	if ec := launcher.ValidateServerStopValue(reportOrDiscard(), serverStop, runtime.GOOS != "windows" && isAdmin); ec != common.ErrSuccess {
 		atomicExitCode.Store(int32(ec))
 		return
@@ -444,15 +487,28 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		return
 	}
 	configSetGameIdFn(gameId)
+	serverGames, gamesErr := validateServerGames(cfg.Server.Games, gameId)
+	if gamesErr != nil {
+		reportOrDiscard().Fail("%s", gamesErr.Error())
+		atomicExitCode.Store(int32(launcher.ErrInvalidServerArgs))
+		return
+	}
 	serverValues := map[string]string{
 		"Game":             gameId,
 		"Id":               uuid.New().String(),
 		"StartBsIfMissing": "true",
 	}
+	// The expansion overloads {Game} only in the server arguments: it is the
+	// single safe way to turn one '-e {Game}' into '-e age1 -e age2' with
+	// shell.Fields. The battle-server-manager keeps the single-game map.
+	serverArgValues := maps.Clone(serverValues)
+	if len(cfg.Server.Games) > 0 {
+		serverArgValues["Game"] = strings.Join(serverGames, " -e ")
+	}
 	var serverArgsValues *cmdServer.Values
 	var serverFlags *pflag.FlagSet
 	var serverArgs []string
-	if serverArgs, err = parseCommandArgsFn(cfg.Server.Args, serverValues); err == nil {
+	if serverArgs, err = parseCommandArgsFn(cfg.Server.Args, serverArgValues); err == nil {
 		var serverSingleFlagSet *commonCmd.SingleFlagSet
 		serverArgsValues, serverSingleFlagSet = cmdServer.SingleFlagSet("", nil, nil)
 		serverFlags = serverSingleFlagSet.Fs()
@@ -733,6 +789,9 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	customCertFile := slices.ContainsFunc(cfg.Client.Args, func(s string) bool {
 		return strings.Contains(s, "{CertFilePath}")
 	})
+	customApiCertFile := slices.ContainsFunc(cfg.Client.Args, func(s string) bool {
+		return strings.Contains(s, "{ApiCertFilePath}")
+	})
 	customSigKeyFile := slices.ContainsFunc(cfg.Client.Args, func(s string) bool {
 		return strings.Contains(s, "{SigKeyFilePath}")
 	})
@@ -791,7 +850,69 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 			return
 		}
 	}
+	// A separate API server is configured before the root server is discovered
+	// or started: it is the first thing the game needs, and a failure here
+	// should not leave a server running for a run that stops.
+	apiSeparate := launcher.ServerApiSeparate(serverApiHost)
+	// Declared out here because the game's CA step, much later, adds the API
+	// certificate of its own on a game that keeps a bundle of its own.
+	var apiCertificate *x509.Certificate
+	if apiSeparate {
+		if cancelled("configuring the API server") {
+			return
+		}
+		apiIPs := commonHostOrIpToIpsFn(serverApiHost)
+		if len(apiIPs) == 0 {
+			reportOrDiscard().Fail("Failed to resolve Server.Api.Host %s to an IPv4 address.", serverApiHost)
+			atomicExitCode.Store(int32(launcher.ErrInvalidServerApiHost))
+			return
+		}
+		apiIP := apiIPs[0]
+		apiSearch := launcher.ActivePresenter().Start("Checking API server /test...")
+		apiProgress := launcher.ActivePresenter().BeginProgress()
+		status, probeErr := serverProbeApiFn(serverApiHost, true, nil)
+		if probeErr != nil || status != http.StatusOK {
+			apiProgress.Fail()
+			apiSearch.Fail("API server did not answer /test with 200.")
+			if probeErr != nil {
+				reportOrDiscard().Fault("Error: %s", probeErr.Error())
+			} else {
+				reportOrDiscard().Fault("Status: %d.", status)
+			}
+			atomicExitCode.Store(int32(launcher.ErrApiServerUnreachable))
+			return
+		}
+		apiProgress.Done()
+		apiSearch.Done("API server answered /test.")
+		apiCertificate = serverReadApiCACertFn(serverApiHost)
+		if apiCertificate == nil {
+			reportOrDiscard().Fail("Failed to read the certificate of the API server from %s.", serverApiHost)
+			atomicExitCode.Store(int32(launcher.ErrReadApiCACert))
+			return
+		}
+		if cancelled("mapping the API hosts") {
+			return
+		}
+		atomicExitCode.Store(int32(configMapApiHostsFn(gameId, apiIP, macOsExclusiveMappings, canAddHost, customHostFile)))
+		if atomicExitCode.Load() != int32(common.ErrSuccess) {
+			return
+		}
+		logger.WriteFileLog(gameId, "post api host mapping")
+		if cancelled("trusting the API certificate") {
+			return
+		}
+		atomicExitCode.Store(int32(configAddApiCertFn(gameId, apiCertificate, canTrustCertificate, customApiCertFile, macOsExclusiveMappings)))
+		if atomicExitCode.Load() != int32(common.ErrSuccess) {
+			return
+		}
+		logger.WriteFileLog(gameId, "post add api cert")
+	} else if customApiCertFile && !customCertFile {
+		// No API pass runs (auto) and no root certificate file is written
+		// either, so the client's placeholder has nothing to become.
+		reportOrDiscard().Warn("The client arguments ask for {ApiCertFilePath}, but with the API embedded in the server no separate certificate file is written unless {CertFilePath} is used too; the placeholder is left as-is.")
+	}
 	var serverIP string
+	var serverSafeMode string
 	if serverStart == "auto" {
 		announcePorts := cfg.Server.AnnouncePorts
 		ports := mapset.NewThreadUnsafeSetWithSize[uint16](len(announcePorts))
@@ -809,7 +930,7 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 				return
 			}
 		}
-		serverId, selectedServerIp, canceled := discoverServersFn(
+		serverId, selectedServerIp, discoveredSafe, canceled := discoverServersFn(
 			gameId,
 			cfg.Server.SingleAutoSelect,
 			multicastIPs,
@@ -822,6 +943,7 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		}
 		if serverId != uuidNilFn() {
 			serverIP = selectedServerIp.String()
+			serverSafeMode = discoveredSafe
 			serverStart = "false"
 			serverArgsValues.Id = serverId.String()
 			if serverStop == "auto" && (!isAdmin || runtime.GOOS == "windows") {
@@ -832,6 +954,18 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 			if serverStop == "auto" {
 				serverStop = "true"
 			}
+		}
+	}
+	// A multi-game server outlives the launcher that started it: stopping it on
+	// exit would cut off the players of every other title it serves. The
+	// configured intent decides, not the 'auto' resolved above: the launcher
+	// that started the server would otherwise keep stop=true and cut off the
+	// other games when it exits.
+	if len(serverGames) > 1 {
+		var warnings []string
+		serverStop, warnings = resolveServerStop(stopWasAuto, serverStop, true)
+		for _, warning := range warnings {
+			reportOrDiscard().Warn("%s", warning)
 		}
 	}
 	if serverStart == "false" {
@@ -858,9 +992,16 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 				reportOrDiscard().Fail("serverStart is false. Failed to resolve serverHost to a valid and reachable IP.")
 				atomicExitCode.Store(int32(launcher.ErrInvalidServerHost))
 				return
-			} else {
-				serverIP = measuredServerIPAddrs[0].Ip.String()
+			} else if selected, ok := server.SelectServerIP(gameId, measuredServerIPAddrs, func(message string) {
+				reportOrDiscard().Warn("%s", message)
+			}); ok {
+				serverIP = selected.Ip.String()
 				serverArgsValues.Id = id.String()
+				serverSafeMode = data.Safe
+			} else {
+				reportOrDiscard().Fail("serverStart is false. Failed to find a usable address of the server.")
+				atomicExitCode.Store(int32(launcher.ErrInvalidServerHost))
+				return
 			}
 		}
 	} else {
@@ -923,10 +1064,14 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 			}
 		}
 		var ec int
-		ec, serverIP = configStartServerFn(serverExecutablePath, serverFlags, serverArgsValues, serverStop == "true")
+		var serverData *commonServer.AnnounceMessageDataSupportedLatest
+		ec, serverIP, serverData = configStartServerFn(serverExecutablePath, serverFlags, serverArgsValues, serverStop == "true")
 		if ec != common.ErrSuccess {
 			atomicExitCode.Store(int32(ec))
 			return
+		}
+		if serverData != nil {
+			serverSafeMode = serverData.Safe
 		}
 	}
 	serverCertificate := serverReadCACertFn(serverIP)
@@ -935,18 +1080,21 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		atomicExitCode.Store(int32(launcher.ErrReadCert))
 		return
 	}
+	if launcher.SafeAppliesToClient(serverSafeMode, clientExecutableOfficial) {
+		launcher.ActiveDialog().Warning(launcher.SafeModeWarning, promptInput())
+	}
 	// Past this point the run stops hosts, installs certificates and launches the
 	// game, and each of those is something the user would have to undo by hand.
 	// It is the last moment where stopping is still free.
 	if cancelled("changing the machine") {
 		return
 	}
-	atomicExitCode.Store(int32(configMapHostsFn(gameId, serverIP, macOsExclusiveMappings, canAddHost, customHostFile)))
+	atomicExitCode.Store(int32(configMapHostsFn(gameId, serverIP, macOsExclusiveMappings, canAddHost, customHostFile, apiSeparate)))
 	if atomicExitCode.Load() != int32(common.ErrSuccess) {
 		return
 	}
 	logger.WriteFileLog(gameId, "post host mapping")
-	atomicExitCode.Store(int32(configAddCertFn(gameId, uuidMustParseFn(serverArgsValues.Id), serverCertificate, canTrustCertificate, customCertFile, macOsExclusiveMappings)))
+	atomicExitCode.Store(int32(configAddCertFn(gameId, uuidMustParseFn(serverArgsValues.Id), serverCertificate, canTrustCertificate, customCertFile, macOsExclusiveMappings, apiSeparate)))
 	if atomicExitCode.Load() != int32(common.ErrSuccess) {
 		return
 	}
@@ -964,11 +1112,22 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	}
 	logger.WriteFileLog(gameId, "post isolate user data")
 	if gamePath != "" {
-		atomicExitCode.Store(int32(configAddCACertToGameFn(gameId, uuidMustParseFn(serverArgsValues.Id), serverCertificate, configGamePathToGameCertPathFn(executer, gamePath), gameCaCertPath, cfg.Config.Certificate.CanTrustInGame, macOsExclusiveMappings)))
+		atomicExitCode.Store(int32(configAddCACertToGameFn(gameId, uuidMustParseFn(serverArgsValues.Id), serverCertificate, configGamePathToGameCertPathFn(executer, gamePath), gameCaCertPath, cfg.Config.Certificate.CanTrustInGame, macOsExclusiveMappings, apiSeparate)))
 		if atomicExitCode.Load() != int32(common.ErrSuccess) {
 			return
 		}
 		logger.WriteFileLog(gameId, "post add game cert")
+		if apiSeparate {
+			// The game validates what it connects to against its own CA
+			// bundle, so on a game that keeps one the standalone API
+			// server's certificate has to land there too, or the mods
+			// endpoints fail TLS however well the system store was set up.
+			atomicExitCode.Store(int32(configAddApiCACertToGameFn(gameId, apiCertificate, configGamePathToGameCertPathFn(executer, gamePath), gameCaCertPath, cfg.Config.Certificate.CanTrustInGame, macOsExclusiveMappings)))
+			if atomicExitCode.Load() != int32(common.ErrSuccess) {
+				return
+			}
+			logger.WriteFileLog(gameId, "post add game api cert")
+		}
 	}
 	atomicExitCode.Store(int32(configLaunchAgentAndGameFn(executer, customExecutor, cfg.Client.Args, canTrustCertificate, canBroadcastBattleServer, isolationPath)))
 	return
@@ -1009,4 +1168,30 @@ func orNone(path string) string {
 		return "none"
 	}
 	return path
+}
+
+// validateServerGames resolves and checks Server.Games. Empty means the old
+// single-game behaviour; otherwise every entry must be a supported game, no
+// entry may repeat, and the game being launched must be one of them.
+func validateServerGames(games []string, current string) ([]string, error) {
+	if len(games) == 0 {
+		return []string{current}, nil
+	}
+	seen := make(map[string]bool, len(games))
+	out := make([]string, 0, len(games))
+	for _, g := range games {
+		g = strings.TrimSpace(g)
+		if !game.SupportedGames.ContainsOne(g) {
+			return nil, fmt.Errorf("Server.Games: unsupported game %q", g)
+		}
+		if seen[g] {
+			return nil, fmt.Errorf("Server.Games: duplicated game %q", g)
+		}
+		seen[g] = true
+		out = append(out, g)
+	}
+	if !seen[current] {
+		return nil, fmt.Errorf("Server.Games must include the current game %q", current)
+	}
+	return out, nil
 }

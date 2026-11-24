@@ -1,9 +1,19 @@
 package main
 
-// ConfigFile is the bridge between Go and the React editor.
+// ConfigFile is the bridge between Go and the React editor. One load is one
+// document: config.toml or one config.<game>.toml, never both at once.
 type ConfigFile struct {
-	Path             string            `json:"path"`
-	Content          string            `json:"content"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	// Kind is "main" for config.toml and "game" for a config.<game>.toml.
+	Kind string `json:"kind"`
+	// Game is the game a "game" document belongs to (empty for "main").
+	Game string `json:"game"`
+	// SuggestedName is the file name a new document proposes when it is saved.
+	SuggestedName string `json:"suggestedName"`
+	// New reports a document that is not on disk yet, even when Path already
+	// names where it will be written.
+	New              bool              `json:"new"`
 	Config           *Configuration    `json:"config"`
 	ValidationErrors []ValidationError `json:"validationErrors"`
 }
@@ -13,21 +23,50 @@ type InternetConfiguration struct {
 	IP      string `toml:"IP" json:"IP"`
 }
 
+// HostsConfiguration is the global listener configuration: every listener
+// serves every enabled game, and the list only selects the certificate mode it
+// presents. The old per-game Hosts key survives in GameConfig so an existing
+// document can still be read and migrated.
+type HostsConfiguration struct {
+	Modern []string `toml:"Modern" json:"Modern"`
+	Legacy []string `toml:"Legacy" json:"Legacy"`
+}
+
 type SignConfig struct {
 	Enabled                  bool     `toml:"Enabled" json:"Enabled"`
+	PlatformUserIdExceptions []string `toml:"PlatformUserIdExceptions" json:"PlatformUserIdExceptions"`
+}
+
+// SafeConfig controls the progress the server hands to official accounts.
+type SafeConfig struct {
+	// Enabled is any because TOML accepts both a string ('auto', 'true',
+	// 'false') and an unquoted bool; parseConfiguration normalizes it to the
+	// string the server reads.
+	Enabled                  any      `toml:"Enabled" json:"Enabled"`
 	PlatformUserIdExceptions []string `toml:"PlatformUserIdExceptions" json:"PlatformUserIdExceptions"`
 }
 
 type Configuration struct {
 	Log                    bool                     `toml:"Log" json:"Log"`
 	GeneratePlatformUserID bool                     `toml:"GeneratePlatformUserId" json:"GeneratePlatformUserId"`
+	Hosts                  HostsConfiguration       `toml:"Hosts" json:"Hosts"`
 	Sign                   SignConfig               `toml:"Sign" json:"Sign"`
+	Safe                   SafeConfig               `toml:"Safe" json:"Safe"`
 	Authentication         string                   `toml:"Authentication" json:"Authentication"`
 	Internet               InternetConfiguration    `toml:"Internet" json:"Internet"`
 	Games                  GamesConfiguration       `toml:"Games" json:"Games"`
 	Announcement           AnnouncementConfig       `toml:"Announcement" json:"Announcement"`
 	CustomFiles            CustomFilesConfiguration `toml:"CustomFiles" json:"CustomFiles"`
 	Replays                ReplaysConfiguration     `toml:"Replays" json:"Replays"`
+	Mods                   ModsConfiguration        `toml:"Mods" json:"Mods"`
+	Api                    ApiConfiguration         `toml:"Api" json:"Api"`
+}
+
+// ApiConfiguration is the master switch of the Age of Empires API tree. With
+// it off the server answers those paths with 404 instead of the embedded
+// library or the official service.
+type ApiConfiguration struct {
+	Enabled bool `toml:"Enabled" json:"Enabled"`
 }
 
 type GamesConfiguration struct {
@@ -92,6 +131,19 @@ type ReplaysConfiguration struct {
 	MaxFileSize  string `toml:"MaxFileSize" json:"MaxFileSize"`
 	MaxTotalSize string `toml:"MaxTotalSize" json:"MaxTotalSize"`
 	Expiry       string `toml:"Expiry" json:"Expiry"`
+}
+
+// ModsConfiguration configures the mods API served on the Age of Empires
+// hosts. The same ageAPIServer instance serves the /api/MatchContent/ endpoints
+// with the [CustomFiles] settings, so the two sections are independent switches
+// over one process. Sizes are kept as strings and validated here, like
+// CustomFiles.
+type ModsConfiguration struct {
+	Enabled            bool   `toml:"Enabled" json:"Enabled"`
+	DBPath             string `toml:"DBPath" json:"DBPath"`
+	UploadDir          string `toml:"UploadDir" json:"UploadDir"`
+	MaxUploadSize      string `toml:"MaxUploadSize" json:"MaxUploadSize"`
+	RequireAuthForRead bool   `toml:"RequireAuthForRead" json:"RequireAuthForRead"`
 }
 
 // Severities carried by a ValidationError: an error blocks saving, a warning

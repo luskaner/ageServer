@@ -1,23 +1,32 @@
 import React from 'react';
-import { Alert, Button, Center, Code, List, Paper, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Center, Code, List, Menu, Paper, Stack, Text, Title } from '@mantine/core';
 import {
     IconAlertCircle,
+    IconChevronDown,
+    IconDeviceGamepad2,
     IconFilePlus,
     IconFileText,
     IconFileUpload,
     IconFolderOpen,
 } from '@tabler/icons-react';
 import { ValidationError } from '../../bindings/changeme';
-import { fieldLabel, humanMessage } from '../types';
+import { AVAILABLE_GAMES, fieldLabel, humanMessage } from '../types';
 
 interface Screen1Props {
     onSelectConfig?: () => void;
     onCreateConfig?: () => void;
+    onCreateGameConfig?: (gameId: string) => void;
     errorMsg?: string;
     validationErrors?: ValidationError[];
 }
 
-export const Screen1_FileLoad: React.FC<Screen1Props> = ({ onSelectConfig, onCreateConfig, errorMsg, validationErrors = [] }) => {
+export const Screen1_FileLoad: React.FC<Screen1Props> = ({
+    onSelectConfig,
+    onCreateConfig,
+    onCreateGameConfig,
+    errorMsg,
+    validationErrors = [],
+}) => {
     // Warnings do not block anything, so they are not listed as errors here.
     const blockingErrors = validationErrors.filter((issue) => issue.severity !== 'warning');
     return (
@@ -65,6 +74,28 @@ export const Screen1_FileLoad: React.FC<Screen1Props> = ({ onSelectConfig, onCre
                 <Button size="md" leftSection={<IconFilePlus size={16} />} onClick={() => onCreateConfig?.()}>
                     Create new configuration
                 </Button>
+
+                {/* A per-game document is created on its own, so the game is
+                    chosen here instead of inside the global configuration. */}
+                <Menu position="bottom" width={240}>
+                    <Menu.Target>
+                        <Button
+                            size="md"
+                            variant="default"
+                            leftSection={<IconDeviceGamepad2 size={16} />}
+                            rightSection={<IconChevronDown size={16} />}
+                        >
+                            Create a game configuration file
+                        </Button>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                        {AVAILABLE_GAMES.map((game) => (
+                            <Menu.Item key={game.id} onClick={() => onCreateGameConfig?.(game.id)}>
+                                {game.name}
+                            </Menu.Item>
+                        ))}
+                    </Menu.Dropdown>
+                </Menu>
 
                 {errorMsg && (
                     <Alert color="red" variant="light" icon={<IconAlertCircle size={20} />} title="Error loading TOML">

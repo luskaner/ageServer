@@ -46,8 +46,10 @@ Note: For the full list see [minimum requirements for Go](https://go.dev/wiki/Mi
 
 ### Partially proxied
 
-- `api.ageofempires.com`: except text moderation and the `MatchContent` endpoints (multiplayer savegame and
-  replay upload/download) so it works normally even without internet.
+- `api.ageofempires.com`: except text moderation, the `MatchContent` endpoints (multiplayer savegame and
+  replay upload/download) and the mods API (`/api/v4/Mods/...`, `/api/v1/Mods/...` and `/Poll/...`), which this
+  server serves itself, so it works normally even without internet. An official client with internet still gets
+  the official service for those; see [Mods](#mods).
 - `cdn.ageofempires.com`: except server status so it always shows online.
 
 Note proxied domains only override part of the official functionality but retain the rest of it.
@@ -98,18 +100,77 @@ The `/api/MatchContent/` endpoints serve multiplayer savegames and replays: the 
 remaining players download it to restore the match. Without them the game fails with "Failed to upload/download
 custom files".
 
-Files are stored under a per-game folder (by default `<TEMP>\ageServer\custom-files\<game>`), evicted least
-recently first to stay under the accumulated quota, and swept after the configured TTL. A `.part` file is used
-while uploading; it is renamed into place once the `matchId` is known, so a crash mid-upload leaves at most an
-orphan `.part` that is purged on the next startup.
+They are served by the embedded `ageAPIServer` library, the same instance that serves the mods API: the
+`[CustomFiles]` section is handed to it at startup, and the endpoints are mounted on the Age of Empires hosts
+and on the game host. The library is built when either `[Mods] Enabled` or `[CustomFiles] Enabled` is on, so
+one section can be turned off without taking the other with it, and each one only turns on its own routes.
+On the Age of Empires hosts every request of every client follows the official-client condition of
+[Mods](#mods): an official client with internet keeps the official service, everything else gets the local
+answer the library owns:
+
+| `[CustomFiles] Enabled` | Official client with internet | Emulated client or no internet |
+|---|---|---|
+| on | Upstream proxy. | Local library. |
+| off | Upstream proxy. | The local library answers 404: it does not serve these endpoints. |
+
+With `[Mods]` disabled too, no library instance is built and the host handler sees the request:
+upstream proxy with internet on `api.ageofempires.com`, 404 without it. The game host was never
+proxied, so there the answer is always the local one.
+
+Files are stored under one folder (`resources/custom-files` by default, relative to the server directory;
+`auto` resolves there too, with no per-game subfolder),
+evicted oldest first to stay under the accumulated quota, and swept after the configured TTL. A `.part` file is
+used while uploading; it is renamed into place once the `matchId` is known, so a crash mid-upload leaves at most
+an orphan `.part` that is purged on the next startup.
+
+The single store is also the one behavioural change of the transition from the previous per-game folders: the
+numeric match id alone addresses a file, and every enabled game shares the id space. Two titles playing at the
+same time can pick the same match id (each game numbers its own matches), and the second upload then replaces
+the first. The request carries no game marker, so the ids cannot be partitioned; the cost is a savegame
+exchange answered with the other title's file, nothing else.
 
 The TTL is what removes a file, not a clean exit: stopping the server leaves the payloads on disk, and a later
 startup removes whatever it finds older than the TTL. The index is not persisted, so after a restart those
-leftovers are no longer reachable and are only reclaimed by that later startup. Up to `MaxFileSize` the endpoints
-run outside the global body-size cap, and the upload raises the read deadline for its own request; bodies larger
-than 4 KiB are left out of the communication log rather than base64-encoded into a multi-megabyte line.
+leftovers are no longer reachable and are only reclaimed by that later startup. The prefix runs outside the
+global body-size cap, and the upload raises the read deadline for its own request instead of relying on the
+server-wide `ReadTimeout`.
 
 See the `[CustomFiles]` section of [`config.toml`](resources/config/config.toml).
+
+### Mods
+
+The mods API of `api.ageofempires.com` (and of the AoE IV host) is served by this server through the
+`github.com/luskaner/ageAPIServer` library, mounted in-process with its own SQLite database: mods keep working
+without internet, where those paths used to answer 404. Every enabled game shares one database; the API selects
+mods by `gameTitleId`. The same instance serves the `/api/MatchContent/` endpoints, configured by the
+`[CustomFiles]` section; the library is built when either section is enabled.
+
+| Key | Description |
+|---|---|
+| `Enabled` | Whether to serve the mods API. Off goes back to the host proxy: upstream with internet, 404 without it. |
+| `DBPath` | SQLite file. Defaults to `resources/mods/mods.db`, relative to the server directory; `auto` resolves there too. |
+| `UploadDir` | Archives and screenshots uploaded to `Publish`. Defaults to `resources/mods/uploads`, relative to the server directory; `auto` resolves there too. |
+| `MaxUploadSize` | Body cap of one mods request, which also raises the server-wide cap for those paths. |
+| `RequireAuthForRead` | Makes the endpoints the specification declares anonymous require credentials. |
+
+**Official clients keep the official service.** The upstream is selected only when the server has internet **and**
+the client is official, and the rule covers every tree of the Age of Empires hosts that the library serves:
+the mods API and `/api/MatchContent/` alike — an official client keeps the official savegame exchange too.
+`proxyModsRequest` (`internal/routes/router/mods.go`) treats a client as emulated when its
+`Steam1.0` ticket can be decoded — gbe_fork emits plaintext tickets — and as official otherwise; a real Steam
+ticket is opaque. A request without that header counts as official. Without internet there is nothing to forward
+to, so the local answer always wins.
+
+**Known limitation.** The Steam ticket of a request is parsed, not verified: a ticket that carries no SteamID64 is
+traded for a stable hash of the token, so a client whose ticket rotates shows up as two users in `My` and
+`Subscribe`. A request without an `Authorization: Steam1.0` header cannot be told apart from an official client,
+so with internet it is always forwarded upstream; that includes a browser asking for
+`GET /api/v4/mods/image/{name}`, a client that authenticates with the `.AgeOfEmpiresServices` cookie instead of
+the ticket, and — since the condition also governs the savegame endpoints — a `/api/MatchContent/` request whose
+client did not send the ticket header. Confirm with a capture of each title that its MatchContent requests carry
+the `Steam1.0` header; until then, an emulated client with internet assumes the risk of being proxied upstream.
+Without internet the local answer wins. This is a LAN server: do not expose it to the internet
+expecting the mods API to be authenticated.
 
 ### Cloud
 
@@ -174,6 +235,7 @@ the [`responses`](resources/responses) base directory.
 - [`Item Locations`](resources/responses/age4/itemLocations.json): Locations of items.
 - [`Item Bundle Items`](resources/responses/age4/itemBundleItems.json): Grouping of items into bundles.
 - [`Level Rewards Table`](resources/responses/age4/levelRewardsTable.json): Level rewards table.
+- [`Menu Backgrounds`](resources/responses/age4/menuBackgrounds.json): Catalogue of the main-menu backgrounds the client can display.
 
 #### Age of Mythology: Retold
 
@@ -360,6 +422,17 @@ deployment this is the same exposure the game client already has.
 
 The implementation notes, field-by-field contracts and the reasoning behind each
 decision are in [`docs/community-api-implementation.md`](../docs/community-api-implementation.md).
+
+### Menu backgrounds (AoE IV)
+
+The AoE IV client reads its main-menu background from a type-0 community event, so the
+server can show a dated background to every player. The schedule lives in
+`resources/config/age4/menuBackgrounds.toml`, which is **not shipped**: without it the
+endpoint behaves exactly as before. The file is read at startup, and an invalid one
+stops the server with a message naming the offending entry.
+
+See [Menu backgrounds](./menuBackgrounds.md) for the catalogue, the file format and the
+publish rules.
 
 ## Ranked ladder
 

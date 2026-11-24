@@ -38,6 +38,9 @@ type EmbeddedBattleServer struct {
 }
 
 type Game struct {
+	// Hosts is read from the old Games.<id>.Hosts documents only. Hosts are
+	// global now (Configuration.Hosts); the field survives so an existing
+	// config.toml can be migrated instead of silently losing its bindings.
 	Hosts                []string
 	BattleServers        []BattleServer
 	EmbeddedBattleServer EmbeddedBattleServer
@@ -50,6 +53,14 @@ type Games struct {
 	Age3    Game
 	Age4    Game
 	Athens  Game
+}
+
+// Hosts are the addresses the server listens on, shared by every enabled game.
+// Modern is the principal set (CA-signed leaf); Legacy is the alternative set
+// (self-signed leaf) for the titles that reject the modern one.
+type Hosts struct {
+	Modern []string
+	Legacy []string
 }
 
 type Internet struct {
@@ -80,6 +91,34 @@ type Replays struct {
 	Expiry       string
 }
 
+// Mods configures the mods API that is served on the Age of Empires hosts. It
+// is the ageAPIServer library mounted in-process, so the mods keep working
+// without internet instead of being forwarded upstream. Sizes are kept as
+// strings and validated once at startup, like CustomFiles.
+type Mods struct {
+	Enabled bool
+	// DBPath is the SQLite file. It defaults to resources/mods/mods.db,
+	// relative to the server directory; 'auto' resolves there too.
+	DBPath string
+	// UploadDir holds the archives and screenshots Publish stores. It defaults
+	// to resources/mods/uploads; 'auto' resolves there too.
+	UploadDir string
+	// MaxUploadSize caps the body of one mods request (a mod archive).
+	MaxUploadSize string
+	// RequireAuthForRead is kept for configuration compatibility: the
+	// embedded ageAPIServer library (since v1.0.1) always follows the spec's
+	// read-only visibility, so this setting no longer changes anything.
+	RequireAuthForRead bool
+}
+
+// Api governs the public API tree of Age of Empires on its hosts. With
+// Enabled=false none of that tree is served by this process: neither the embedded
+// library nor the forward to the official service. The root server's own routes
+// (/test/root, /cacert.pem/root, the signing key and shutdown) are unaffected.
+type Api struct {
+	Enabled bool
+}
+
 type SignConfig struct {
 	// Enabled makes the server re-sign the catalogues it serves instead of
 	// replaying the signatures captured alongside them in resources/responses.
@@ -92,16 +131,30 @@ type SignConfig struct {
 	PlatformUserIdExceptions []string
 }
 
+// SafeConfig controls the progress the server hands to official accounts.
+type SafeConfig struct {
+	// Enabled accepts "auto", "true" or "false". A TOML boolean written
+	// without quotes is normalized to "true"/"false" at startup.
+	Enabled string
+
+	// PlatformUserIdExceptions inverts the resolved value, like [Sign].
+	PlatformUserIdExceptions []string
+}
+
 type Configuration struct {
 	Log                    bool
 	GeneratePlatformUserId bool
 	Authentication         string
 	Internet               Internet
 	Announcement           Announcement
+	Hosts                  Hosts
 	Games                  Games
 	CustomFiles            CustomFiles
 	Replays                Replays
+	Mods                   Mods
+	Api                    Api
 	Sign                   SignConfig
+	Safe                   SafeConfig
 	Automatch              Automatch
 }
 
@@ -114,6 +167,42 @@ type Automatch struct {
 	AssumeQueue string
 }
 
+// Get returns the game section for gameId.
+func (g *Games) Get(gameId string) *Game {
+	switch gameId {
+	case "age1":
+		return &g.Age1
+	case "age2":
+		return &g.Age2
+	case "age3":
+		return &g.Age3
+	case "age4":
+		return &g.Age4
+	case "athens":
+		return &g.Athens
+	default:
+		return nil
+	}
+}
+
+// Set replaces the game section for gameId.
+func (g *Games) Set(gameId string, cfg Game) {
+	switch gameId {
+	case "age1":
+		g.Age1 = cfg
+	case "age2":
+		g.Age2 = cfg
+	case "age3":
+		g.Age3 = cfg
+	case "age4":
+		g.Age4 = cfg
+	case "athens":
+		g.Athens = cfg
+	}
+}
+
+// GetGameHosts is deprecated: hosts are global in Configuration.Hosts. It is
+// kept for the configuration editor and tests that still read old documents.
 func (cfg *Configuration) GetGameHosts(gameId string) []string {
 	switch gameId {
 	case "age1":

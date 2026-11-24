@@ -65,4 +65,13 @@ const (
 	// ErrConfigSigKeyAdd is the code for a run that got the signing key but
 	// could not leave it in a file for the client to read.
 	ErrConfigSigKeyAdd
+	// ErrInvalidServerApiHost is the code for a Server.Api.Host that cannot
+	// name a separate API server.
+	ErrInvalidServerApiHost
+	// ErrApiServerUnreachable is the code for a configured API server that did
+	// not answer its liveness probe with 200.
+	ErrApiServerUnreachable
+	// ErrReadApiCACert is the code for an API server that answered but whose
+	// certificate could not be read or parsed.
+	ErrReadApiCACert
 )

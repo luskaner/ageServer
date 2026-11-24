@@ -27,7 +27,7 @@ import (
 type deps struct {
 	bytesToCertificate func([]byte) *x509.Certificate
 	newFile            func(root string, gameId string, finalRoot bool) (error, *commonLogger.Root)
-	runSetUp           func(gameId string, ip net.IP, macOsExclusiveMappings bool, canUseInternet bool, certificate *x509.Certificate, logRoot string, out io.Writer, optionsFn func(*exec.Options)) *exec.Result
+	runSetUp           func(gameId string, ip net.IP, macOsExclusiveMappings bool, canUseInternet bool, api bool, rootOnly bool, certificate *x509.Certificate, logRoot string, out io.Writer, optionsFn func(*exec.Options)) *exec.Result
 	runRevert          func(ips bool, certs bool, failfast bool, logRoot string, out io.Writer, optionsFn func(*exec.Options)) *exec.Result
 	runFlushCache      func(ips bool, certs bool, logRoot string, out io.Writer, optionsFn func(*exec.Options)) (string, *exec.Result)
 	runFlushCacheAgent func(ips bool, certs bool, logRoot string, out io.Writer, optionsFn func(*exec.Options)) (string, *exec.Result)
@@ -93,10 +93,17 @@ func newAdmin(d deps) *Admin {
 // functions, mirroring the http.DefaultClient idiom.
 var Default = newAdmin(defaultDeps())
 
-func (a *Admin) RunSetUp(gameId string, logRoot string, ipToMap net.IP, macOsExclusiveMappings bool, addCertData []byte, canUseInternet bool) (err error, exitCode int) {
+// RunSetUp maps hosts and/or trusts a local certificate. api and rootOnly
+// pick which half of the game's domains the host mapping covers when a
+// session splits them (a standalone API server's pass and the server's own);
+// both false keep the whole AllHosts mapping. The two travel to the elevated
+// side either inside the SetupCommand (agent) or as --api/--rootOnly (direct
+// config-admin), never dropped: a lost flag there silently mapped everything
+// to whichever address belonged to the other half.
+func (a *Admin) RunSetUp(gameId string, logRoot string, ipToMap net.IP, macOsExclusiveMappings bool, addCertData []byte, canUseInternet bool, api bool, rootOnly bool) (err error, exitCode int) {
 	exitCode = common.ErrGeneral
 	if a.ipc != nil {
-		return a.runSetUpAgent(gameId, ipToMap, macOsExclusiveMappings, canUseInternet, addCertData)
+		return a.runSetUpAgent(gameId, ipToMap, macOsExclusiveMappings, canUseInternet, addCertData, api, rootOnly)
 	}
 
 	var certificate *x509.Certificate
@@ -122,7 +129,7 @@ func (a *Admin) RunSetUp(gameId string, logRoot string, ipToMap net.IP, macOsExc
 		suffix = "_hosts"
 	}
 	if bufferErr := file.Buffer("config-admin_setup"+suffix, func(writer io.Writer) {
-		result = a.deps.runSetUp(gameId, ipToMap, macOsExclusiveMappings, canUseInternet, certificate, file.Folder(), writer, func(options *exec.Options) {
+		result = a.deps.runSetUp(gameId, ipToMap, macOsExclusiveMappings, canUseInternet, api, rootOnly, certificate, file.Folder(), writer, func(options *exec.Options) {
 			if writer != nil {
 				options.Stdout = writer
 				options.Stderr = writer
@@ -400,20 +407,20 @@ func (a *Admin) runRevertAgent(unmapIPs bool, removeCert bool) (err error, exitC
 	)
 }
 
-func (a *Admin) runSetUpAgent(gameId string, mapIp net.IP, macOsExclusiveMappings bool, canUseInternet bool, certificate []byte) (err error, exitCode int) {
+func (a *Admin) runSetUpAgent(gameId string, mapIp net.IP, macOsExclusiveMappings bool, canUseInternet bool, certificate []byte, api bool, rootOnly bool) (err error, exitCode int) {
 	return a.sendAgent(
 		commonIpc.Setup,
 		"Setup",
 		func() any {
-			return commonIpc.SetupCommand{GameId: gameId, IP: mapIp, MacOsExclusiveMappings: macOsExclusiveMappings, CanUseInternet: canUseInternet, Certificate: certificate}
+			return commonIpc.SetupCommand{GameId: gameId, IP: mapIp, MacOsExclusiveMappings: macOsExclusiveMappings, CanUseInternet: canUseInternet, Certificate: certificate, Api: api, RootOnly: rootOnly}
 		},
 	)
 }
 
 // Package-level wrappers for backward compatibility. They delegate to Default.
 
-func RunSetUp(gameId string, logRoot string, ipToMap net.IP, macOsExclusiveMappings bool, addCertData []byte, canUseInternet bool) (err error, exitCode int) {
-	return Default.RunSetUp(gameId, logRoot, ipToMap, macOsExclusiveMappings, addCertData, canUseInternet)
+func RunSetUp(gameId string, logRoot string, ipToMap net.IP, macOsExclusiveMappings bool, addCertData []byte, canUseInternet bool, api bool, rootOnly bool) (err error, exitCode int) {
+	return Default.RunSetUp(gameId, logRoot, ipToMap, macOsExclusiveMappings, addCertData, canUseInternet, api, rootOnly)
 }
 
 func RunRevert(logRoot string, unmapIPs bool, removeCert bool, failfast bool) (err error, exitCode int) {

@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/luskaner/ageServer/common"
 )
 
 func generateTestCertAndKey(t *testing.T) (certPem []byte, keyPem []byte) {
@@ -70,7 +72,10 @@ func startTLSServer(t *testing.T, handler http.Handler) string {
 func TestReadCACertificateFromServerSuccess(t *testing.T) {
 	certPem, _ := generateTestCertAndKey(t)
 
-	host := startTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	host := startTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if want := "/" + common.CACertPath; r.URL.Path != want {
+			t.Errorf("path = %q, want %q", r.URL.Path, want)
+		}
 		_, _ = w.Write(certPem)
 	}))
 

@@ -47,6 +47,32 @@ func TestMappings_MacOsExclusive(t *testing.T) {
 	}
 }
 
+// The API and root mappings are disjoint and together cover what Mappings
+// covers, which is what lets the two setup passes use one hosts file.
+func TestApiAndRootMappingsPartitionAllMappings(t *testing.T) {
+	ip := net.ParseIP("192.168.1.1")
+	all := Mappings(game.AoE2, ip, false)
+	root := RootMappings(game.AoE2, ip, false)
+	api := ApiMappings(game.AoE2, ip, false)
+	if len(root)+len(api) != len(all) {
+		t.Fatalf("root (%d) + api (%d) != all (%d)", len(root), len(api), len(all))
+	}
+	for host := range api {
+		if _, ok := root[host]; ok {
+			t.Fatalf("%v is in both mappings", host)
+		}
+		if _, ok := all[host]; !ok {
+			t.Fatalf("%v is missing from the union", host)
+		}
+	}
+}
+
+func TestApiMappingsNilIP(t *testing.T) {
+	if m := ApiMappings(game.AoE2, nil, false); len(m) != 0 {
+		t.Fatalf("ApiMappings with nil IP should be empty, got %d entries", len(m))
+	}
+}
+
 func TestMappings_DifferentGames(t *testing.T) {
 	ip := net.ParseIP("10.0.0.1")
 	m1 := Mappings(game.AoE1, ip, false)

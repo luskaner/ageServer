@@ -1,0 +1,746 @@
+asyncapi: "3.1.0"
+id: "urn:ageserver:websocket"
+info:
+  title: Age Server WebSocket API
+  version: "2.0.0"
+  description: |
+    AsyncAPI description of the Age Server notification socket, the push half of
+    the REST API documented in `api_spec.yml` (same directory). The game clients
+    open one WebSocket at `/wss/` and receive there the events another client
+    triggered through REST: invitations, chat, presence, match start, match
+    results and matchmaking joins.
+
+    ## Envelope
+
+    A server frame is a JSON array with four slots:
+
+    `[messageId, action, userId, payload]`
+
+    * `messageId` is always `0`; the client does not acknowledge frames.
+    * `action` is the message type (`FriendAcceptMessage`, `ChannelChatMessage`,
+      …). It is the discriminant: the client switches on it to parse `payload`.
+    * `userId` is the profile id of the session the frame belongs to (the
+      recipient).
+    * `payload` is the message body. Its layout is positional, like the REST
+      responses: each schema lists the meaning of every slot in its
+      `x-positions` extension, because OpenAPI/AsyncAPI Schema cannot express a
+      tuple mixing strings, numbers and arrays.
+
+    ## Session and authentication
+
+    The socket is anonymous at the HTTP level: the first frame the client sends
+    must bind a session (`SessionBind`, `operation: 0`) within 60 seconds of the
+    upgrade. Its `sessionToken` is the `connectionToken` returned by
+    `POST /game/login/platformlogin`, the same value the REST calls send as
+    `sessionID`. An invalid or missing bind closes the socket with close code
+    `1000` and a reason (`Missing initial message`, `Invalid login message`,
+    `Invalid login message data`).
+
+    While the socket is open the server refreshes the session expiry every 30
+    seconds, so a connected client is never logged out. The client must send
+    something at least once a minute (any frame, or a WebSocket ping) or the
+    server drops the connection. Binding again with a newer token moves the
+    socket to the new session, which is what a client does after logging in
+    again.
+
+    ## Delivery guarantees
+
+    * At most one live socket per session: the newest connection replaces the
+      previous one in the session index.
+    * Only frames for connected clients are pushed. If the session has no live
+      socket, the same frame is queued and returned by
+      `POST /game/login/readSession` as `[messageId, [frame, ...]]`, in the
+      order it was produced. The client may therefore use the socket, the poll,
+      or both.
+    * Frames are text frames with `application/json`; no binary frames and no
+      compression extension are used.
+  contact:
+    name: luskaner
+    url: https://github.com/luskaner
+  license:
+    name: AGPL-3.0-only
+    url: https://www.gnu.org/licenses/agpl-3.0.txt
+  externalDocs:
+    description: REST half of the same server (sessions, triggers and schemas).
+    url: https://github.com/luskaner/ageServer
+defaultContentType: application/json
+servers:
+  gameHost:
+    host: aoe-api.worldsedgelink.com
+    protocol: wss
+    protocolVersion: "13"
+    description: |
+      Game host of A1–A4 (TLS, port 443). The clients upgrade the same host they
+      use for `/game` and `/community`. Release domains
+      `aoeliverelease1-api.worldsedgelink.com` through `aoelivereleaseN-api.worldsedgelink.com`
+      and the AoE2 Mac domains `arthurlive-api.worldsedgelink.com`,
+      `arthurlive-release1-api.worldsedgelink.com` through
+      `arthurlive-releaseN-api.worldsedgelink.com` are aliases of this host.
+  aomHost:
+    host: andromeda-live-release21-api.worldsedgelink.com
+    protocol: wss
+    protocolVersion: "13"
+    description: |
+      Game host of Age of Mythology — Retold. Release domains
+      `andromeda-live-release1-api.worldsedgelink.com` through
+      `andromeda-live-releaseN-api.worldsedgelink.com` are aliases of this host.
+channels:
+  notificationSocket:
+    address: /wss/
+    title: Notification socket
+    description: |
+      The only WebSocket endpoint of the server. It answers an HTTP `GET` with
+      the `Upgrade` handshake and then behaves as the frame exchange described
+      here. It is registered for every title, so the same socket carries the
+      subsets each client understands; every message declares its titles in
+      `x-games`.
+    servers:
+      - $ref: '#/servers/gameHost'
+      - $ref: '#/servers/aomHost'
+    bindings:
+      ws:
+        method: GET
+    messages:
+      sessionBind:
+        $ref: '#/components/messages/SessionBind'
+      friendAccept:
+        $ref: '#/components/messages/FriendAccept'
+      friendClear:
+        $ref: '#/components/messages/FriendClear'
+      presence:
+        $ref: '#/components/messages/Presence'
+      extendInvitation:
+        $ref: '#/components/messages/ExtendInvitation'
+      cancelInvitation:
+        $ref: '#/components/messages/CancelInvitation'
+      replyInvitation:
+        $ref: '#/components/messages/ReplyInvitation'
+      platformSessionUpdate:
+        $ref: '#/components/messages/PlatformSessionUpdate'
+      channelJoin:
+        $ref: '#/components/messages/ChannelJoin'
+      channelLeave:
+        $ref: '#/components/messages/ChannelLeave'
+      channelChat:
+        $ref: '#/components/messages/ChannelChat'
+      personalChat:
+        $ref: '#/components/messages/PersonalChat'
+      matchReceivedChat:
+        $ref: '#/components/messages/MatchReceivedChat'
+      matchStart:
+        $ref: '#/components/messages/MatchStart'
+      gameResultNotification:
+        $ref: '#/components/messages/GameResultNotification'
+      avatarStatsUpdated:
+        $ref: '#/components/messages/AvatarStatsUpdated'
+      automatch2Game:
+        $ref: '#/components/messages/Automatch2Game'
+operations:
+  bindSession:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: Bind (or re-bind) the socket to a local session
+    description: |
+      The client sends `{"operation": 0, "sessionToken": "<connectionToken>"}` as
+      the first frame and after logging in again. Any other `operation` value is
+      accepted while the session is valid but not interpreted: it only counts as
+      activity for the one-minute read deadline.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/sessionBind'
+  pushFriendAccept:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: A player of the title is online
+    description: |
+      Sent by `POST /game/login/platformlogin` to every other connected player of
+      the title (A3, A4, AoM), so the friends list shows the newcomer.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/friendAccept'
+  pushFriendClear:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: A player of the title went offline
+    description: |
+      Sent by `POST /game/login/logout` to every other connected player of the
+      title (A3, A4, AoM).
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/friendClear'
+  pushPresence:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: Presence of a player changed
+    description: |
+      Sent to every connected player by `relationship/setPresence`,
+      `platformlogin` (presence 1) and `logout` (presence 0). The profile info
+      carries the presence fields appended at the end.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/presence'
+  pushExtendInvitation:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: A player invited the recipient to a lobby
+    description: Triggered by `POST /game/invitation/extendInvitation`.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/extendInvitation'
+  pushCancelInvitation:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: The inviter withdrew an invitation
+    description: Triggered by `POST /game/invitation/cancelInvitation`.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/cancelInvitation'
+  pushReplyInvitation:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: The invitee accepted or rejected an invitation
+    description: |
+      Sent to the inviter by `POST /game/invitation/replyToInvitation`; the
+      answer is `"1"` (accepted) or `"0"` (rejected), as a string.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/replyInvitation'
+  pushPlatformSessionUpdate:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: The lobby published its platform session
+    description: |
+      Sent to every peer of the lobby by `advertisement/updatePlatformSessionID`
+      (and `advertisement/updatePlatformLobbyID`), so the group can be created
+      on the platform side before the match starts.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/platformSessionUpdate'
+  pushChannelJoin:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: A player joined a chat channel
+    description: |
+      Sent by `POST /game/chat/joinChannel` to the members that were already
+      inside the channel, never to the newcomer (which gets the roster in the
+      REST answer).
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/channelJoin'
+  pushChannelLeave:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: A player left a chat channel
+    description: |
+      Sent by `chat/leaveChannel`, `logout` and `platformlogin` (a login drops
+      the stale memberships of a previous session) to the members that remain.
+      AoE III only reads one message per `readSession` poll, so the server spaces
+      consecutive leaves 100 ms apart.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/channelLeave'
+  pushChannelChat:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: A message was sent to a chat channel
+    description: |
+      Sent by `POST /game/chat/sendText` to every member of the channel,
+      including the sender (which also gets the REST answer).
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/channelChat'
+  pushPersonalChat:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: A private message was sent to the recipient
+    description: |
+      Sent by `chat/sendWhispers` (and the legacy `chat/sendWhisper`), one frame
+      per recipient.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/personalChat'
+  pushMatchReceivedChat:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: A message was sent to the in-match chat
+    description: |
+      Sent by `POST /game/party/sendMatchChat` to every addressed peer, one frame
+      per message. The `metadata` slot only exists for client library 1.94 and
+      later.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/matchReceivedChat'
+  pushMatchStart:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: The host started the match
+    description: |
+      Sent to every peer of the lobby by `POST /game/advertisement/updateState`
+      when the state becomes `1`. It carries the players, the civilizations, the
+      start time, the encoded lobby and the challenge progress of each player.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/matchStart'
+  pushGameResultNotification:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: The result of a reported match
+    description: |
+      Sent by `POST /game/party/reportMatch` to every player of the match, rated
+      or not: the post-game screen waits for it before leaving "Retrieving…".
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/gameResultNotification'
+  pushAvatarStatsUpdated:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: The avatar statistics of the player changed
+    description: |
+      Sent by `POST /game/leaderboard/setAvatarStatValues` to the player that sent
+      the update; nobody else is notified yet.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/avatarStatsUpdated'
+  pushAutomatch2Game:
+    action: send
+    channel:
+      $ref: '#/channels/notificationSocket'
+    summary: The matchmaker found a match for the queued player
+    description: |
+      Sent to each joiner (not to the host) when the host's lobby becomes
+      available, so the client knows the lobby, the relay address and the peers
+      to connect to. The host learns about it in its `automatch2/polling`
+      response instead. This is what lets the queue fill without the clients
+      polling each other.
+    messages:
+      - $ref: '#/channels/notificationSocket/messages/automatch2Game'
+components:
+  messages:
+    SessionBind:
+      name: SessionBind
+      title: Session bind
+      summary: Client frame that attaches the socket to a session
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SessionBind'
+    FriendAccept:
+      name: FriendAcceptMessage
+      title: Player online
+      summary: Another player of the title is online
+      description: |
+        Sent by `platformlogin` to every other connected player of A3, A4 and AoM.
+      contentType: application/json
+      x-games: [A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: FriendAcceptMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 1
+            maxItems: 1
+            description: The profile of the player that came online.
+            x-positions: [profileInfo]
+            items: {}
+    FriendClear:
+      name: FriendClearMessage
+      title: Player offline
+      summary: Another player of the title logged out
+      description: Sent by `logout` to every other connected player of A3, A4 and AoM.
+      contentType: application/json
+      x-games: [A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: FriendClearMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 2
+            maxItems: 2
+            description: The profile of the player that logged out and a fixed 0.
+            x-positions: [profileInfo, 0]
+            items: {}
+    Presence:
+      name: PresenceMessage
+      title: Presence changed
+      summary: The presence of a player changed
+      description: |
+        Sent to every connected player by `setPresence`, `platformlogin` and
+        `logout`.
+      contentType: application/json
+      x-games: [A1, A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: PresenceMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 1
+            maxItems: 1
+            description: |
+              The profile with the presence block appended at the end
+              (`presenceID`, `presenceLocalized`, `[[propertyID, value], ...]`).
+            x-positions: [profileInfoWithPresence]
+            items: {}
+    ExtendInvitation:
+      name: ExtendInvitationMessage
+      title: Lobby invitation
+      summary: A player invited the recipient to a lobby
+      description: Sent by `invitation/extendInvitation`.
+      contentType: application/json
+      x-games: [A1, A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: ExtendInvitationMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 3
+            maxItems: 3
+            description: The inviter, the lobby and its gathering password.
+            x-positions: [profileInfo, advertisementId, gatheringPassword]
+            items: {}
+    CancelInvitation:
+      name: CancelInvitationMessage
+      title: Invitation withdrawn
+      summary: The inviter withdrew the invitation
+      description: Sent by `invitation/cancelInvitation`.
+      contentType: application/json
+      x-games: [A1, A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: CancelInvitationMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 2
+            maxItems: 2
+            description: The inviter and the lobby.
+            x-positions: [profileInfo, advertisementId]
+            items: {}
+    ReplyInvitation:
+      name: ReplyInvitationMessage
+      title: Invitation answered
+      summary: The invitee accepted or rejected the invitation
+      description: Sent to the inviter by `invitation/replyToInvitation`.
+      contentType: application/json
+      x-games: [A1, A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: ReplyInvitationMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 3
+            maxItems: 3
+            description: The invitee, the lobby and the answer as a string.
+            x-positions: [profileInfo, advertisementId, accepted]
+            items: {}
+    PlatformSessionUpdate:
+      name: PlatformSessionUpdateMessage
+      title: Platform session published
+      summary: The lobby published its platform session id
+      description: |
+        Sent to every peer of the lobby by `advertisement/updatePlatformSessionID`
+        and `advertisement/updatePlatformLobbyID`.
+      contentType: application/json
+      x-games: [A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 3
+        maxItems: 6
+        items:
+          - {const: 0, description: message id}
+          - {const: PlatformSessionUpdateMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 3
+            maxItems: 6
+            description: |
+              Three slots on older clients; A2, A4, AoM and client library 1.90
+              and later append `0`, `""`, `""` as an extension block.
+            x-positions: [matchId, metadata, platformSessionId, "0", emptyString, emptyString]
+            items: {}
+    ChannelJoin:
+      name: ChannelJoinMessage
+      title: Channel join
+      summary: A player joined a chat channel
+      description: Sent to the members already inside the channel by `chat/joinChannel`.
+      contentType: application/json
+      x-games: [A3]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: ChannelJoinMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 2
+            maxItems: 2
+            description: The channel id as a string and the roster delta.
+            x-positions: [channelId, rosterEntry]
+            items: {}
+    ChannelLeave:
+      name: ChannelLeaveMessage
+      title: Channel leave
+      summary: A player left a chat channel
+      description: |
+        Sent to the members that remain by `chat/leaveChannel`, `logout` and
+        `platformlogin`.
+      contentType: application/json
+      x-games: [A3]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: ChannelLeaveMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 2
+            maxItems: 2
+            description: The channel id as a string and the profile that left.
+            x-positions: [channelId, profileInfo]
+            items: {}
+    ChannelChat:
+      name: ChannelChatMessage
+      title: Channel message
+      summary: Someone wrote in a chat channel
+      description: Sent by `chat/sendText` to every member, sender included.
+      contentType: application/json
+      x-games: [A3]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: ChannelChatMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 4
+            maxItems: 6
+            description: |
+              Legacy layout has four slots; client library 1.90 and later append
+              `""` and the message again.
+            x-positions: [chatroomId, userId, emptyString, message, emptyString, message]
+            items: {}
+    PersonalChat:
+      name: PersonalChatMessage
+      title: Whisper
+      summary: A private message was sent to the recipient
+      description: Sent by `chat/sendWhispers`, one frame per recipient.
+      contentType: application/json
+      x-games: [A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: PersonalChatMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 3
+            maxItems: 4
+            description: |
+              The sender profile, an empty string, then the message. The modern
+              layout replaces the plain message with `["", message]` and repeats
+              the message in the last slot.
+            x-positions: [profileInfo, emptyString, messageOrPair, message]
+            items: {}
+    MatchReceivedChat:
+      name: MatchReceivedChatMessage
+      title: In-match chat
+      summary: A message was sent to the in-match chat
+      description: Sent by `party/sendMatchChat` to every addressed peer.
+      contentType: application/json
+      x-games: [A1, A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: MatchReceivedChatMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 5
+            maxItems: 6
+            description: |
+              The sender, the filtered and the raw message, the message type and
+              the lobby; client library 1.94 and later append the metadata.
+            x-positions: [senderId, filteredMessage, content, messageType, sessionId, metadata]
+            items: {}
+    MatchStart:
+      name: MatchStartMessage
+      title: Match started
+      summary: The host started the match
+      description: Sent to every peer of the lobby by `advertisement/updateState`.
+      contentType: application/json
+      x-games: [A1, A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: MatchStartMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 6
+            maxItems: 6
+            description: |
+              Players, civilizations, start time, players as strings, the encoded
+              lobby and the challenge progress of each player.
+            x-positions: [userIds, races, startTime, userIdsStr, advertisement, challengeProgress]
+            items: {}
+    GameResultNotification:
+      name: GameResultNotificationMessage
+      title: Match result
+      summary: The result of the reported match
+      description: |
+        Sent by `party/reportMatch` to every player of the match. Each results
+        row carries the winning teams (slot 4), which is how the client decides
+        win or loss.
+      contentType: application/json
+      x-games: [A1, A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: GameResultNotificationMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 6
+            maxItems: 6
+            description: |
+              One row per player, the ladder stats of the match, an empty block,
+              the match id, an empty string and an empty block.
+            x-positions: [playerResults, leaderboardStats, emptyArray, matchId, emptyString, emptyArray]
+            items: {}
+    AvatarStatsUpdated:
+      name: AvatarStatsUpdatedMessage
+      title: Avatar stats updated
+      summary: The avatar statistics of the player changed
+      description: Sent by `leaderboard/setAvatarStatValues` to that same player.
+      contentType: application/json
+      x-games: [A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: AvatarStatsUpdatedMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 1
+            maxItems: 1
+            description: The encoded avatar statistics that changed.
+            x-positions: [avatarStats]
+            items: {}
+    Automatch2Game:
+      name: Automatch2GameMessage
+      title: Match found
+      summary: The matchmaker found a match for the queued player
+      description: |
+        Sent to each joiner when the host lobby becomes available. The slots are
+        14 or 15 depending on the title profile: the older layout carries the
+        team of the recipient and three relay ports, the newer one carries
+        `ranked` and only two ports.
+      contentType: application/json
+      x-games: [A1, A2, A3, A4, AoM]
+      payload:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          - {const: 0, description: message id}
+          - {const: Automatch2GameMessage}
+          - {type: integer, description: recipient profile id}
+          - type: array
+            minItems: 14
+            maxItems: 15
+            description: Lobby, relay address and peers of the found match.
+            x-positions: [hostId, matchId, mapName, raceId, rankedOrTeam, "0", teams, teamSizeOrPlayers, authtoken, ip, port0, port1, port2, peers, emptyString]
+            items: {}
+  schemas:
+    SessionBind:
+      type: object
+      title: Session bind
+      description: |
+        Client frame. `operation` must be `0`; `sessionToken` is the
+        `connectionToken` of `platformlogin`. Feeding a newer token moves the
+        socket to that session. A frame with another `operation` is accepted
+        while the current session is valid and only refreshes the read deadline.
+      required: [operation, sessionToken]
+      properties:
+        operation:
+          type: integer
+          const: 0
+        sessionToken:
+          type: string
+    ProfileInfo:
+      type: array
+      title: Profile info
+      description: |
+        Profile of a player inside a notification. Its length depends on the
+        client library version: `sanitizedAlias` exists from 1.90 onwards and
+        shifts every later slot by one, so the positions below are the modern
+        ones. The presence block is appended only in `PresenceMessage`.
+      minItems: 14
+      maxItems: 19
+      items: {}
+      x-positions:
+        - profileEntityVersion
+        - profileId
+        - name
+        - metaData
+        - alias
+        - sanitizedAlias
+        - clanName
+        - personalStatGroupID
+        - xp
+        - level
+        - leaderboardRegionID
+        - banInfo
+        - platformUserID
+        - accountType
+        - linkedPlatformAccounts
+      x-library-version: "sanitizedAlias (slot 5) exists from client library 1.90"
+    ServerFrame:
+      type: array
+      title: Server frame envelope
+      description: |
+        Shape shared by every server frame:
+        `[0, action, recipientProfileId, payload]`. The message definitions of
+        this document already pin the first three slots and the payload of their
+        own action; this schema exists for readers that want the envelope alone.
+      minItems: 4
+      maxItems: 4
+      items: {}
+      x-positions: [messageId, action, recipientProfileId, payload]

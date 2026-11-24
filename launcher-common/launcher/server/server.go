@@ -26,9 +26,39 @@ import (
 type MesuredIpAddress struct {
 	Ip      net.IP
 	Latency time.Duration
+	// Mode is the certificate mode the listener answered with (empty for an
+	// older server) and Data is that listener's announce payload.
+	Mode string
+	Data *server.AnnounceMessageDataSupportedLatest
 }
 
-func StartServer(r launcher.Reporter, gameTitle string, stop string, executable string, flags *pflag.FlagSet, values *cmdServer.Values, optionsFn func(options commonExecutor.Options)) (result *commonExecutor.Result, executablePath string, ip string) {
+// SelectServerIP picks the address whose certificate class the game prefers,
+// falling back to an older server that sends no mode and, last, to the first
+// measured address with a warning. Every caller uses it, so the address and the
+// certificate read later cannot disagree.
+func SelectServerIP(gameID string, addrs []MesuredIpAddress, warn func(string)) (MesuredIpAddress, bool) {
+	for _, mode := range common.PreferredModes(gameID) {
+		for _, addr := range addrs {
+			if addr.Data != nil && addr.Data.Mode == string(mode) {
+				return addr, true
+			}
+		}
+	}
+	for _, addr := range addrs {
+		if addr.Data != nil && addr.Data.Mode == "" {
+			return addr, true
+		}
+	}
+	if len(addrs) > 0 {
+		if warn != nil {
+			warn("no listener with a preferred certificate mode; using " + addrs[0].Ip.String())
+		}
+		return addrs[0], true
+	}
+	return MesuredIpAddress{}, false
+}
+
+func StartServer(r launcher.Reporter, gameTitle string, stop string, executable string, flags *pflag.FlagSet, values *cmdServer.Values, optionsFn func(options commonExecutor.Options)) (result *commonExecutor.Result, executablePath string, ip string, data *server.AnnounceMessageDataSupportedLatest) {
 	executablePath = GetExecutablePath(executable)
 	if executablePath == "" {
 		return
@@ -51,9 +81,14 @@ func StartServer(r launcher.Reporter, gameTitle string, stop string, executable 
 			case <-timeout:
 				break loop
 			default:
-				if _, measuredIpAddrs, data := FilterServerIPs(uuid.MustParse(values.Id), "", gameTitle, localIPs); data != nil {
-					ip = measuredIpAddrs[0].Ip.String()
-					return
+				if _, measuredIpAddrs, announce := FilterServerIPs(uuid.MustParse(values.Id), "", gameTitle, localIPs); len(measuredIpAddrs) > 0 {
+					if selected, ok := SelectServerIP(gameTitle, measuredIpAddrs, func(message string) {
+						r.Warn("%s", message)
+					}); ok {
+						ip = selected.Ip.String()
+						data = announce
+						return
+					}
 				}
 				if _, err := commonProcess.FindProcess(int(result.Pid)); err != nil {
 					break loop
@@ -121,6 +156,8 @@ func FilterServerIPs(id uuid.UUID, serverName string, gameTitle string, possible
 			measuredIpAddresses = append(measuredIpAddresses, MesuredIpAddress{
 				Ip:      ip,
 				Latency: latency,
+				Mode:    tmpData.Mode,
+				Data:    tmpData,
 			})
 			if data == nil {
 				data = tmpData

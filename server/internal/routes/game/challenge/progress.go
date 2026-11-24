@@ -79,6 +79,11 @@ func updateProgress(w http.ResponseWriter, r *http.Request) {
 		i.JSON(&w, i.A{0, i.A{}, i.A{}})
 		return
 	}
+	if models.SafeForRequest(r) {
+		// Safe mode acknowledges the update without persisting it.
+		i.JSON(&w, i.A{0, i.A{}, i.A{}})
+		return
+	}
 	game := models.G(r)
 	sess := models.SessionOrPanic(r)
 	user, ok := game.Users().GetUserById(sess.GetUserId())

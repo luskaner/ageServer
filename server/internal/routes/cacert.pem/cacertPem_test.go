@@ -1,7 +1,6 @@
 package cacert_pem
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,87 +8,51 @@ import (
 	"testing"
 
 	"github.com/luskaner/ageServer/common"
-	"github.com/luskaner/ageServer/server/internal/models"
 )
 
-// mockGame implements models.Game with just Title
-type mockGame struct {
-	title string
-}
-
-func (m *mockGame) Title() string                                         { return m.title }
-func (m *mockGame) Resources() models.Resources                           { return nil }
-func (m *mockGame) Items() models.Items                                   { return nil }
-func (m *mockGame) LeaderboardDefinitions() models.LeaderboardDefinitions { return nil }
-func (m *mockGame) PresenceDefinitions() models.PresenceDefinitions       { return nil }
-func (m *mockGame) BattleServers() models.BattleServers                   { return nil }
-func (m *mockGame) Users() models.Users                                   { return nil }
-func (m *mockGame) Advertisements() models.Advertisements                 { return nil }
-func (m *mockGame) ChatChannels() models.ChatChannels                     { return nil }
-func (m *mockGame) Sessions() models.Sessions                             { return nil }
-func (m *mockGame) CustomFiles() models.CustomFiles                       { return nil }
-func (m *mockGame) Matchmaking() models.Matchmaking                       { return nil }
-func (m *mockGame) MatchHistory() models.MatchHistory                     { return nil }
-
-func TestCacertPemNotFoundWhenNoFolder(t *testing.T) {
-	// This test will call os.Executable which returns the test binary path, and CertificatePairFolder will create a folder
-	// To test the NotFound path, we can make the folder not contain the cert file
-	req := httptest.NewRequest("GET", "/cacert.pem", nil)
-	// Set game in context
-	ctx := context.WithValue(req.Context(), "game", &mockGame{title: "age2"})
-	req = req.WithContext(ctx)
+func TestCacertPemNotFoundWhenNoFile(t *testing.T) {
+	req := httptest.NewRequest("GET", "/cacert.pem/root", nil)
 	rr := httptest.NewRecorder()
-	CacertPem(rr, req)
-	// Since the cert file likely doesn't exist in the test's certificate folder, it should be 404
+	CacertPem(rr, req, common.CertModeModern)
+	// The test binary's certificate folder normally has no cert.pem.
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
 
-func TestCacertPemServesFileWhenExists(t *testing.T) {
+func TestCacertPemServesTheFileOfTheMode(t *testing.T) {
 	exe, _ := os.Executable()
 	folder := common.CertificatePairFolder(exe)
 	if folder == "" {
 		t.Skip("could not determine folder")
 	}
-	_ = os.MkdirAll(folder, 0755)
-	for _, name := range []string{common.CACert, common.SelfSignedCert} {
-		path := filepath.Join(folder, name)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			_ = os.WriteFile(path, []byte("dummy"), 0644)
-			t.Cleanup(func() { _ = os.Remove(path) })
-		}
-	}
-	req := httptest.NewRequest("GET", "/cacert.pem", nil)
-	ctx := context.WithValue(req.Context(), "game", &mockGame{title: "age2"})
-	req = req.WithContext(ctx)
-	rr := httptest.NewRecorder()
-	CacertPem(rr, req)
-	// Should be 200 if file exists, or 404 if not
-	if rr.Code != http.StatusOK && rr.Code != http.StatusNotFound {
-		t.Fatalf("unexpected code %d", rr.Code)
-	}
-}
-
-func TestCacertPemSelfSignedVsCA(t *testing.T) {
-	// Test with a game that uses SelfSignedCert vs one that uses CACert
-	for _, tc := range []struct {
-		gameId string
-		file   string
-	}{
-		{"age1", common.SelfSignedCert},
-		{"age2", common.SelfSignedCert},
-		{"age4", common.CACert},
-		{"athens", common.CACert},
+	for file, contents := range map[string]string{
+		common.CACert:         "modern-ca",
+		common.SelfSignedCert: "legacy-ca",
 	} {
-		req := httptest.NewRequest("GET", "/cacert.pem", nil)
-		ctx := context.WithValue(req.Context(), "game", &mockGame{title: tc.gameId})
-		req = req.WithContext(ctx)
+		path := filepath.Join(folder, file)
+		if _, err := os.Stat(path); err == nil {
+			// Do not overwrite a real certificate pair of the machine.
+			t.Skipf("%s already exists", path)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(path) })
+	}
+	for mode, file := range map[common.CertMode]string{
+		common.CertModeModern: common.CACert,
+		common.CertModeLegacy: common.SelfSignedCert,
+	} {
+		req := httptest.NewRequest("GET", "/cacert.pem/root", nil)
 		rr := httptest.NewRecorder()
-		CacertPem(rr, req)
-		// Just check it doesn't panic and returns 404 or 200
-		if rr.Code != http.StatusNotFound && rr.Code != http.StatusOK && rr.Code != http.StatusInternalServerError {
-			t.Fatalf("game %s code %d", tc.gameId, rr.Code)
+		CacertPem(rr, req, mode)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", mode, rr.Code)
+		}
+		want, _ := os.ReadFile(filepath.Join(folder, file))
+		if rr.Body.String() != string(want) {
+			t.Fatalf("%s served %q, want the contents of %s", mode, rr.Body.String(), file)
 		}
 	}
 }

@@ -8,6 +8,15 @@ export interface AnnouncementConfig {
     "MulticastGroup": string;
 }
 
+/**
+ * ApiConfiguration is the master switch of the Age of Empires API tree. With
+ * it off the server answers those paths with 404 instead of the embedded
+ * library or the official service.
+ */
+export interface ApiConfiguration {
+    "Enabled": boolean;
+}
+
 export interface BattleServerConfig {
     "Region": string;
     "Name": string;
@@ -18,24 +27,33 @@ export interface BattleServerConfig {
 }
 
 /**
- * ReplaysConfiguration configures the replays the game uploads after a match.
- * They are always stored under <resources>/responses/cloud/<game>/replays, so
- * there is no folder setting. Sizes and the TTL are kept as strings and
- * validated once at startup.
- */
-export interface ReplaysConfiguration {
-    "Enabled": boolean;
-    "MaxFileSize": string;
-    "MaxTotalSize": string;
-    "Expiry": string;
-}
-
-/**
- * ConfigFile is the bridge between Go and the React editor.
+ * ConfigFile is the bridge between Go and the React editor. One load is one
+ * document: config.toml or one config.<game>.toml, never both at once.
  */
 export interface ConfigFile {
     "path": string;
     "content": string;
+
+    /**
+     * Kind is "main" for config.toml and "game" for a config.<game>.toml.
+     */
+    "kind": string;
+
+    /**
+     * Game is the game a "game" document belongs to (empty for "main").
+     */
+    "game": string;
+
+    /**
+     * SuggestedName is the file name a new document proposes when it is saved.
+     */
+    "suggestedName": string;
+
+    /**
+     * New reports a document that is not on disk yet, even when Path already
+     * names where it will be written.
+     */
+    "new": boolean;
     "config": Configuration | null;
     "validationErrors": ValidationError[] | null;
 }
@@ -43,13 +61,17 @@ export interface ConfigFile {
 export interface Configuration {
     "Log": boolean;
     "GeneratePlatformUserId": boolean;
+    "Hosts": HostsConfiguration;
     "Sign": SignConfig;
+    "Safe": SafeConfig;
     "Authentication": string;
     "Internet": InternetConfiguration;
     "Games": GamesConfiguration;
     "Announcement": AnnouncementConfig;
     "CustomFiles": CustomFilesConfiguration;
     "Replays": ReplaysConfiguration;
+    "Mods": ModsConfiguration;
+    "Api": ApiConfiguration;
 }
 
 /**
@@ -109,13 +131,57 @@ export interface GamesConfiguration {
     "athens": GameConfig;
 }
 
+/**
+ * HostsConfiguration is the global listener configuration: every listener
+ * serves every enabled game, and the list only selects the certificate mode it
+ * presents. The old per-game Hosts key survives in GameConfig so an existing
+ * document can still be read and migrated.
+ */
+export interface HostsConfiguration {
+    "Modern": string[] | null;
+    "Legacy": string[] | null;
+}
+
 export interface InternetConfiguration {
     "Enabled": boolean;
     "IP": string;
 }
 
+/**
+ * ModsConfiguration configures the mods API served on the Age of Empires
+ * hosts. The same ageAPIServer instance serves the /api/MatchContent/ endpoints
+ * with the [CustomFiles] settings, so the two sections are independent switches
+ * over one process. Sizes are kept as strings and validated here, like
+ * CustomFiles.
+ */
+export interface ModsConfiguration {
+    "Enabled": boolean;
+    "DBPath": string;
+    "UploadDir": string;
+    "MaxUploadSize": string;
+    "RequireAuthForRead": boolean;
+}
+
+/**
+ * ReplaysConfiguration configures the replays the game uploads after a match.
+ * They are always stored under <resources>/responses/cloud/<game>/replays, so
+ * there is no folder setting. Sizes and the TTL are kept as strings and
+ * validated once at startup.
+ */
+export interface ReplaysConfiguration {
+    "Enabled": boolean;
+    "MaxFileSize": string;
+    "MaxTotalSize": string;
+    "Expiry": string;
+}
+
 export interface SignConfig {
     "Enabled": boolean;
+    "PlatformUserIdExceptions": string[] | null;
+}
+
+export interface SafeConfig {
+    "Enabled": any;
     "PlatformUserIdExceptions": string[] | null;
 }
 

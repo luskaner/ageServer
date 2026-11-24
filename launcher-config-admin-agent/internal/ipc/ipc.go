@@ -18,6 +18,13 @@ import (
 	"golang.org/x/net/idna"
 )
 
+// mappedIps and addedCert remember what this agent process did, so a Revert
+// only has to be told which Kinds to undo and a failed run leaves nothing
+// behind. They are deliberately not guards: one session maps hosts and adds
+// certificates more than once (an API pass and the server's own pass when a
+// standalone API server is configured), so a repeat Setup has to succeed.
+// Idempotency lives where the change happens — the hosts file keeps our
+// marker, the certificate store keeps our subject — not in a one-shot flag.
 var mappedIps = false
 var addedCert = false
 
@@ -125,6 +132,14 @@ func checkCertificateValidity(cert *x509.Certificate, gameId string) bool {
 	expectedExtKeyUsages := mapset.NewSet[x509.ExtKeyUsage]()
 	if common.SelfSignedCertGame(gameId) {
 		if !cert.MaxPathLenZero {
+			// A legacy title may be served from a modern listener (the two
+			// modes exist precisely so one process can serve both classes).
+			// Accept the modern CA profile with a warning; the pinning of the
+			// bytes, the CN and IsCA above are not relaxed.
+			if modernCaProfile(cert) {
+				cmdlog.Warn("Game %s is a legacy title but the certificate is the modern CA profile; accepting it with a warning", gameId)
+				return true
+			}
 			return false
 		}
 		selfSignedCertDomains := mapset.NewSet[string](common.SelfSignedCertDomains...)
@@ -144,6 +159,17 @@ func checkCertificateValidity(cert *x509.Certificate, gameId string) bool {
 	return true
 }
 
+// modernCaProfile is the CA half of the modern pair as server-genCert creates
+// it: a CA with only CertSign and no extended usage or SANs. It is deliberately
+// narrower than the legacy profile, not a general "any CA" escape hatch.
+func modernCaProfile(cert *x509.Certificate) bool {
+	return cert.IsCA &&
+		cert.KeyUsage == x509.KeyUsageCertSign &&
+		len(cert.ExtKeyUsage) == 0 &&
+		len(cert.DNSNames) == 0 &&
+		len(cert.IPAddresses) == 0
+}
+
 func handleSetUp(logRoot string, decoder *gob.Decoder) int {
 	var msg ipc.SetupCommand
 	cmdlog.Step("<- SetupCommand")
@@ -152,20 +178,16 @@ func handleSetUp(logRoot string, decoder *gob.Decoder) int {
 		return internal.ErrDecode
 	}
 	cmdlog.Printf("<- %v\n", msg)
-	if len(msg.IP) > 0 && mappedIps {
-		cmdlog.Info("IPs already mapped")
-		return internal.ErrIpsAlreadyMapped
-	}
 	if !game.SupportedGames.ContainsOne(msg.GameId) {
 		cmdlog.Fail("Game is not supported")
 		return internal.ErrGameNotSupported
 	}
+	if msg.Api && msg.RootOnly {
+		cmdlog.Fail("api and rootOnly mappings cannot both be set")
+		return internal.ErrHostSetConflict
+	}
 	var cert *x509.Certificate
 	if msg.Certificate != nil {
-		if addedCert {
-			cmdlog.Info("certificate already added")
-			return internal.ErrCertAlreadyAdded
-		}
 		str := "Parsing certificate: "
 		var err error
 		cert, err = parseCertFn(msg.Certificate)
@@ -189,7 +211,7 @@ func handleSetUp(logRoot string, decoder *gob.Decoder) int {
 	}
 	var result *exec.Result
 	if buffErr := bufferFn("config-admin_setup"+suffix, func(writer io.Writer) {
-		result = runSetUpFn(msg.GameId, msg.IP, msg.MacOsExclusiveMappings, msg.CanUseInternet, cert, logRoot, writer, func(options *exec.Options) {
+		result = runSetUpFn(msg.GameId, msg.IP, msg.MacOsExclusiveMappings, msg.CanUseInternet, msg.Api, msg.RootOnly, cert, logRoot, writer, func(options *exec.Options) {
 			if writer != nil {
 				cmdlog.Println("run config admin setup", options.String())
 			}

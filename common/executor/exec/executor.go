@@ -152,7 +152,10 @@ func SetOsExecutableFn(fn func() (string, error)) {
 	osExecutableFn = fn
 }
 
-// SetExecCustomExecutableFn sets a custom execCustomExecutable for testing.
-func SetExecCustomExecutableFn(fn func(executable string, gui bool, wait bool, show bool, executableWorkingPath bool, stdout io.Writer, stderr io.Writer, arg ...string) (error, *exec.Cmd)) {
+// SetExecCustomExecutableFn sets a custom execCustomExecutable for testing. It
+// returns the function it replaced so a test can restore it on cleanup.
+func SetExecCustomExecutableFn(fn func(executable string, gui bool, wait bool, show bool, executableWorkingPath bool, stdout io.Writer, stderr io.Writer, arg ...string) (error, *exec.Cmd)) (previous func(executable string, gui bool, wait bool, show bool, executableWorkingPath bool, stdout io.Writer, stderr io.Writer, arg ...string) (error, *exec.Cmd)) {
+	previous = execCustomExecutableFn
 	execCustomExecutableFn = fn
+	return
 }

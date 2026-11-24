@@ -39,10 +39,28 @@ func (h *HostMappings) String(lineEnding string) string {
 	return sb.String()
 }
 
+// Mappings maps every domain of the game, API included, to ip.
 func Mappings(gameId string, ip net.IP, withMacOsExclusive bool) HostMappings {
+	return MappingsFor(common.AllHosts(gameId, withMacOsExclusive), ip)
+}
+
+// RootMappings maps the domains the root server answers to ip.
+func RootMappings(gameId string, ip net.IP, withMacOsExclusive bool) HostMappings {
+	return MappingsFor(common.RootHosts(gameId, withMacOsExclusive), ip)
+}
+
+// ApiMappings maps the API domains to ip. It is what a standalone API server
+// needs pointed at it.
+func ApiMappings(gameId string, ip net.IP, withMacOsExclusive bool) HostMappings {
+	return MappingsFor(common.ApiHosts(gameId, withMacOsExclusive), ip)
+}
+
+// MappingsFor maps one set of domains to ip. It is the one place that builds a
+// mapping, so the passes that split the domains still agree on the shape.
+func MappingsFor(domains []string, ip net.IP) HostMappings {
 	mappings := make(HostMappings)
 	if ip != nil {
-		for _, host := range common.AllHosts(gameId, withMacOsExclusive) {
+		for _, host := range domains {
 			mappings.Set(Host(host), ip)
 		}
 	}

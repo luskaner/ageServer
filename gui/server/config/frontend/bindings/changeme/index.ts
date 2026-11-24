@@ -10,6 +10,7 @@ export {
 
 export type {
     AnnouncementConfig,
+    ApiConfiguration,
     BattleServerConfig,
     ConfigFile,
     Configuration,
@@ -18,8 +19,11 @@ export type {
     EmbeddedBattleServerDefaults,
     GameConfig,
     GamesConfiguration,
+    HostsConfiguration,
     InternetConfiguration,
+    ModsConfiguration,
     ReplaysConfiguration,
+    SafeConfig,
     SignConfig,
     ValidationError
 } from "./models.js";

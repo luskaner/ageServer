@@ -17,9 +17,15 @@ export interface EmbeddedBattleServerConfig {
 export type EmbeddedBattleServerDefaults = EmbeddedBattleServerConfig;
 
 export interface GameHostsConfig {
-  Hosts: string[];
+  /** Deprecated per-game key: read only to migrate an old document. */
+  Hosts?: string[];
   BattleServers: BattleServerConfig[];
   EmbeddedBattleServer: EmbeddedBattleServerConfig;
+}
+
+export interface HostsConfig {
+  Modern: string[];
+  Legacy: string[];
 }
 
 export interface BattleServerConfig {
@@ -58,6 +64,11 @@ export interface SignConfig {
   PlatformUserIdExceptions: string[];
 }
 
+export interface SafeConfig {
+  Enabled: 'auto' | 'true' | 'false';
+  PlatformUserIdExceptions: string[];
+}
+
 export interface CustomFilesConfig {
   Enabled: boolean;
   Folder: string;
@@ -73,16 +84,32 @@ export interface ReplaysConfig {
   Expiry: string;
 }
 
+export interface ModsConfig {
+  Enabled: boolean;
+  DBPath: string;
+  UploadDir: string;
+  MaxUploadSize: string;
+  RequireAuthForRead: boolean;
+}
+
+export interface ApiConfig {
+  Enabled: boolean;
+}
+
 export interface AppConfig {
   Log: boolean;
   GeneratePlatformUserId: boolean;
   Sign: SignConfig;
+  Safe: SafeConfig;
   Authentication: 'required' | 'cached' | 'adaptive' | 'disabled';
   Internet: InternetConfig;
+  Hosts: HostsConfig;
   Games: GamesConfig;
   Announcement: AnnouncementConfig;
   CustomFiles: CustomFilesConfig;
   Replays: ReplaysConfig;
+  Mods: ModsConfig;
+  Api: ApiConfig;
 }
 
 export interface ValidationErrors {
@@ -111,7 +138,13 @@ export function fieldLabel(field: string): string {
   if (field === 'GeneratePlatformUserId') return 'Generate platform user ID';
   if (field === 'Sign.Enabled') return 'Re-sign catalogues';
   if (field === 'Sign.PlatformUserIdExceptions') return 'Platform user ID exceptions';
+  if (field === 'Safe.Enabled') return 'Safe mode';
+  if (field === 'Safe.PlatformUserIdExceptions') return 'Platform user ID exceptions';
   if (field === 'Internet.Enabled') return 'Internet access';
+  if (field === 'Hosts') return 'Listeners';
+  if (field === 'Hosts.Modern') return 'Regular listeners';
+  if (field === 'Hosts.Legacy') return 'Self-signed listeners';
+  if (/^Hosts\.(?:Modern|Legacy)\.\d+$/.test(field)) return 'Listener address';
   if (field === 'Internet.IP') return 'Public IP address';
   if (field === 'Announcement.Port') return 'Announcement port';
   if (field === 'Announcement.MulticastGroup') return 'Multicast group';
@@ -124,6 +157,12 @@ export function fieldLabel(field: string): string {
   if (field === 'Replays.MaxFileSize') return 'Maximum replay size';
   if (field === 'Replays.MaxTotalSize') return 'Replay total size limit';
   if (field === 'Replays.Expiry') return 'Replay expiry';
+  if (field === 'Mods.Enabled') return 'Mods API';
+  if (field === 'Api.Enabled') return 'Age of Empires API';
+  if (field === 'Mods.DBPath') return 'Mods database file';
+  if (field === 'Mods.UploadDir') return 'Mods upload folder';
+  if (field === 'Mods.MaxUploadSize') return 'Maximum mods request size';
+  if (field === 'Mods.RequireAuthForRead') return 'Authentication for reads';
   if (field.startsWith('Games.Enabled')) return 'Enabled games';
   if (field.startsWith('Sign.PlatformUserIdExceptions')) return 'Platform user ID exceptions';
 

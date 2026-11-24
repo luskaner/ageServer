@@ -130,7 +130,7 @@ func TestSendAgentSetupSuccessViaPipe(t *testing.T) {
 		return enc.Encode(common.ErrSuccess)
 	})
 
-	err, code := ac.a.runSetUpAgent("age2", net.ParseIP("127.0.0.1"), false, false, []byte("cert"))
+	err, code := ac.a.runSetUpAgent("age2", net.ParseIP("127.0.0.1"), false, false, []byte("cert"), false, false)
 	ac.waitServer(t, errc)
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
@@ -205,7 +205,7 @@ func TestSendAgentFirstDecodeNonSuccessExit(t *testing.T) {
 		return enc.Encode(1) // non-success exit code
 	})
 
-	_, code := ac.a.runSetUpAgent("age2", nil, false, true, nil)
+	_, code := ac.a.runSetUpAgent("age2", nil, false, true, nil, false, false)
 	ac.waitServer(t, errc)
 	if code != 1 {
 		t.Fatalf("expected exit 1, got %d", code)
@@ -244,7 +244,7 @@ func TestSendAgentDecodeFinalFailure(t *testing.T) {
 		return ac.remote.Close()
 	})
 
-	err, _ := ac.a.runSetUpAgent("age2", nil, false, true, nil)
+	err, _ := ac.a.runSetUpAgent("age2", nil, false, true, nil, false, false)
 	ac.waitServer(t, errc)
 	if err == nil {
 		t.Fatal("expected error decoding final exit code after agent closed connection")
@@ -283,7 +283,7 @@ func TestRunSetUpAgentViaSendAgentSuccess(t *testing.T) {
 		return enc.Encode(common.ErrSuccess)
 	})
 
-	err, code := ac.a.runSetUpAgent("age3", net.ParseIP("1.2.3.4"), true, true, []byte("certdata"))
+	err, code := ac.a.runSetUpAgent("age3", net.ParseIP("1.2.3.4"), true, true, []byte("certdata"), false, false)
 	ac.waitServer(t, errc)
 	if err != nil || code != common.ErrSuccess {
 		t.Fatalf("expected success, got err %v code %d", err, code)

@@ -17,6 +17,7 @@ import (
 	cmdServer "github.com/luskaner/ageServer/common/cmd/server"
 	commonExecutor "github.com/luskaner/ageServer/common/executor/exec"
 	commonLogger "github.com/luskaner/ageServer/common/logger"
+	commonServer "github.com/luskaner/ageServer/common/server"
 	"github.com/luskaner/ageServer/launcher-common/launcher"
 	"github.com/luskaner/ageServer/launcher-common/launcher/server"
 	"github.com/spf13/pflag"
@@ -25,6 +26,7 @@ import (
 type processedServer struct {
 	server.MesuredIpAddress
 	id          uuid.UUID
+	safe        string
 	description string
 	// label is a compact version of description, without the alternative IPs and
 	// hostnames, for dialogs with little horizontal room.
@@ -38,13 +40,19 @@ func processedServers(gameTitle string, servers map[uuid.UUID]*server.AnnounceMe
 		if internalData == nil {
 			continue
 		}
-		bestAddress := measuredIPs[0]
+		bestAddress, ok := server.SelectServerIP(gameTitle, measuredIPs, nil)
+		if !ok {
+			continue
+		}
 		var bestHostsSlice []string
 		bestHosts := common.IpToHosts(bestAddress.Ip.String())
 		var alternativeIpSlice []string
 		var alternativeHostsSlice []string
 		alternativeHosts := mapset.NewThreadUnsafeSet[string]()
-		for _, alternativeAddress := range measuredIPs[1:] {
+		for _, alternativeAddress := range measuredIPs {
+			if alternativeAddress.Ip.Equal(bestAddress.Ip) {
+				continue
+			}
 			alternativeHosts.Append(common.IpToHosts(alternativeAddress.Ip.String()).Difference(bestHosts).ToSlice()...)
 			alternativeIpSlice = append(alternativeIpSlice, alternativeAddress.Ip.String())
 		}
@@ -80,6 +88,7 @@ func processedServers(gameTitle string, servers map[uuid.UUID]*server.AnnounceMe
 		_, _ = fmt.Fprintf(&sb, " - %d ms (%s)", latencyMs, internalData.Version)
 		processed = append(processed, &processedServer{
 			id:               serverId,
+			safe:             internalData.Safe,
 			MesuredIpAddress: bestAddress,
 			description:      sb.String(),
 			// Only what decides the choice, in an order that survives a narrow
@@ -95,7 +104,7 @@ func processedServers(gameTitle string, servers map[uuid.UUID]*server.AnnounceMe
 	return processed
 }
 
-func DiscoverServersAndSelectBestIpAddr(r launcher.Reporter, stdin io.Reader, gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (id uuid.UUID, ip net.IP, canceled bool) {
+func DiscoverServersAndSelectBestIpAddr(r launcher.Reporter, stdin io.Reader, gameTitle string, singleAutoSelect bool, multicastGroups mapset.Set[netip.Addr], targetPorts mapset.Set[uint16]) (id uuid.UUID, ip net.IP, safe string, canceled bool) {
 	id = uuid.Nil()
 	servers := make(map[uuid.UUID]*server.AnnounceMessage)
 	// The search takes a couple of seconds and prints nothing until it is over,
@@ -127,6 +136,7 @@ func DiscoverServersAndSelectBestIpAddr(r launcher.Reporter, stdin io.Reader, ga
 				selectedServer := procServers[i]
 				ip = selectedServer.Ip
 				id = selectedServer.id
+				safe = selectedServer.safe
 			} else if !ok {
 				// El usuario declinó activamente (X / Cancelar / "Start own").
 				// No es "no hay servidores": es una cancelación expresa.
@@ -173,7 +183,7 @@ func usableServerIndex(idx int, ok bool, procCount int) int {
 	return idx
 }
 
-func (c *Config) StartServer(executable string, flags *pflag.FlagSet, values *cmdServer.Values, stop bool) (exitCode int, ip string) {
+func (c *Config) StartServer(executable string, flags *pflag.FlagSet, values *cmdServer.Values, stop bool) (exitCode int, ip string, data *commonServer.AnnounceMessageDataSupportedLatest) {
 	if !launcher.CanUseInternet {
 		values.CanUseInternet = false
 	}
@@ -186,7 +196,7 @@ func (c *Config) StartServer(executable string, flags *pflag.FlagSet, values *cm
 	}
 	var result *commonExecutor.Result
 	var serverExe string
-	result, serverExe, ip = server.StartServer(c.report(), c.gameId, stopStr, executable, flags, values, func(options commonExecutor.Options) {
+	result, serverExe, ip, data = server.StartServer(c.report(), c.gameId, stopStr, executable, flags, values, func(options commonExecutor.Options) {
 		commonLogger.Println("start server", options.String())
 	})
 	if result.Success() {

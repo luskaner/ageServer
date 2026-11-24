@@ -10,7 +10,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
- * CreateConfigFile validates a new document and creates it at the requested path.
+ * CreateConfigFile validates a new document and creates it at the requested
+ * path. The file name decides the kind: config.<game>.toml creates a per-game
+ * document, anything else the global configuration.
  */
 export function CreateConfigFile(path: string, configuration: $models.Configuration, overwrite: boolean): $CancellablePromise<$models.ConfigFile | null> {
     return $Call.ByID(539612519, path, configuration, overwrite);
@@ -43,6 +45,24 @@ export function OpenConfigFileAtPath(path: string): $CancellablePromise<$models.
 }
 
 /**
+ * OpenGameDocument opens the config.<game>.toml next to path, or a new document
+ * already aimed at that path when the file does not exist yet. It is the only
+ * way one document leads to another: the editor never holds two at once.
+ */
+export function OpenGameDocument(path: string, gameID: string): $CancellablePromise<$models.ConfigFile | null> {
+    return $Call.ByID(3369473508, path, gameID);
+}
+
+/**
+ * OpenGameTemplate loads a new per-game document for the given game. It is
+ * unsaved, so its save asks for the destination, with config.<game>.toml as
+ * the proposed name.
+ */
+export function OpenGameTemplate(gameID: string): $CancellablePromise<$models.ConfigFile | null> {
+    return $Call.ByID(3335646011, gameID);
+}
+
+/**
  * OpenTemplate loads the official server template as a new, unsaved document.
  */
 export function OpenTemplate(): $CancellablePromise<$models.ConfigFile | null> {
@@ -50,14 +70,17 @@ export function OpenTemplate(): $CancellablePromise<$models.ConfigFile | null> {
 }
 
 /**
- * SaveConfiguration validates and saves all editable configuration fields.
+ * SaveConfiguration validates and saves the loaded document. It writes exactly
+ * one file: the per-game document the path names, or the global configuration.
  */
 export function SaveConfiguration(path: string, configuration: $models.Configuration): $CancellablePromise<void> {
     return $Call.ByID(389537572, path, configuration);
 }
 
 /**
- * SaveConfigurationAs validates and saves an edited configuration to a new path.
+ * SaveConfigurationAs validates and saves an edited document to a new path.
+ * The destination's file name decides what is written, so a game document can
+ * be copied next to another configuration without touching its config.toml.
  */
 export function SaveConfigurationAs(sourcePath: string, destination: string, configuration: $models.Configuration, overwrite: boolean): $CancellablePromise<$models.ConfigFile | null> {
     return $Call.ByID(1881804132, sourcePath, destination, configuration, overwrite);
@@ -93,6 +116,24 @@ export function SelectConfigSaveAsDestination(fileName: string): $CancellablePro
  */
 export function SelectCustomFilesFolder(): $CancellablePromise<string> {
     return $Call.ByID(1358461915);
+}
+
+/**
+ * SelectModsDatabasePath opens the native save dialog used for the mods SQLite
+ * file. Closing the picker is a normal answer: the empty path it returns keeps
+ * the setting as it is.
+ */
+export function SelectModsDatabasePath(): $CancellablePromise<string> {
+    return $Call.ByID(2929558412);
+}
+
+/**
+ * SelectModsUploadFolder opens the native directory picker used for the mods
+ * upload folder. Closing the picker is a normal answer: the empty path it
+ * returns leaves the setting as it is.
+ */
+export function SelectModsUploadFolder(): $CancellablePromise<string> {
+    return $Call.ByID(2297226543);
 }
 
 /**

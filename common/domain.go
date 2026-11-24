@@ -2,6 +2,9 @@ package common
 
 import (
 	"fmt"
+	"net"
+	"slices"
+	"strings"
 
 	commonGame "github.com/luskaner/ageServer/common/game"
 )
@@ -61,8 +64,87 @@ func CertDomains() []string {
 	return domains
 }
 
+// CertMode names one of the two certificate pairs the server can listen with.
+// A listener serves every enabled game; the mode only selects which pair it
+// presents, because a title of the other class may reject the handshake.
+type CertMode string
+
+const (
+	// CertModeModern is the CA-signed leaf (cert.pem/key.pem, with cacert.pem as
+	// the CA). AoE IV and AoM require it because they reject a self-signed leaf.
+	CertModeModern CertMode = "modern"
+	// CertModeLegacy is the self-signed leaf (selfsigned_cert.pem and
+	// selfsigned_key.pem), the class AoE I-III: DE have always accepted.
+	CertModeLegacy CertMode = "legacy"
+)
+
+// GameCertMode is the certificate class a title needs. The other class may be
+// accepted once the compatibility spike (docs/multi-game-per-ip.md, M0) proves
+// it, which is why PreferredModes exists instead of a bare boolean.
+func GameCertMode(game string) CertMode {
+	if game == commonGame.AoE4 || game == commonGame.AoM {
+		return CertModeModern
+	}
+	return CertModeLegacy
+}
+
+// PreferredModes returns the certificate classes a title prefers, its own class
+// first and the other one after it.
+func PreferredModes(game string) []CertMode {
+	if GameCertMode(game) == CertModeModern {
+		return []CertMode{CertModeModern, CertModeLegacy}
+	}
+	return []CertMode{CertModeLegacy, CertModeModern}
+}
+
 func SelfSignedCertGame(game string) bool {
-	return game != commonGame.AoE4 && game != commonGame.AoM
+	return GameCertMode(game) == CertModeLegacy
+}
+
+// NormalizeHost is the form every host comparison uses: lower case, no port and
+// no trailing dot.
+func NormalizeHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return strings.TrimSuffix(host, ".")
+}
+
+// BuildDomainToGameIDs maps every host a title talks to the titles that answer
+// on it. Hosts of games whose API tree is not served by this process go to
+// unserved instead of to the map: a disabled API host must answer 404 rather
+// than fall back to the single enabled game.
+//
+// It must be built after SetUseInternet, because the generated release domains
+// depend on it.
+func BuildDomainToGameIDs(apiEnabled bool) (served map[string][]string, unserved map[string]bool) {
+	served = map[string][]string{}
+	unserved = map[string]bool{}
+	for _, g := range commonGame.SupportedGames.ToSlice() {
+		var hosts []string
+		if apiEnabled {
+			hosts = AllHosts(g, true)
+		} else {
+			hosts = RootHosts(g, true)
+			for _, h := range ApiHosts(g, true) {
+				unserved[NormalizeHost(h)] = true
+			}
+		}
+		for _, h := range hosts {
+			key := NormalizeHost(h)
+			if key == "" {
+				continue
+			}
+			if !slices.Contains(served[key], g) {
+				served[key] = append(served[key], g)
+			}
+		}
+	}
+	for key := range served {
+		slices.Sort(served[key])
+	}
+	return served, unserved
 }
 
 func GameHosts(gameId string, withMacOsExclusive bool) (domains []string) {
@@ -85,7 +167,18 @@ func GameHosts(gameId string, withMacOsExclusive bool) (domains []string) {
 	return domains
 }
 
+// AllHosts is every domain the game talks to: the ones the root server answers
+// and the ones the API answers. It is composed from the two halves so that the
+// halves and the whole cannot diverge.
 func AllHosts(gameId string, withMacOsExclusive bool) (domains []string) {
+	domains = RootHosts(gameId, withMacOsExclusive)
+	domains = append(domains, ApiHosts(gameId, withMacOsExclusive)...)
+	return
+}
+
+// RootHosts are the domains the root server answers itself: the game's own
+// hosts, its PlayFab API and the CDN.
+func RootHosts(gameId string, withMacOsExclusive bool) (domains []string) {
 	domains = GameHosts(gameId, withMacOsExclusive)
 	switch gameId {
 	case commonGame.AoM:
@@ -94,12 +187,17 @@ func AllHosts(gameId string, withMacOsExclusive bool) (domains []string) {
 		domains = append(domains, "ed603"+playFabSuffix)
 	}
 	domains = append(domains, CdnAgeOfEmpires)
-	if gameId == commonGame.AoE4 {
-		domains = append(domains, Aoe4ApiAgeOfEmpires)
-	} else {
-		domains = append(domains, ApiAgeOfEmpires)
-	}
 	return
+}
+
+// ApiHosts are the domains of the Age of Empires API: the mods and match
+// content tree. They can be answered by this server or by a standalone API
+// server, which is why they are separate from the rest.
+func ApiHosts(gameId string, _ bool) (domains []string) {
+	if gameId == commonGame.AoE4 {
+		return []string{Aoe4ApiAgeOfEmpires}
+	}
+	return []string{ApiAgeOfEmpires}
 }
 
 func generateDomains(gameId string) (domains []string) {

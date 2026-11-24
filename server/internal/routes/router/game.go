@@ -23,9 +23,7 @@ import (
 	"github.com/luskaner/ageServer/server/internal/routes/game/party"
 	"github.com/luskaner/ageServer/server/internal/routes/game/playerreport"
 	"github.com/luskaner/ageServer/server/internal/routes/game/relationship"
-	"github.com/luskaner/ageServer/server/internal/routes/matchcontent"
 	"github.com/luskaner/ageServer/server/internal/routes/msstore"
-	"github.com/luskaner/ageServer/server/internal/routes/wss"
 )
 
 type Game struct {
@@ -301,7 +299,8 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 	msstoreGroup := gameGroup.Subgroup("/msstore")
 	msstoreGroup.HandleFunc("GET", "/getStoreTokens", msstore.GetStoreTokens)
 
-	g.group.HandleFunc("GET", "/wss/", wss.Handle)
+	// /wss/ is a route of the listener: the token arrives in the first websocket
+	// message, so the game is chosen after the upgrade.
 
 	// Artificial path needed for cloudGroup
 	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
@@ -313,11 +312,8 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 		g.group.HandleFunc("POST", "/cloudfiles/", cloudfiles.Cloudfiles)
 	}
 
-	// Custom files (savegames/replays). Registered here and in
-	// apiAgeOfEmpires.go because each title reaches them through a different
-	// host, so no gameId condition is needed.
-	g.group.HandleFunc("POST", "/api/MatchContent/", matchcontent.Upload)
-	g.group.HandleFunc("GET", "/api/MatchContent/{matchId}", matchcontent.Download)
-	g.group.HandleFunc("GET", "/api/MatchContent/{matchId}/file/{hash}", matchcontent.DownloadFile)
-	return SessionMiddleware(g.group.mux)
+	// Some titles reach MatchContent through this host. The library serves it
+	// here too; the wrapper runs before the session middleware, like the old
+	// anonymous routes did. The mods tree is not mounted on this host.
+	return withAgeAPIServer(SessionMiddleware(g.group.mux), gameId, nil, false)
 }

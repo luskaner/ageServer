@@ -3,6 +3,7 @@ package launcher
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -124,7 +125,39 @@ func LoadConfig(fs *pflag.FlagSet, v Values, r Reporter) (*Configuration, Loaded
 	if err := k.Unmarshal("", &c); err != nil {
 		return nil, loaded, &ExitError{Code: common.ErrConfigParse, Err: err}
 	}
+	if err := ValidateGameArgs(c.Server.Args); err != nil {
+		return nil, loaded, &ExitError{Code: ErrInvalidServerArgs, Err: err}
+	}
 	return &c, loaded, nil
+}
+
+// ValidateGameArgs enforces the shape the multi-game expansion relies on:
+// exactly one '-e' followed by '{Game}', and '{Game}' nowhere else. The
+// substitution is global, so a '{Game}' in a path or an id would be corrupted
+// by the 'age1 -e age2' expansion.
+func ValidateGameArgs(args []string) error {
+	gameRefs, eIndex := 0, -1
+	for i, arg := range args {
+		if strings.Contains(arg, "{Games}") {
+			return fmt.Errorf("Server.ExecutableArgs: {Games} is not supported; use '-e' '{Game}'")
+		}
+		if strings.Contains(arg, "{Game}") {
+			gameRefs++
+		}
+		if arg == "-e" {
+			if eIndex >= 0 {
+				return fmt.Errorf("Server.ExecutableArgs: '-e' must appear exactly once")
+			}
+			eIndex = i
+		}
+	}
+	if eIndex < 0 || eIndex+1 >= len(args) || args[eIndex+1] != "{Game}" {
+		return fmt.Errorf("Server.ExecutableArgs: '-e' must be followed by '{Game}'")
+	}
+	if gameRefs != 1 {
+		return fmt.Errorf("Server.ExecutableArgs: '{Game}' must appear exactly once and only after '-e'")
+	}
+	return nil
 }
 
 // ConfigPaths2File builds the list of candidates for a config file: the one that
@@ -246,6 +279,26 @@ func ValidateServerStopValue(r Reporter, serverStop string, nonWindowsAdmin bool
 	if validValues := ServerStopValues(nonWindowsAdmin); !validValues.Contains(serverStop) {
 		r.Fail("Invalid value for serverStop (%s): %s", list(validValues), serverStop)
 		return ErrInvalidServerStop
+	}
+	return common.ErrSuccess
+}
+
+// ServerApiSeparate reports whether host names a standalone API server. An
+// empty value and '0.0.0.0' both mean the API embedded in the server.
+func ServerApiSeparate(host string) bool {
+	trimmed := strings.TrimSpace(host)
+	return trimmed != "" && trimmed != netip.IPv4Unspecified().String()
+}
+
+// ValidateApiHostValue checks the host of the API server. '0.0.0.0' and an
+// empty value mean the API embedded in the server; anything else has to be a
+// host name or an IPv4 address, because the launcher resolves it to reach port
+// 443.
+func ValidateApiHostValue(r Reporter, serverApiHost string) (exitCode int) {
+	host := strings.TrimSpace(serverApiHost)
+	if addr, err := netip.ParseAddr(host); err == nil && addr.Is6() {
+		r.Fail("Invalid value for Server.Api.Host: only a host or an IPv4 address is supported, not %s.", host)
+		return ErrInvalidServerApiHost
 	}
 	return common.ErrSuccess
 }

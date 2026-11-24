@@ -10,14 +10,20 @@ import (
 // [progressID, definitionID, completionCount, progress, expiryTime,
 // lastCompletedTime, assignedTime].
 //
-// A missing/legacy value is represented as an empty list, never as shared state.
-func GetChallengeProgressData(user models.User) i.A {
+// When safe is true every record is encoded as pending, without touching the
+// persisted document. A missing/legacy value is represented as an empty list,
+// never as shared state.
+func GetChallengeProgressData(user models.User, safe bool) i.A {
 	if user == nil || user.GetChallengeProgress() == nil {
 		return i.A{}
 	}
 	result := i.A{}
 	_ = user.GetChallengeProgress().WithReadOnly(func(data *[]models.ChallengeProgress) error {
-		result = models.EncodeChallengeProgress(*data)
+		if safe {
+			result = models.EncodeChallengeProgressPending(*data)
+		} else {
+			result = models.EncodeChallengeProgress(*data)
+		}
 		return nil
 	})
 	return result

@@ -14,6 +14,7 @@ import {
     NumberInput,
     Radio,
     ScrollArea,
+    Select,
     Stack,
     Switch,
     Text,
@@ -26,6 +27,7 @@ import { useDebouncedValue, useDisclosure, useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications';
 import {
     IconAlertTriangle,
+    IconApi,
     IconBroadcast,
     IconChevronDown,
     IconCircleCheck,
@@ -44,6 +46,7 @@ import {
     IconPlus,
     IconSettings,
     IconShield,
+    IconShieldCheck,
     IconSignature,
     IconSpeakerphone,
     IconTrash,
@@ -56,13 +59,16 @@ import { GameSection } from './GameSection';
 import { IPv4Input } from './IPv4Input';
 import { InfoBar } from './InfoBar';
 import { SectionHeading } from './SectionHeading';
+import { PlatformUserIdExceptionsCard } from './PlatformUserIdExceptionsCard';
 import { SettingCard } from './SettingCard';
 import { SwitchSettingCard } from './SwitchSettingCard';
 import { UnitInput, UnitInputUnit } from './UnitInput';
 import { ConfigFile, ConfigService, Configuration, ValidationError } from '../../bindings/changeme';
 function toServiceConfiguration(config: AppConfig): Configuration {
     const game = (gameId: string) => ({
-        Hosts: config.Games[gameId]?.Hosts ?? [],
+        // Legacy per-game hosts: the editor migrated them to the global table,
+        // so they are sent empty and removed from the document on save.
+        Hosts: [],
         BattleServers: config.Games[gameId]?.BattleServers ?? [],
         EmbeddedBattleServer: config.Games[gameId]?.EmbeddedBattleServer ?? {
             StartIfMissing: 'true',
@@ -80,8 +86,10 @@ function toServiceConfiguration(config: AppConfig): Configuration {
         Log: config.Log,
         GeneratePlatformUserId: config.GeneratePlatformUserId,
         Sign: { Enabled: config.Sign.Enabled, PlatformUserIdExceptions: config.Sign.PlatformUserIdExceptions },
+        Safe: { Enabled: config.Safe.Enabled, PlatformUserIdExceptions: config.Safe.PlatformUserIdExceptions },
         Authentication: config.Authentication,
         Internet: { Enabled: config.Internet.Enabled, IP: config.Internet.IP },
+        Hosts: { Modern: config.Hosts.Modern, Legacy: config.Hosts.Legacy },
         Games: {
             Enabled: config.Games.Enabled,
             age1: game('age1'),
@@ -98,18 +106,41 @@ function toServiceConfiguration(config: AppConfig): Configuration {
             MaxTotalSize: '1GB',
             Expiry: '-1s',
         },
+        Api: config.Api ?? {
+            Enabled: true,
+        },
+        Mods: config.Mods ?? {
+            Enabled: true,
+            DBPath: 'resources/mods/mods.db',
+            UploadDir: 'resources/mods/uploads',
+            MaxUploadSize: '256MB',
+            RequireAuthForRead: false,
+        },
     };
 }
 type GameSectionKey = `game:${string}`;
-type StaticSectionKey = 'general' | 'internet' | 'announcement' | 'customFiles' | 'replays' | 'sign';
+type StaticSectionKey =
+    | 'general'
+    | 'internet'
+    | 'hosts'
+    | 'announcement'
+    | 'api'
+    | 'replays'
+    | 'sign'
+    | 'safe';
 type SectionKey = StaticSectionKey | GameSectionKey;
 const SECTION_LABELS: Record<StaticSectionKey, { title: string; subtitle: string }> = {
     general: { title: 'General', subtitle: 'Basic server configuration options.' },
     internet: { title: 'Internet', subtitle: 'Internet access and the address the server announces.' },
+    hosts: {
+        title: 'Listeners',
+        subtitle: 'Addresses the server binds and the certificate each one presents.',
+    },
     announcement: { title: 'Announcement', subtitle: 'Configure LAN discovery and announcement settings.' },
-    customFiles: { title: 'Custom files', subtitle: 'Storage of the savegames and replays uploaded by the game.' },
+    api: { title: 'API', subtitle: 'Match content storage and the mods API served by this server.' },
     replays: { title: 'Replays', subtitle: 'Uploads of the replays the game records after a match.' },
     sign: { title: 'Sign', subtitle: 'Configure catalogue signing and platform user exceptions.' },
+    safe: { title: 'Safe', subtitle: 'Keep official accounts from syncing progress this server fabricates.' },
 };
 function isGameSection(section: SectionKey): section is GameSectionKey {
     return section.startsWith('game:');
@@ -119,7 +150,7 @@ function sectionInfo(section: SectionKey): { title: string; subtitle: string } {
         const game = AVAILABLE_GAMES.find((candidate) => `game:${candidate.id}` === section);
         return {
             title: game?.name ?? 'Game',
-            subtitle: 'Hosts, battle servers and the embedded battle server for this game.',
+            subtitle: 'Battle servers and the embedded battle server for this game.',
         };
     }
     return SECTION_LABELS[section];
@@ -152,14 +183,19 @@ const AUTH_OPTIONS = [
 ): SectionKey {
     if (field.startsWith('Games.')) {
         const gameId = field.split('.')[1];
+        if (field.endsWith('.Hosts') || field.includes('.Hosts.')) return 'hosts';
         if (AVAILABLE_GAMES.some((game) => game.id === gameId)) return `game:${gameId}`;
         return 'general';
     }
     if (field.startsWith('Internet.')) return 'internet';
+    if (field === 'Hosts' || field.startsWith('Hosts.')) return 'hosts';
     if (field.startsWith('Announcement.')) return 'announcement';
-    if (field.startsWith('CustomFiles.')) return 'customFiles';
+    if (field.startsWith('CustomFiles.')) return 'api';
+    if (field.startsWith('Mods.')) return 'api';
+    if (field.startsWith('Api.')) return 'api';
     if (field.startsWith('Replays.')) return 'replays';
     if (field.startsWith('Sign.')) return 'sign';
+    if (field.startsWith('Safe.')) return 'safe';
     return 'general';
 }
 /** Splits the result of the Go validation into blocking errors and warnings. */ function splitIssues(
@@ -186,12 +222,87 @@ const AUTH_OPTIONS = [
             .map(([field]) => [field, live[field]]),
     );
 }
+/** One certificate class of the global [Hosts] table. */
+const ListenerCard: React.FC<{
+    title: string;
+    description: string;
+    list: 'Modern' | 'Legacy';
+    icon: React.ReactNode;
+    hosts: string[];
+    errors: ValidationErrors;
+    warnings: ValidationErrors;
+    onChange: (list: 'Modern' | 'Legacy', index: number, value: string) => void;
+    onAdd: (list: 'Modern' | 'Legacy') => void;
+    onRemove: (list: 'Modern' | 'Legacy', index: number) => void;
+}> = ({ title, description, list, icon, hosts, errors, warnings, onChange, onAdd, onRemove }) => {
+    const [expanded, handlers] = useDisclosure(false);
+    const prefix = `Hosts.${list}`;
+    return (
+        <SettingCard
+            icon={icon}
+            title={title}
+            description={description}
+            value={hosts.length > 0 ? hosts.join(', ') : 'None'}
+            error={errors[prefix]}
+            warning={warnings[prefix]}
+            invalid={hosts.some((_, index) => Boolean(errors[`${prefix}.${index}`]))}
+            expanded={expanded}
+            onToggle={handlers.toggle}
+            details={
+                <Stack gap="xs" maw={520}>
+                    {hosts.length === 0 && (
+                        <Text size="sm" c="dimmed">
+                            No address listens with this certificate class.
+                        </Text>
+                    )}
+                    {hosts.map((host, index) => (
+                        <Stack key={index} gap={4}>
+                            <Group gap="sm" wrap="nowrap" justify="flex-start">
+                                <IPv4Input value={host} onChange={(value) => onChange(list, index, value)} />
+                                <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    size="sm"
+                                    aria-label={`Remove ${list} address ${index + 1}`}
+                                    onClick={() => onRemove(list, index)}
+                                >
+                                    <IconTrash size={16} stroke={1.6} />
+                                </ActionIcon>
+                            </Group>
+                            {errors[`${prefix}.${index}`] && <Input.Error>{errors[`${prefix}.${index}`]}</Input.Error>}
+                            {!errors[`${prefix}.${index}`] && warnings[`${prefix}.${index}`] && (
+                                <Text size="xs" style={{ color: 'var(--mantine-color-warning)' }}>
+                                    {warnings[`${prefix}.${index}`]}
+                                </Text>
+                            )}
+                        </Stack>
+                    ))}
+                    <Button
+                        variant="subtle"
+                        size="compact-sm"
+                        w="fit-content"
+                        leftSection={<IconPlus size={15} stroke={1.8} />}
+                        onClick={() => onAdd(list)}
+                    >
+                        Add address
+                    </Button>
+                </Stack>
+            }
+        />
+    );
+};
+
 interface Screen2Props {
     initialConfig: AppConfig;
     backendValidationErrors: ValidationError[];
     embeddedDefaults?: Record<string, EmbeddedBattleServerDefaults | undefined> | undefined;
     fileName: string;
     isNew: boolean;
+    // The document this editor holds: config.toml (main) or one
+    // config.<game>.toml. Only one document is edited at a time.
+    documentKind: 'main' | 'game';
+    documentGame?: string;
+    suggestedName?: string;
     onSaved: (file: ConfigFile) => void;
     onBack: () => void;
 }
@@ -201,14 +312,21 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     embeddedDefaults,
     fileName,
     isNew,
+    documentKind,
+    documentGame,
+    suggestedName,
     onSaved,
     onBack,
 }) => {
+    // A per-game document holds only its game: the global settings and the
+    // other games belong to other files, so they are not shown here at all.
+    const isGameDocument = documentKind === 'game';
     const form = useForm<AppConfig>({ mode: 'controlled', initialValues: initialConfig });
     const config = form.values;
     const [authExpanded, authExpandedHandlers] = useDisclosure(false);
     const [multicastExpanded, multicastExpandedHandlers] = useDisclosure(false);
-    const [exceptionsExpanded, exceptionsExpandedHandlers] = useDisclosure(false); // Multicast sits under the LAN announcement: switching the announcement off
+    const [exceptionsExpanded, exceptionsExpandedHandlers] = useDisclosure(false);
+    const [safeExceptionsExpanded, safeExceptionsExpandedHandlers] = useDisclosure(false); // Multicast sits under the LAN announcement: switching the announcement off
     // takes the whole card away, so its details close instead of staying open
     // behind a row that can no longer be clicked.
     const closeMulticastDetails = multicastExpandedHandlers.close;
@@ -225,13 +343,14 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     const sidebarOpened = isNarrowWindow ? overlayNavbarOpened : navbarOpened;
     const toggleSidebar = isNarrowWindow ? overlayNavbarHandlers.toggle : navbarHandlers.toggle;
     const sidebarWidth = 240;
-    const [activeSection, setActiveSection] = useState<SectionKey>('general');
-    const [gamesOpened, gamesHandlers] = useDisclosure(true);
-    const activeGame = isGameSection(activeSection)
-        ? AVAILABLE_GAMES.find((game) => `game:${game.id}` === activeSection)
-        : undefined;
+    const [activeSection, setActiveSection] = useState<SectionKey>(() =>
+        isGameDocument && documentGame ? (`game:${documentGame}` as SectionKey) : 'general',
+    );
+    const activeGame =
+        isGameDocument && isGameSection(activeSection)
+            ? AVAILABLE_GAMES.find((game) => `game:${game.id}` === activeSection)
+            : undefined;
     const selectSection = (section: SectionKey) => {
-        if (isGameSection(section)) gamesHandlers.open();
         setActiveSection(section);
     }; // The file's own validation result seeds the messages shown when it opens;
     // every blur (or committed control) replaces them with the fresh result.
@@ -318,30 +437,19 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     // control was left, so a value typed right now is not in it yet. Warnings are
     // advisories and never block saving.
     const hasErrors = Object.keys(liveIssues.errors).length > 0;
-    const handleGameToggle = (gameId: string) => {
-        const enabled = [...form.values.Games.Enabled];
-        const index = enabled.indexOf(gameId);
-        if (index === -1) {
-            enabled.push(gameId);
-        } else {
-            enabled.splice(index, 1);
-        }
-        form.setFieldValue('Games.Enabled', enabled);
-        requestValidation();
-    };
-    const handleGameHostChange = (gameId: string, index: number, value: string) => {
-        form.setFieldValue(`Games.${gameId}.Hosts.${index}`, value);
+    const handleHostChange = (list: 'Modern' | 'Legacy', index: number, value: string) => {
+        form.setFieldValue(`Hosts.${list}.${index}`, value);
     }; // Adding and removing a host change the shape of the list, which is not
     // something that produces a blur: they count as finished edits themselves.
-    const handleAddGameHost = (gameId: string) => {
-        const hosts = form.values.Games[gameId]?.Hosts ?? [];
-        form.setFieldValue(`Games.${gameId}.Hosts`, [...hosts, '0.0.0.0']);
+    const handleAddHost = (list: 'Modern' | 'Legacy') => {
+        const hosts = form.values.Hosts[list] ?? [];
+        form.setFieldValue(`Hosts.${list}`, [...hosts, '0.0.0.0']);
         requestValidation();
     };
-    const handleRemoveGameHost = (gameId: string, index: number) => {
-        const hosts = [...(form.values.Games[gameId]?.Hosts ?? [])];
+    const handleRemoveHost = (list: 'Modern' | 'Legacy', index: number) => {
+        const hosts = [...(form.values.Hosts[list] ?? [])];
         hosts.splice(index, 1);
-        form.setFieldValue(`Games.${gameId}.Hosts`, hosts);
+        form.setFieldValue(`Hosts.${list}`, hosts);
         requestValidation();
     };
     const handlePortChange = (value: string | number) => {
@@ -367,6 +475,11 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
         confirmRequest?.resolve(confirmed);
         setConfirmRequest(null);
     };
+    // The file this document will be written to, when it is already known:
+    // a game document opened from config.toml knows its sibling path even
+    // before it exists.
+    const knownDestination = isNew ? fileName : '';
+    const needsDestination = isNew && !knownDestination;
     const handleSave = async () => {
         if (hasErrors) return;
         try {
@@ -375,7 +488,9 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                 showSuccessToast('Configuration saved successfully.');
                 return;
             }
-            const destination = await ConfigService.SelectConfigDestination();
+            const destination =
+                knownDestination ||
+                (await ConfigService.SelectConfigSaveAsDestination(suggestedName || 'config.toml'));
             if (!destination) return;
             try {
                 const created = await ConfigService.CreateConfigFile(
@@ -437,20 +552,24 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
         }
     };
     const authLabel = AUTH_OPTIONS.find((option) => option.value === config.Authentication)?.label ?? 'Disabled';
-    // The exceptions are a list, so the card summarises how many there are
-    // instead of printing every id on the row.
-    const exceptionCount = (config.Sign.PlatformUserIdExceptions ?? []).length;
-    const exceptionsValue =
-        exceptionCount === 0 ? 'None' : `${exceptionCount} ${exceptionCount === 1 ? 'exception' : 'exceptions'}`;
     const section = sectionInfo(activeSection);
-    const navItems: Array<{ key: StaticSectionKey; label: string; icon: React.ReactNode }> = [
-        { key: 'general', label: 'General', icon: <IconSettings size={18} stroke={1.6} /> },
-        { key: 'internet', label: 'Internet', icon: <IconWorld size={18} stroke={1.6} /> },
-        { key: 'announcement', label: 'Announcement', icon: <IconSpeakerphone size={18} stroke={1.6} /> },
-        { key: 'customFiles', label: 'Custom files', icon: <IconFiles size={18} stroke={1.6} /> },
-        { key: 'replays', label: 'Replays', icon: <IconMovie size={18} stroke={1.6} /> },
-        { key: 'sign', label: 'Sign', icon: <IconSignature size={18} stroke={1.6} /> },
-    ];
+    // A per-game document carries only that game: the global pages belong to
+    // config.toml, which is a document of its own.
+    const navItems: Array<{ key: StaticSectionKey; label: string; icon: React.ReactNode }> = isGameDocument
+        ? []
+        : [
+              { key: 'general', label: 'General', icon: <IconSettings size={18} stroke={1.6} /> },
+              { key: 'internet', label: 'Internet', icon: <IconWorld size={18} stroke={1.6} /> },
+              { key: 'hosts', label: 'Listeners', icon: <IconNetwork size={18} stroke={1.6} /> },
+              { key: 'announcement', label: 'Announcement', icon: <IconSpeakerphone size={18} stroke={1.6} /> },
+              { key: 'api', label: 'API', icon: <IconApi size={18} stroke={1.6} /> },
+              { key: 'replays', label: 'Replays', icon: <IconMovie size={18} stroke={1.6} /> },
+              { key: 'sign', label: 'Sign', icon: <IconSignature size={18} stroke={1.6} /> },
+              { key: 'safe', label: 'Safe', icon: <IconShieldCheck size={18} stroke={1.6} /> },
+          ];
+    const gameDocumentPage = isGameDocument
+        ? AVAILABLE_GAMES.find((game) => game.id === documentGame) ?? AVAILABLE_GAMES[0]
+        : undefined;
     // A page whose whole feature hangs on one switch carries it next to the
     // title, the way a game page carries the game's, so the page itself only
     // lists the settings that switch turns on.
@@ -458,8 +577,8 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
         switch (activeSection) {
             case 'announcement':
                 return { ...switchProps('Announcement.Enabled'), ariaLabel: 'LAN announcement' };
-            case 'customFiles':
-                return { ...switchProps('CustomFiles.Enabled'), ariaLabel: 'Custom files' };
+            case 'api':
+                return { ...switchProps('Api.Enabled'), ariaLabel: 'Age of Empires API' };
             case 'replays':
                 return { ...switchProps('Replays.Enabled'), ariaLabel: 'Replay uploads' };
             default:
@@ -523,16 +642,6 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                         </Box>
                     </Group>
                     <Group gap="md" wrap="nowrap">
-                        {activeGame && (
-                            <Switch
-                                checked={config.Games.Enabled.includes(activeGame.id)}
-                                onChange={() => handleGameToggle(activeGame.id)}
-                                label={config.Games.Enabled.includes(activeGame.id) ? 'Enabled' : 'Disabled'}
-                                labelPosition="left"
-                                aria-label={`Enable ${activeGame.name}`}
-                                withThumbIndicator={false}
-                            />
-                        )}
                         {headerToggle && (
                             <Switch
                                 checked={headerToggle.checked}
@@ -552,10 +661,12 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                 onClick={handleSave}
                                 disabled={hasErrors}
                             >
-                                {/* A new document has no path yet: saving always
-                                    asks for the destination, so the button says
-                                    what it will do. */}
-                                {isNew ? 'Save as…' : 'Save'}
+                                {/* A new document with no path yet asks for the
+                                    destination, so the button says what it will
+                                    do. One that already knows where it goes (a
+                                    game document next to config.toml) just
+                                    creates that file. */}
+                                {needsDestination ? 'Save as…' : 'Save'}
                             </Button>
                             {!isNew && (
                                 <Menu position="bottom-end" width={190}>
@@ -595,48 +706,28 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
             >
                 <style>{winuiNavItemCss}</style>
                 <AppShell.Section grow component={ScrollArea} px={12} py="sm">
-                    {navItems.slice(0, 2).map(renderStaticNavItem)}
-                    <NavLink
-                        label="Games"
-                        leftSection={<IconDeviceGamepad2 size={18} stroke={1.6} />}
-                        // Only the game itself is the selected item: the group
-                        // stays a plain, expanded container so the pane never
-                        // shows two selections at once.
-                        opened={gamesOpened}
-                        onClick={gamesHandlers.toggle}
-                        className={winuiNavItemClass}
-                        styles={{
-                            root: {
-                                borderRadius: 4,
-                                paddingBlock: 8,
-                                paddingInline: 8,
-                            },
-                        }}
-                    >
-                        {AVAILABLE_GAMES.map((game) => (
-                            <NavLink
-                                key={game.id}
-                                label={game.name}
-                                active={activeSection === `game:${game.id}`}
-                                onClick={() => selectSection(`game:${game.id}`)}
-                                className={winuiNavItemClass}
-                                styles={{
-                                    root: {
-                                        borderRadius: 4,
-                                        paddingBlock: 6,
-                                        paddingInline: 8,
-                                    },
-                                }}
-                            />
-                        ))}
-                    </NavLink>
-                    {navItems.slice(2).map(renderStaticNavItem)}
+                    {gameDocumentPage && (
+                        <NavLink
+                            label={gameDocumentPage.name}
+                            leftSection={<IconDeviceGamepad2 size={18} stroke={1.6} />}
+                            active
+                            className={winuiNavItemClass}
+                            styles={{
+                                root: {
+                                    borderRadius: 4,
+                                    paddingBlock: 8,
+                                    paddingInline: 8,
+                                },
+                            }}
+                        />
+                    )}
+                    {navItems.map(renderStaticNavItem)}
                 </AppShell.Section>
                 <AppShell.Section px={12} py="xs">
                     <Group gap={8} wrap="nowrap">
                         <Box w={8} h={8} bg="teal" style={{ borderRadius: 999, flexShrink: 0 }} />
                         <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>
-                            {fileName || 'New configuration'}
+                            {fileName || suggestedName || 'New configuration'}
                         </Text>
                         <Tooltip label="Open another configuration file" withArrow openDelay={400}>
                             <ActionIcon
@@ -766,9 +857,49 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             </AutoManualCard>
                         </Stack>
                     )}
-                    {/* SECTION 3: ONE GAME AT A TIME */}
+                    {/* SECTION 3: LISTENERS */}
+                    {activeSection === 'hosts' && (
+                        <Stack gap="sm">
+                            <InfoBar severity="info">
+                                <Text size="sm">
+                                    Every listener serves every enabled game. The certificate class only changes what
+                                    the address presents: AoE IV and AoM require the regular certificate, while AoE I-III:
+                                    DE have always used the self-signed one. A single 0.0.0.0 is a placeholder: the server
+                                    keeps only the class the enabled games need, and it cannot serve both classes at once,
+                                    so enabling regular and self-signed games together needs a concrete address in one
+                                    list.
+                                </Text>
+                            </InfoBar>
+                            <ListenerCard
+                                title="Regular certificates"
+                                description="CA-signed certificate used by Age of Empires IV and Age of Mythology: Retold."
+                                list="Modern"
+                                icon={<IconNetwork size={20} stroke={1.6} />}
+                                hosts={config.Hosts.Modern}
+                                errors={allErrors}
+                                warnings={allWarnings}
+                                onChange={handleHostChange}
+                                onAdd={handleAddHost}
+                                onRemove={handleRemoveHost}
+                            />
+                            <ListenerCard
+                                title="Self-signed certificates"
+                                description="Self-signed certificate used by Age of Empires I-III: DE."
+                                list="Legacy"
+                                icon={<IconShield size={20} stroke={1.6} />}
+                                hosts={config.Hosts.Legacy}
+                                errors={allErrors}
+                                warnings={allWarnings}
+                                onChange={handleHostChange}
+                                onAdd={handleAddHost}
+                                onRemove={handleRemoveHost}
+                            />
+                        </Stack>
+                    )}
+                    {/* SECTION 4: ONE GAME AT A TIME */}
                     {activeGame && (
-                        <GameSection
+                        <Stack gap="sm">
+                            <GameSection
                             key={activeGame.id}
                             game={activeGame}
                             config={config}
@@ -776,9 +907,6 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             warnings={allWarnings}
                             embeddedDefaults={embeddedDefaults?.[activeGame.id]}
                             disabled={!config.Games.Enabled.includes(activeGame.id)}
-                            onHostChange={handleGameHostChange}
-                            onAddHost={handleAddGameHost}
-                            onRemoveHost={handleRemoveGameHost}
                             onChangeBattleServers={(gameId, servers) =>
                                 form.setFieldValue(`Games.${gameId}.BattleServers`, servers)
                             }
@@ -786,9 +914,10 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                 form.setFieldValue(`Games.${gameId}.EmbeddedBattleServer`, embedded)
                             }
                             onCommit={requestValidation}
-                        />
+                            />
+                        </Stack>
                     )}
-                    {/* SECTION 4: ANNOUNCEMENT */}
+                    {/* SECTION 5: ANNOUNCEMENT */}
                     {activeSection === 'announcement' && (
                         <Stack gap="sm">
                             <SettingCard
@@ -845,13 +974,23 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             />
                         </Stack>
                     )}
-                    {/* SECTION 5: CUSTOM FILES */}
-                    {activeSection === 'customFiles' && (
+                    {/* SECTION 6: API */}
+                    {activeSection === 'api' && (
                         <Stack gap="sm">
+                            <SectionHeading level="section">
+                                Custom files
+                            </SectionHeading>
+                            <SwitchSettingCard
+                                icon={<IconFiles size={20} stroke={1.6} />}
+                                title="Custom files"
+                                description="Serve the match content endpoints the game uses to exchange savegames and replays."
+                                ariaLabel="Custom files"
+                                {...switchProps('CustomFiles.Enabled')}
+                            />
                             <AutoManualCard
                                 icon={<IconFolder size={20} stroke={1.6} />}
                                 title="Storage folder"
-                                description="Folder where the files are stored. Automatic uses the system temporary folder."
+                                description="Folder where the files are stored. Defaults to resources/custom-files, relative to the server directory."
                                 error={allErrors['CustomFiles.Folder']}
                                 value={config.CustomFiles.Folder}
                                 onChange={(value) => form.setFieldValue('CustomFiles.Folder', value)}
@@ -911,9 +1050,87 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                     />
                                 }
                             />
+                            <SectionHeading level="section" spaced>
+                                Mods
+                            </SectionHeading>
+                            <SwitchSettingCard
+                                icon={<IconApi size={20} stroke={1.6} />}
+                                title="Mods"
+                                description="Serve the mods of this server's library instead of proxying them to the official service."
+                                ariaLabel="Mods"
+                                {...switchProps('Mods.Enabled')}
+                            />
+                            <AutoManualCard
+                                icon={<IconDatabase size={20} stroke={1.6} />}
+                                title="Database file"
+                                description="SQLite database of the mods API. Defaults to resources/mods/mods.db, relative to the server directory."
+                                error={allErrors['Mods.DBPath']}
+                                value={config.Mods.DBPath}
+                                onChange={(value) => form.setFieldValue('Mods.DBPath', value)}
+                                onCommit={requestValidation}
+                                disabled={!config.Mods.Enabled}
+                            >
+                                {(manual) => (
+                                    <FolderPickerInput
+                                        {...manual}
+                                        onSelect={requestValidation}
+                                        picker={() => ConfigService.SelectModsDatabasePath()}
+                                        ariaLabel="Mods database file"
+                                        placeholder="No database file selected"
+                                        failureTitle="Database file not selected"
+                                    />
+                                )}
+                            </AutoManualCard>
+                            <AutoManualCard
+                                icon={<IconFolder size={20} stroke={1.6} />}
+                                title="Upload folder"
+                                description="Folder for the archives and screenshots uploaded to Publish. Defaults to resources/mods/uploads, relative to the server directory."
+                                error={allErrors['Mods.UploadDir']}
+                                value={config.Mods.UploadDir}
+                                onChange={(value) => form.setFieldValue('Mods.UploadDir', value)}
+                                onCommit={requestValidation}
+                                disabled={!config.Mods.Enabled}
+                            >
+                                {(manual) => (
+                                    <FolderPickerInput
+                                        {...manual}
+                                        onSelect={requestValidation}
+                                        picker={() => ConfigService.SelectModsUploadFolder()}
+                                        ariaLabel="Mods upload folder"
+                                        placeholder="No folder selected"
+                                        failureTitle="Upload folder not selected"
+                                    />
+                                )}
+                            </AutoManualCard>
+                            <SettingCard
+                                icon={<IconFile size={20} stroke={1.6} />}
+                                title="Maximum request size"
+                                description="Largest single mods request, in megabytes or gigabytes. It also raises the body cap the server applies (default: 256MB)."
+                                error={allErrors['Mods.MaxUploadSize']}
+                                disabled={!config.Mods.Enabled}
+                                control={
+                                    <UnitInput
+                                        value={config.Mods.MaxUploadSize}
+                                        onChange={(value) => form.setFieldValue('Mods.MaxUploadSize', value)}
+                                        units={SIZE_UNITS}
+                                        ariaLabel="Maximum mods request size"
+                                        onCommit={requestValidation}
+                                        disabled={!config.Mods.Enabled}
+                                    />
+                                }
+                            />
+                            <SwitchSettingCard
+                                icon={<IconShield size={20} stroke={1.6} />}
+                                title="Require authentication to read"
+                                description="Reject read requests without credentials. Off keeps the endpoints the specification declares anonymous."
+                                error={allErrors['Mods.RequireAuthForRead']}
+                                ariaLabel="Require authentication to read"
+                                {...switchProps('Mods.RequireAuthForRead')}
+                                disabled={!config.Mods.Enabled}
+                            />
                         </Stack>
                     )}
-                    {/* SECTION 6: REPLAYS */}
+                    {/* SECTION 7: REPLAYS */}
                     {activeSection === 'replays' && (
                         <Stack gap="sm">
                             <SettingCard
@@ -969,7 +1186,7 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             />
                         </Stack>
                     )}
-                    {/* SECTION 7: SIGN */}
+                    {/* SECTION 8: SIGN */}
                     {activeSection === 'sign' && (
                         <Stack gap="sm">
                             <SwitchSettingCard
@@ -980,72 +1197,56 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                                 ariaLabel="Sign catalogues"
                                 {...switchProps('Sign.Enabled')}
                             />
-                            <SettingCard
-                                icon={<IconId size={20} stroke={1.6} />}
-                                title="Platform user ID exceptions"
-                                // The list is the opposite of the switch, exactly
-                                // as the template documents it.
+                            <PlatformUserIdExceptionsCard
+                                ids={config.Sign.PlatformUserIdExceptions ?? []}
                                 description={
                                     config.Sign.Enabled
                                         ? 'Users listed here keep the captured signatures. One ID per line.'
                                         : 'Users listed here get this server’s signatures while everyone else keeps the captured ones. One ID per line.'
                                 }
-                                value={exceptionsValue}
                                 error={allErrors['Sign.PlatformUserIdExceptions']}
                                 expanded={exceptionsExpanded}
                                 onToggle={exceptionsExpandedHandlers.toggle}
-                                details={
-                                    <div style={{ width: '100%', maxWidth: 560 }}>
-                                        <Stack gap="xs" style={{ width: '100%' }}>
-                                            {(config.Sign.PlatformUserIdExceptions ?? []).map((id, index) => (
-                                                <Stack key={index} gap={4}>
-                                                    <Group gap="xs" wrap="nowrap" justify="space-between">
-                                                        <Input
-                                                            value={id}
-                                                            onChange={(e) => {
-                                                                const arr = [...(config.Sign.PlatformUserIdExceptions ?? [])];
-                                                                arr[index] = e.target.value;
-                                                                form.setFieldValue('Sign.PlatformUserIdExceptions', arr);
-                                                            }}
-                                                            onBlur={requestValidation}
-                                                            placeholder="Platform user ID"
-                                                            style={{ flex: 1 }}
-                                                        />
-                                                        <ActionIcon
-                                                            variant="subtle"
-                                                            color="gray"
-                                                            size="sm"
-                                                            aria-label={`Remove exception ${index + 1}`}
-                                                            disabled={(config.Sign.PlatformUserIdExceptions ?? []).length <= 1}
-                                                            onClick={() => {
-                                                                const arr = [...(config.Sign.PlatformUserIdExceptions ?? [])];
-                                                                arr.splice(index, 1);
-                                                                form.setFieldValue('Sign.PlatformUserIdExceptions', arr);
-                                                                requestValidation();
-                                                            }}
-                                                        >
-                                                            <IconTrash size={16} stroke={1.6} />
-                                                        </ActionIcon>
-                                                    </Group>
-                                                </Stack>
-                                            ))}
-                                            <Button
-                                                variant="subtle"
-                                                size="compact-sm"
-                                                w="fit-content"
-                                                leftSection={<IconPlus size={15} stroke={1.8} />}
-                                                disabled={(config.Sign.PlatformUserIdExceptions ?? []).some((id) => id === '')}
-                                                onClick={() => {
-                                                    const arr = [...(config.Sign.PlatformUserIdExceptions ?? [])];
-                                                    arr.push('');
-                                                    form.setFieldValue('Sign.PlatformUserIdExceptions', arr);
-                                                }}
-                                            >
-                                                Add exception
-                                            </Button>
-                                        </Stack>
-                                    </div>
+                                onChange={(ids) => form.setFieldValue('Sign.PlatformUserIdExceptions', ids)}
+                                onCommit={requestValidation}
+                            />
+                        </Stack>
+                    )}
+                    {/* SECTION 9: SAFE */}
+                    {activeSection === 'safe' && (
+                        <Stack gap="sm">
+                            <SettingCard
+                                icon={<IconShieldCheck size={20} stroke={1.6} />}
+                                title="Safe mode"
+                                description="Withhold achievements, challenge progress and avatar-stat writes from sessions that would sync them to Xbox. Automatic applies only to official sessions; Always and Never override that."
+                                error={allErrors['Safe.Enabled']}
+                                control={
+                                    <Select
+                                        value={config.Safe.Enabled}
+                                        onChange={(value) => {
+                                            if (!value) return;
+                                            form.setFieldValue('Safe.Enabled', value as AppConfig['Safe']['Enabled']);
+                                            requestValidation();
+                                        }}
+                                        data={[
+                                            { value: 'auto', label: 'Automatic' },
+                                            { value: 'true', label: 'Always' },
+                                            { value: 'false', label: 'Never' },
+                                        ]}
+                                        allowDeselect={false}
+                                        aria-label="Safe mode"
+                                        w={170}
+                                    />
                                 }
+                            />
+                            <PlatformUserIdExceptionsCard
+                                ids={config.Safe.PlatformUserIdExceptions ?? []}
+                                description="Users listed here invert the mode above, exactly as in Sign. One platform user ID per line."
+                                error={allErrors['Safe.PlatformUserIdExceptions']}
+                                expanded={safeExceptionsExpanded}
+                                onToggle={safeExceptionsExpandedHandlers.toggle}
+                                onChange={(ids) => form.setFieldValue('Safe.PlatformUserIdExceptions', ids)}
+                                onCommit={requestValidation}
                             />
                         </Stack>
                     )}

@@ -24,13 +24,19 @@ const LatencyMeasurementCount = 3
 var (
 	tlsDialFn       = tls.Dial
 	serverPort      = "443"
-	serverPath      = "test"
+	serverPath      = common.AnnouncePath
 	newHTTPClientFn = func(serverName string, insecureSkipVerify bool, rootCAs *x509.CertPool) *http.Client {
 		tr := &http.Transport{TLSClientConfig: TlsConfig(serverName, insecureSkipVerify, rootCAs)}
 		return &http.Client{Transport: tr, Timeout: 1 * time.Second}
 	}
-	buildURLFn = func(ipAddr net.IP) url.URL {
-		return url.URL{Scheme: "https", Host: net.JoinHostPort(ipAddr.String(), serverPort), Path: serverPath}
+	buildURLFn = func(ipAddr net.IP, gameTitle string) url.URL {
+		u := url.URL{Scheme: "https", Host: net.JoinHostPort(ipAddr.String(), serverPort), Path: serverPath}
+		// A multi-game listener can only answer with the title that was asked
+		// for; without it the request is ambiguous and the server answers 400.
+		query := u.Query()
+		query.Set("title", gameTitle)
+		u.RawQuery = query.Encode()
+		return u
 	}
 )
 
@@ -67,6 +73,39 @@ func CheckConnectionFromServer(host string, insecureSkipVerify bool, rootCAs *x5
 	return err
 }
 
+// ProbeApiServer asks the liveness probe of a standalone API server and returns
+// the status it answered with. A server that is up answers 200; the launcher
+// reads anything else as a server it cannot use.
+//
+// It is the API's own probe and not this server's announce route: a standalone
+// ageAPIServer publishes no announcement, so growing the probe into one would
+// make the check depend on something the API server does not have.
+func ProbeApiServer(host string, insecureSkipVerify bool, rootCAs *x509.CertPool) (status int, err error) {
+	ips := common.HostOrIpToIps(host)
+	var ip string
+	if len(ips) == 0 {
+		ip = host
+	} else {
+		ip = ips[0]
+	}
+	client := newHTTPClientFn(host, insecureSkipVerify, rootCAs)
+	u := url.URL{Scheme: "https", Host: net.JoinHostPort(ip, serverPort), Path: "/" + common.ApiTestPath}
+	var req *http.Request
+	if req, err = http.NewRequest("GET", u.String(), nil); err != nil {
+		return
+	}
+	req.Header.Set("User-Agent", common.UserAgent())
+	req.Host = host
+	var resp *http.Response
+	if resp, err = client.Do(req); err != nil {
+		return
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+	return resp.StatusCode, nil
+}
+
 func LanServerHost(id uuid.UUID, gameTitle string, host string, insecureSkipVerify bool, rootCAs *x509.CertPool) (ok bool) {
 	ipAddrs := common.HostOrIpToIps(host)
 	if len(ipAddrs) == 0 {
@@ -82,7 +121,7 @@ func LanServerHost(id uuid.UUID, gameTitle string, host string, insecureSkipVeri
 
 func LanServerIP(id uuid.UUID, gameTitle string, ipAddr net.IP, serverName string, insecureSkipVerify bool, rootCAs *x509.CertPool, ignoreLatency bool) (ok bool, serverId uuid.UUID, latency time.Duration, data *AnnounceMessageDataSupportedLatest) {
 	client := newHTTPClientFn(serverName, insecureSkipVerify, rootCAs)
-	u := buildURLFn(ipAddr)
+	u := buildURLFn(ipAddr, gameTitle)
 	if !ignoreLatency {
 		var latencyAccumulator time.Duration
 		for range LatencyMeasurementCount {

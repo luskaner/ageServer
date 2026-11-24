@@ -18,7 +18,6 @@ type Game interface {
 	Advertisements() Advertisements
 	ChatChannels() ChatChannels
 	Sessions() Sessions
-	CustomFiles() CustomFiles
 	Matchmaking() Matchmaking
 	MatchHistory() MatchHistory
 }
@@ -103,7 +102,6 @@ type MainGame struct {
 	leaderboardDefinitions LeaderboardDefinitions
 	items                  Items
 	presenceDefinitions    PresenceDefinitions
-	customFiles            CustomFiles
 	matchHistory           MatchHistory
 	title                  string
 }
@@ -125,8 +123,6 @@ type InstanceOpts struct {
 	LeaderboardDefinitions LeaderboardDefinitions
 	PresenceDefinitions    PresenceDefinitions
 	Items                  Items
-	CustomFiles            CustomFiles
-	CustomFilesOpts        *CustomFilesOpts
 }
 
 func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
@@ -157,9 +153,6 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 	if opts.Instances.Sessions == nil {
 		opts.Instances.Sessions = &MainSessions{}
 	}
-	if opts.Instances.CustomFiles == nil {
-		opts.Instances.CustomFiles = &MainCustomFiles{}
-	}
 	if opts.Instances.Matchmaking == nil {
 		opts.Instances.Matchmaking = &MainMatchmaking{}
 	}
@@ -170,7 +163,6 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 		advertisements: opts.Instances.Advertisements,
 		chatChannels:   opts.Instances.ChatChannels,
 		sessions:       opts.Instances.Sessions,
-		customFiles:    opts.Instances.CustomFiles,
 		matchmaking:    opts.Instances.Matchmaking,
 		title:          gameId,
 	}
@@ -188,7 +180,6 @@ func CreateMainGame(gameId string, opts *CreateMainGameOpts) Game {
 	game.advertisements.Initialize(game.users, game.battleServers)
 	game.chatChannels.Initialize(game.resources.ChatChannels())
 	game.sessions.Initialize()
-	game.customFiles.Initialize(gameId, opts.Instances.CustomFilesOpts)
 	game.matchHistory = NewMatchHistoryStoreForGame(gameId)
 	if mainUsers, ok := game.users.(*MainUsers); ok && mainUsers != nil {
 		history := game.matchHistory
@@ -319,10 +310,6 @@ func (g *MainGame) Items() Items {
 
 func (g *MainGame) PresenceDefinitions() PresenceDefinitions {
 	return g.presenceDefinitions
-}
-
-func (g *MainGame) CustomFiles() CustomFiles {
-	return g.customFiles
 }
 
 // getChallengeFormat returns the JSON format used by a game's challenges.json.

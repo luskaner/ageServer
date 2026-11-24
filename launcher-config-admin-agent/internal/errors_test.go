@@ -17,6 +17,7 @@ func TestErrorConstants(t *testing.T) {
 		{"ErrCertInvalid", ErrCertInvalid},
 		{"ErrFlushCache", ErrFlushCache},
 		{"ErrGameNotSupported", ErrGameNotSupported},
+		{"ErrHostSetConflict", ErrHostSetConflict},
 	}
 	for _, c := range constants {
 		if c.val == 0 {
