@@ -281,7 +281,6 @@ func TestAllRoutes_AuthenticatedAndAnonymous(t *testing.T) {
 		"/game/news/getNews":                true,
 		"/game/Challenge/getChallenges":     true,
 		"/game/item/getItemBundleItemsJson": true,
-		"/wss/":                             true,
 	}
 	for _, gid := range gameIds {
 		t.Run(gid, func(t *testing.T) {
@@ -580,7 +579,8 @@ func buildExpectedRoutes(gameId string) []routeCase {
 
 	add("GET", "/game/msstore/getStoreTokens")
 
-	add("GET", "/wss/")
+	// /wss/ is a listener route: the token arrives in the first websocket
+	// message, so the game mux no longer registers it.
 
 	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {
 		add("GET", "/cloudfiles/")

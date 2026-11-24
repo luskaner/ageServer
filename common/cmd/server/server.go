@@ -24,6 +24,12 @@ type Values struct {
 	AnnounceMulticast      string
 	AnnounceMulticastGroup string
 	StartBsIfMissing       string
+	// Mode filters which certificate class is listened with (modern, legacy).
+	// Empty listens with both configured sets.
+	Mode string
+	// GameConfig is an explicit per-game config file, only valid when exactly
+	// one game is enabled.
+	GameConfig string
 	// AssumeQueue unlocks matchmaking when the map pool a client uses is not
 	// part of the bundled automatchMaps.json. Only "rm-solo" is accepted; see
 	// docs/matchmaking.md §4.1.
@@ -49,7 +55,9 @@ func SingleFlagSet(version string, configPaths []string, runFn func(*pflag.FlagS
 	cmd.LogRootCommand(flags, &values.LogRoot)
 	flags.BoolVarP(&values.GeneratePlatformUserId, "generatePlatformUserId", "g", false, "Generate the Platform User Id based on the user's IP.")
 	flags.StringVar(&values.Id, "id", "", "Server instance ID to identify it.")
-	flags.StringVar(&values.StartBsIfMissing, "startBsIfMissing", "true", "Embedded battle server mode for all enabled games (true, false, required)")
+	flags.StringVar(&values.StartBsIfMissing, "startBsIfMissing", "", "Embedded battle server mode for all enabled games (true, false, required). Defaults to the per-game configuration")
+	flags.StringVar(&values.Mode, "mode", "", "Listen only with this certificate mode (modern, legacy)")
+	flags.StringVar(&values.GameConfig, "gameConfig", "", "Per-game config file (default config.<game>.toml in the config directories). Only valid with a single enabled game")
 	flags.StringVar(&values.AssumeQueue, "assumeQueue", "", "Match unknown matchTypes as the given queue when the bundled map pool is out of date. Accepted: rm-solo (forces the match to be unrated)")
 	return
 }

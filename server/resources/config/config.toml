@@ -41,29 +41,29 @@ Enabled = true
 # which requires Internet.Enabled = true.
 IP = 'auto'
 
+# The addresses the server listens on. Every enabled game is served on every
+# listener; the certificate mode is what changes, not the game. Only IPv4 is
+# supported; use a LAN address or 0.0.0.0 (all interfaces).
+[Hosts]
+# Principal addresses: CA root + signed leaf. Required by AoE IV: AE and AoM: RT.
+Modern = ['0.0.0.0']
+# Alternative addresses: self-signed leaf (the certificate AoE I-III: DE accept).
+# Leave empty unless you need a second address for those titles.
+Legacy = []
+
 [Games]
 # Games that the server will accept.
 # "age1" (AoE: DE), "age2" (AoE II: DE), "age3" (AoE III: DE), "age4" (AoE IV: AE) and "athens" (AoM: RT).
 Enabled = []
 
-# Games.<game>.Hosts is the hosts/IPs the server will bind to for that game. Only IPv4 is supported.
-# Must be *unique* within enabled games.
-# *Recommended to change to the LAN host* (use 0.0.0.0 and 127.0.0.1 for testing)
-
-[Games.age1]
-Hosts = ['0.0.0.0']
-
-[Games.age2]
-Hosts = ['0.0.0.0']
-
-[Games.age3]
-Hosts = ['0.0.0.0']
-
-[Games.age4]
-Hosts = ['0.0.0.0']
-
-[Games.athens]
-Hosts = ['0.0.0.0']
+# Per-game battle servers and the embedded battle server live in
+# config.<game>.toml, next to this file. The old [Games.<game>.BattleServers]
+# and [Games.<game>.EmbeddedBattleServer] keys of this file are still read as a
+# fallback, with a warning; migrate them when you can.
+#
+# The old [Games.<game>.Hosts] keys are deprecated: hosts are global in [Hosts].
+# When [Hosts] is absent they are migrated if every enabled game lists the same
+# addresses; differing lists stop the boot.
 
 # CONFIGURING BATTLE SERVERS
 # See the complete information in BattleServers.md
@@ -120,26 +120,12 @@ Expiry = '12h'
 
 # CONFIGURING EMBEDDED BATTLE SERVER
 # Runs a battle server inside the age server process instead of as a
-# separate executable. Configure per game under Games.<game>.EmbeddedBattleServer.
+# separate executable. Configure it per game in config.<game>.toml under
+# [Game.EmbeddedBattleServer]; the same values in this file are still read as
+# a fallback with a warning.
 # The server starts the battle server on startup and stops it on shutdown.
 # The battle server appears in the game's battle server list like any
 # external battle server.
-#
-# STARTIFMISSING: Controls when the embedded battle server auto-starts if no
-# external battle server is configured ([[Games.<game>.BattleServers]]) and none
-# is detected by the battle-server-manager. Accepted values:
-#   "true" (default): always start if missing
-#   "false": never auto-start
-#   "required": start if missing for age4/athens, otherwise false
-# [Games.age1.EmbeddedBattleServer]
-# StartIfMissing = "true"
-# Region = 'my-embedded-server'
-# Name = 'Embedded Battle Server'
-# IPv4 = 'auto'
-# BsPort = 0
-# WebSocketPort = 0
-# OutOfBandPort = 0
-# LogLevel = 'info'
 #
 # The simulation period is not configurable here: each game always runs with
 # its own default (25 ms for AoE: DE, 50 for AoE III: DE and AoM: RT, 125 for

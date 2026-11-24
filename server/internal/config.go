@@ -38,6 +38,9 @@ type EmbeddedBattleServer struct {
 }
 
 type Game struct {
+	// Hosts is read from the old Games.<id>.Hosts documents only. Hosts are
+	// global now (Configuration.Hosts); the field survives so an existing
+	// config.toml can be migrated instead of silently losing its bindings.
 	Hosts                []string
 	BattleServers        []BattleServer
 	EmbeddedBattleServer EmbeddedBattleServer
@@ -50,6 +53,14 @@ type Games struct {
 	Age3    Game
 	Age4    Game
 	Athens  Game
+}
+
+// Hosts are the addresses the server listens on, shared by every enabled game.
+// Modern is the principal set (CA-signed leaf); Legacy is the alternative set
+// (self-signed leaf) for the titles that reject the modern one.
+type Hosts struct {
+	Modern []string
+	Legacy []string
 }
 
 type Internet struct {
@@ -126,6 +137,7 @@ type Configuration struct {
 	Authentication         string
 	Internet               Internet
 	Announcement           Announcement
+	Hosts                  Hosts
 	Games                  Games
 	CustomFiles            CustomFiles
 	Replays                Replays
@@ -144,6 +156,42 @@ type Automatch struct {
 	AssumeQueue string
 }
 
+// Get returns the game section for gameId.
+func (g *Games) Get(gameId string) *Game {
+	switch gameId {
+	case "age1":
+		return &g.Age1
+	case "age2":
+		return &g.Age2
+	case "age3":
+		return &g.Age3
+	case "age4":
+		return &g.Age4
+	case "athens":
+		return &g.Athens
+	default:
+		return nil
+	}
+}
+
+// Set replaces the game section for gameId.
+func (g *Games) Set(gameId string, cfg Game) {
+	switch gameId {
+	case "age1":
+		g.Age1 = cfg
+	case "age2":
+		g.Age2 = cfg
+	case "age3":
+		g.Age3 = cfg
+	case "age4":
+		g.Age4 = cfg
+	case "athens":
+		g.Athens = cfg
+	}
+}
+
+// GetGameHosts is deprecated: hosts are global in Configuration.Hosts. It is
+// kept for the configuration editor and tests that still read old documents.
 func (cfg *Configuration) GetGameHosts(gameId string) []string {
 	switch gameId {
 	case "age1":

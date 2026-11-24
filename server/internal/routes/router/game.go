@@ -24,7 +24,6 @@ import (
 	"github.com/luskaner/ageServer/server/internal/routes/game/playerreport"
 	"github.com/luskaner/ageServer/server/internal/routes/game/relationship"
 	"github.com/luskaner/ageServer/server/internal/routes/msstore"
-	"github.com/luskaner/ageServer/server/internal/routes/wss"
 )
 
 type Game struct {
@@ -300,7 +299,8 @@ func (g *Game) InitializeRoutes(gameId string, _ http.Handler) http.Handler {
 	msstoreGroup := gameGroup.Subgroup("/msstore")
 	msstoreGroup.HandleFunc("GET", "/getStoreTokens", msstore.GetStoreTokens)
 
-	g.group.HandleFunc("GET", "/wss/", wss.Handle)
+	// /wss/ is a route of the listener: the token arrives in the first websocket
+	// message, so the game is chosen after the upgrade.
 
 	// Artificial path needed for cloudGroup
 	if gameId == game.AoE2 || gameId == game.AoE3 || gameId == game.AoE4 || gameId == game.AoM {

@@ -14,7 +14,6 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
-    IconAlertTriangle,
     IconCpu,
     IconPlus,
     IconServerCog,
@@ -110,49 +109,38 @@ export interface GameSectionProps {
      * cannot be opened until the game is enabled in the header.
      */
     disabled?: boolean;
-    onHostChange: (gameId: string, index: number, value: string) => void;
-    onAddHost: (gameId: string) => void;
-    onRemoveHost: (gameId: string, index: number) => void;
     onChangeBattleServers: (gameId: string, servers: BattleServerConfig[]) => void;
     onChangeEmbeddedBattleServer: (gameId: string, config: EmbeddedBattleServerConfig) => void;
     onCommit: () => void;
 }
 
 /**
- * One game's page: three collapsible cards. Hosts shows the bound addresses as a
- * comma-separated summary and lets them be edited when expanded; Battle servers
- * lists its regions the same way (they are unique within the game) and
- * expanding lists each server's address/ports with a delete button. Adding a
- * server opens a single-entry dialog. Embedded Battle Server configures the
- * built-in battle server that runs inside the age server process.
+ * One game's page: two collapsible cards. Battle servers lists its regions as a
+ * comma-separated summary (they are unique within the game) and expanding lists
+ * each server's address/ports with a delete button. Adding a server opens a
+ * single-entry dialog. Embedded Battle Server configures the built-in battle
+ * server that runs inside the age server process. Hosts are global and live on
+ * the Listeners page.
  */
 export const GameSection: React.FC<GameSectionProps> = ({
     game,
     config,
     errors,
     warnings,
-    onHostChange,
-    onAddHost,
-    onRemoveHost,
     onChangeBattleServers,
     onChangeEmbeddedBattleServer,
     embeddedDefaults,
     disabled = false,
     onCommit,
 }) => {
-    const [hostsExpanded, hostsHandlers] = useDisclosure(false);
     const [serversExpanded, serversHandlers] = useDisclosure(false);
     const [ebsExpanded, ebsHandlers] = useDisclosure(false);
     const [addServerOpen, addServerHandlers] = useDisclosure(false);
 
     const gameConfig = config.Games[game.id];
-    const hosts = Array.isArray(gameConfig?.Hosts) ? gameConfig.Hosts : [];
     const servers = Array.isArray(gameConfig?.BattleServers) ? gameConfig.BattleServers : [];
     const ebs = gameConfig?.EmbeddedBattleServer ?? EMPTY_EMBEDDED_BATTLE_SERVER;
 
-    const hostsError = errors[`Games.${game.id}.Hosts`];
-    const hostRowErrors = hosts.map((_, index) => errors[`Games.${game.id}.Hosts.${index}`]);
-    const hostRowWarnings = hosts.map((_, index) => warnings[`Games.${game.id}.Hosts.${index}`]);
     const battleServersError = errors[`Games.${game.id}.BattleServers`];
     const battleServerEntryErrors = Object.keys(errors).filter((field) =>
         field.startsWith(`Games.${game.id}.BattleServers.`),
@@ -189,69 +177,6 @@ export const GameSection: React.FC<GameSectionProps> = ({
                     </Text>
                 </InfoBar>
             )}
-
-            <SettingCard
-                icon={<IconWorld size={20} stroke={1.6} />}
-                title="Hosts"
-                description="IPv4 addresses the server binds to for this game."
-                value={hosts.length > 0 ? hosts.join(', ') : 'None'}
-                disabled={disabled}
-                error={hostsError}
-                invalid={hostRowErrors.some((message) => Boolean(message))}
-                expanded={hostsExpanded}
-                onToggle={hostsHandlers.toggle}
-                details={
-                    <Stack gap="xs" maw={520}>
-                        {hosts.map((host, index) => (
-                            <Stack key={index} gap={4}>
-                                <Group gap="sm" wrap="nowrap" justify="flex-start">
-                                    <IPv4Input
-                                        value={host}
-                                        onChange={(value) => onHostChange(game.id, index, value)}
-                                    />
-                                    <ActionIcon
-                                        variant="subtle"
-                                        color="gray"
-                                        size="sm"
-                                        aria-label={`Remove host ${index + 1} of ${game.name}`}
-                                        // A game needs a host to bind to, so the last row stays.
-                                        disabled={hosts.length <= 1}
-                                        onClick={() => onRemoveHost(game.id, index)}
-                                    >
-                                        <IconTrash size={16} stroke={1.6} />
-                                    </ActionIcon>
-                                </Group>
-                                {hostRowErrors[index] && <Input.Error>{hostRowErrors[index]}</Input.Error>}
-                                {!hostRowErrors[index] && hostRowWarnings[index] && (
-                                    <Group gap={6} wrap="nowrap" align="flex-start">
-                                        <IconAlertTriangle
-                                            size={13}
-                                            stroke={1.8}
-                                            style={{
-                                                color: 'var(--mantine-color-warning)',
-                                                flexShrink: 0,
-                                                marginTop: 2,
-                                            }}
-                                        />
-                                        <Text size="xs" style={{ color: 'var(--mantine-color-warning)' }}>
-                                            {hostRowWarnings[index]}
-                                        </Text>
-                                    </Group>
-                                )}
-                            </Stack>
-                        ))}
-                        <Button
-                            variant="subtle"
-                            size="compact-sm"
-                            w="fit-content"
-                            leftSection={<IconPlus size={15} stroke={1.8} />}
-                            onClick={() => onAddHost(game.id)}
-                        >
-                            Add host
-                        </Button>
-                    </Stack>
-                }
-            />
 
             <SectionHeading level="section" spaced>
                 Battle servers

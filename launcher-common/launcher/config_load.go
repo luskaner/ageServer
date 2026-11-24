@@ -125,7 +125,39 @@ func LoadConfig(fs *pflag.FlagSet, v Values, r Reporter) (*Configuration, Loaded
 	if err := k.Unmarshal("", &c); err != nil {
 		return nil, loaded, &ExitError{Code: common.ErrConfigParse, Err: err}
 	}
+	if err := ValidateGameArgs(c.Server.Args); err != nil {
+		return nil, loaded, &ExitError{Code: ErrInvalidServerArgs, Err: err}
+	}
 	return &c, loaded, nil
+}
+
+// ValidateGameArgs enforces the shape the multi-game expansion relies on:
+// exactly one '-e' followed by '{Game}', and '{Game}' nowhere else. The
+// substitution is global, so a '{Game}' in a path or an id would be corrupted
+// by the 'age1 -e age2' expansion.
+func ValidateGameArgs(args []string) error {
+	gameRefs, eIndex := 0, -1
+	for i, arg := range args {
+		if strings.Contains(arg, "{Games}") {
+			return fmt.Errorf("Server.ExecutableArgs: {Games} is not supported; use '-e' '{Game}'")
+		}
+		if strings.Contains(arg, "{Game}") {
+			gameRefs++
+		}
+		if arg == "-e" {
+			if eIndex >= 0 {
+				return fmt.Errorf("Server.ExecutableArgs: '-e' must appear exactly once")
+			}
+			eIndex = i
+		}
+	}
+	if eIndex < 0 || eIndex+1 >= len(args) || args[eIndex+1] != "{Game}" {
+		return fmt.Errorf("Server.ExecutableArgs: '-e' must be followed by '{Game}'")
+	}
+	if gameRefs != 1 {
+		return fmt.Errorf("Server.ExecutableArgs: '{Game}' must appear exactly once and only after '-e'")
+	}
+	return nil
 }
 
 // ConfigPaths2File builds the list of candidates for a config file: the one that

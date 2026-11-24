@@ -104,9 +104,41 @@ func parseMessage(sessions models.Sessions, message i.H, currentSession models.S
 	return op, sess
 }
 
-func Handle(w http.ResponseWriter, r *http.Request) {
-	sessions := models.G(r).Sessions()
+// SessionLookup resolves the session token of the first websocket message to a
+// session and its game. The listener uses it to serve every enabled game from
+// one address; the game, and therefore its sessions, is fixed for the whole
+// connection once the first message resolves it.
+type SessionLookup func(token string) (models.Session, models.Game, bool)
 
+// Handle is the single-game entry point: the game comes from the request
+// context, which is what the game mux used to provide.
+func Handle(w http.ResponseWriter, r *http.Request) {
+	HandleWith(w, r, func(token string) (models.Session, models.Game, bool) {
+		game, _ := r.Context().Value(models.GameContextKey).(models.Game)
+		if game == nil || game.Sessions() == nil {
+			return nil, nil, false
+		}
+		sess, ok := game.Sessions().GetById(token)
+		if !ok {
+			return nil, nil, false
+		}
+		return sess, game, true
+	})
+}
+
+func loginToken(message i.H) string {
+	raw, ok := message["sessionToken"]
+	if !ok {
+		return ""
+	}
+	token, _ := raw.(string)
+	return token
+}
+
+// HandleWith upgrades the connection at the listener, reads the first message
+// and resolves its session token to a game before serving the rest of the
+// connection with that game's sessions.
+func HandleWith(w http.ResponseWriter, r *http.Request, lookup SessionLookup) {
 	// WriteBufferSize is deprecated since gws v1.4.5 and has no effect, so it
 	// is not set: the writer uses its own default.
 	option := &gws.ServerOption{
@@ -140,12 +172,13 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, sess := parseMessage(sessions, loginMsg, nil)
-	if sess == nil {
+	sess, game, ok := lookup(loginToken(loginMsg))
+	if !ok || sess == nil || game == nil || game.Sessions() == nil {
 		writeClose(socket, "Invalid login message data")
 		_ = socket.NetConn().Close()
 		return
 	}
+	sessions := game.Sessions()
 
 	sessionToken := sess.Id()
 	connections.Store(sessionToken, socket, nil)

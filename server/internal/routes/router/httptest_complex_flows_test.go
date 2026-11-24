@@ -495,18 +495,9 @@ func TestComplex_WSS_LoginDependent_Httptest(t *testing.T) {
 		// Como no es un hijack real, el handler hará upgrade y fallará, pero no debe panic
 		t.Logf("✓ WSS sin sessionToken → code=%d body=%q", rr.Code, rr.Body.String())
 	})
-	// WSS con sessionToken válido en primer mensaje no se puede simular sin websocket real,
-	// pero verificamos que la ruta está registrada y no da 404
-	t.Run("WSS_RutaRegistrada", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/wss/", nil)
-		req = req.WithContext(context.WithValue(req.Context(), "game", g))
-		rr := httptest.NewRecorder()
-		h.ServeHTTP(rr, req)
-		if rr.Code == 404 {
-			t.Fatalf("wss no registrada")
-		}
-		t.Logf("✓ WSS ruta registrada code=%d", rr.Code)
-	})
+	// /wss/ moved to the listener: the game is resolved from the token in the
+	// first websocket message, not from the game mux. Its resolution is covered
+	// by the dispatcher tests and by wss.HandleWith's own test.
 }
 
 // TestComplex_InputValidation_PorRuta

@@ -4,6 +4,7 @@ package main
 type ConfigFile struct {
 	Path             string            `json:"path"`
 	Content          string            `json:"content"`
+	GameFiles        map[string]string `json:"gameFiles"`
 	Config           *Configuration    `json:"config"`
 	ValidationErrors []ValidationError `json:"validationErrors"`
 }
@@ -11,6 +12,15 @@ type ConfigFile struct {
 type InternetConfiguration struct {
 	Enabled bool   `toml:"Enabled" json:"Enabled"`
 	IP      string `toml:"IP" json:"IP"`
+}
+
+// HostsConfiguration is the global listener configuration: every listener
+// serves every enabled game, and the list only selects the certificate mode it
+// presents. The old per-game Hosts key survives in GameConfig so an existing
+// document can still be read and migrated.
+type HostsConfiguration struct {
+	Modern []string `toml:"Modern" json:"Modern"`
+	Legacy []string `toml:"Legacy" json:"Legacy"`
 }
 
 type SignConfig struct {
@@ -21,6 +31,7 @@ type SignConfig struct {
 type Configuration struct {
 	Log                    bool                     `toml:"Log" json:"Log"`
 	GeneratePlatformUserID bool                     `toml:"GeneratePlatformUserId" json:"GeneratePlatformUserId"`
+	Hosts                  HostsConfiguration       `toml:"Hosts" json:"Hosts"`
 	Sign                   SignConfig               `toml:"Sign" json:"Sign"`
 	Authentication         string                   `toml:"Authentication" json:"Authentication"`
 	Internet               InternetConfiguration    `toml:"Internet" json:"Internet"`

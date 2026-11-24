@@ -19,7 +19,9 @@ The model in `models.go` mirrors `server/internal/config.go`. Do not invent keys
 | `[Internet] Enabled` | Allow DNS check, authentication and public IP lookup. |
 | `[Internet] IP` | `'auto'` or an IPv4 address. |
 | `[Games] Enabled` | `age1`, `age2`, `age3`, `age4`, `athens`. |
-| `[Games.<game>] Hosts` | IPv4 addresses the server binds for that game; must be unique among enabled games. |
+| `[Hosts] Modern/Legacy` | IPv4 addresses the server binds, shared by every enabled game. `Modern` presents the CA-signed leaf (AoE IV/AoM), `Legacy` the self-signed one (AoE I-III: DE). |
+| `[Games.<game>] Hosts` | **Deprecated.** Read only to migrate an old document; the editor removes it on save and validates it as a warning. |
+| `config.<game>.toml` | Optional per-game document: `[[Game.BattleServers]]` and `[Game.EmbeddedBattleServer]`. The editor reads and writes it next to `config.toml` for every enabled game. |
 | `[[Games.<game>.BattleServers]]` | One table per battle server. See below. |
 | `[Announcement]` | `Enabled`, `Multicast`, `Port`, `MulticastGroup`. |
 | `[CustomFiles]` | `Enabled`, `Folder`, `MaxFileSize`, `MaxTotalSize`, `Expiry`. These are the `/api/MatchContent/` endpoints; `Folder` defaults to `resources/custom-files`, relative to the server directory. |
@@ -41,23 +43,33 @@ WebSocketPort = 30004
 OutOfBandPort = 30005   # not written for age1
 ```
 
-`configurationDocument` rewrites every game through `rewriteBattleServers`:
+The battle servers and the embedded battle server live in one document per
+game, `config.<game>.toml`, written by `prepareGameDocuments` through
+`gameDocumentWithBase`; `configurationDocument` only touches `config.toml`
+(global settings and `[Hosts]`). For every enabled game:
 
 - removes an old inline `BattleServers = [...]` key and every
-  `[[Games.<game>.BattleServers]]` block;
+  `[[Game.BattleServers]]` block before writing the canonical tables;
 - writes the canonical tables back only when the list has entries, so a save
   never appends empty `BattleServers` and a second save is a no-op;
 - keeps the rest of the document (comments, unknown keys) untouched.
 
-Both `rewriteBattleServers` and `rewriteEmbeddedBattleServer` edit the tables
-they find **key by key** (`writeTableKeys`) instead of deleting and recreating
-them: a key that is already there keeps its line, its inline comment and its
-position, a missing key is appended after the last one, and a key the editor
-does not know is left alone. Only a block the game no longer has is removed, and
-even then a comment run separated from the block by a blank line stays in the
-document (`blockCutEnd`), because it closes the section that follows. A whole
-table the document is missing is added next to its siblings (`[Games.age3]` with
-the other games), not at the end of the file.
+Both `rewriteBattleServersSection` and `rewriteEmbeddedBattleServerSection` edit
+the tables they find **key by key** (`writeTableKeys`) instead of deleting and
+recreating them: a key that is already there keeps its line, its inline comment
+and its position, a missing key is appended after the last one, and a key the
+editor does not know is left alone. Only a block the game no longer has is
+removed, and even then a comment run separated from the block by a blank line
+stays in the document (`blockCutEnd`), because it closes the section that
+follows. A whole table the document is missing is added after the `[Game]`
+header, not at the end of the file.
+
+The per-game embedded table is a **delta** against
+`[Games.<game>.EmbeddedBattleServer]` of `config.toml`: only the keys whose
+value differs from the inherited one are written, and a key that matches it is
+removed from the per-game file. An inherited `BsPort = 30003` therefore stays
+inherited after an open and save instead of being pinned to `0`. Reading is the
+mirror image: `readGameFiles` overlays only the keys the file assigns.
 
 `TestConfigurationDocumentKeepsEveryTemplateComment` asserts that every comment
 of the shipped template survives a save that changes values across the document;
@@ -81,14 +93,20 @@ instance serves the `/api/MatchContent/` endpoints, whose settings stay on the
 **Custom files** page, and that the library is built when either section is
 enabled.
 
+### Listeners page
+
+**Listeners** edits the global `[Hosts]` table, not a game: every address serves
+every enabled game. Two cards, **Modern certificates** and **Legacy
+certificates**, each list their addresses as a comma-separated summary;
+expanding shows one IPv4 input per address with add and delete buttons. The page
+says once that the certificate class only changes what the address presents.
+
 ### Game pages
 
 Each game is its own sub-item under **Games** in the sidebar. The page title is
-the game name and the header carries its enabled switch. The page holds the
-**Hosts** card and then a **Battle servers** section with two cards:
+the game name and the header carries its enabled switch. The page holds a
+**Battle servers** section with two cards:
 
-- **Hosts**: the right side lists the hosts separated by commas; expanding shows
-  one IPv4 input per host with add and delete buttons.
 - **Standalone**: the battle servers this document announces. The right side
   lists their regions separated by commas (the region is unique within the
   game); expanding lists each server's region/name, address and ports with a
@@ -106,7 +124,7 @@ The section says, once, that the server also uses the battle servers the
 battle-server-manager finds on the PC: neither card above describes the whole
 picture, and a user must not read "None" as "no battle server at all".
 
-A game that is not in `Games.Enabled` is read-only: its three cards are passed
+A game that is not in `Games.Enabled` is read-only: its two cards are passed
 `disabled`, so they keep their summary but cannot be opened, and the page says
 why. Only the header switch (and the sidebar) lead to them.
 
@@ -137,11 +155,11 @@ neither the document nor the editor has a key for it.
 `ConfigService.EmbeddedBattleServerDefaults()` returns that right-hand column to
 the frontend, which shows it as placeholders and hints: the editor must not
 carry its own copy of those values. An empty `Region` is valid, and
-`rewriteEmbeddedBattleServer` only writes the keys that carry a value, so an
-empty region keeps meaning "Server".
+`embeddedBattleServerEntries` only writes keys whose value differs from the
+inherited one, so an empty region keeps meaning "Server".
 
-`rewriteEmbeddedBattleServer` writes the table only when it *differs* from the
-config defaults (an empty `IPv4` compares equal to `"auto"` and an empty
+`embeddedBattleServerEntries` also normalises the values the server resolves on
+its own (an empty `IPv4` compares equal to `"auto"` and an empty
 `StartIfMissing` to `"true"`): a document without an embedded section saves back
 unchanged instead of gaining one block per game. A save that only touches other
 settings must stay byte-identical.
@@ -154,7 +172,8 @@ settings must stay byte-identical.
 `239.31.97.8`, `CustomFiles` enabled with
 `resources/custom-files`/`32MB`/`256MB`/`12h`, `Mods` enabled with
 `resources/mods/mods.db`/`resources/mods/uploads`/`256MB` and
-`RequireAuthForRead = false`, and `Hosts = ['0.0.0.0']` for every game.
+`RequireAuthForRead = false`, and `Hosts.Modern = ['0.0.0.0']` with an empty
+`Hosts.Legacy`.
 `Replays` defaults to enabled with `32MB`/`1GB`/`-1s`, and `Api.Enabled` defaults
 to `true`. The default folders are relative paths resolved against the server's
 working directory, where `resources` lives.
@@ -166,9 +185,19 @@ it through `ConfigService.ValidateConfiguration`. Errors block saving; warnings
 do not. It mirrors what the server would do at startup:
 
 - authentication values and the `GeneratePlatformUserId`/Internet combinations;
-- supported games, and at least one host for an enabled game;
-- hosts must resolve to IPv4 and not be shared by two enabled games (disabled
-  games only warn);
+- supported games;
+- `Hosts.Modern`/`Hosts.Legacy` cannot both be empty; every host must resolve to
+  IPv4; the two lists cannot share an address; `0.0.0.0` cannot be combined with
+  another address in the same list or with a non-empty list of the other class;
+- an enabled game whose certificate class has no listener only warns, because the
+  other class may still work; a deprecated `Games.<game>.Hosts` also warns;
+- a document without `[Hosts]` that still holds `Games.<game>.Hosts` is migrated
+  when it opens: equal lists go to the class of the enabled games (all legacy →
+  `Hosts.Legacy`, otherwise `Hosts.Modern`, emptying the other list). Differing
+  lists are not guessed: saving such a document fails with both games and lists
+  named;
+- the per-game files are parsed when the document opens: an invalid
+  `config.<game>.toml` fails with its path;
 - enabled `age4` and `athens` need a battle server, and an embedded one that is
   allowed to start counts (`validateGameBattleServers`): the server starts the
   embedded instance before initializing the game and registers it with the rest

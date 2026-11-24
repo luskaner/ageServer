@@ -63,7 +63,9 @@ import { UnitInput, UnitInputUnit } from './UnitInput';
 import { ConfigFile, ConfigService, Configuration, ValidationError } from '../../bindings/changeme';
 function toServiceConfiguration(config: AppConfig): Configuration {
     const game = (gameId: string) => ({
-        Hosts: config.Games[gameId]?.Hosts ?? [],
+        // Legacy per-game hosts: the editor migrated them to the global table,
+        // so they are sent empty and removed from the document on save.
+        Hosts: [],
         BattleServers: config.Games[gameId]?.BattleServers ?? [],
         EmbeddedBattleServer: config.Games[gameId]?.EmbeddedBattleServer ?? {
             StartIfMissing: 'true',
@@ -83,6 +85,7 @@ function toServiceConfiguration(config: AppConfig): Configuration {
         Sign: { Enabled: config.Sign.Enabled, PlatformUserIdExceptions: config.Sign.PlatformUserIdExceptions },
         Authentication: config.Authentication,
         Internet: { Enabled: config.Internet.Enabled, IP: config.Internet.IP },
+        Hosts: { Modern: config.Hosts.Modern, Legacy: config.Hosts.Legacy },
         Games: {
             Enabled: config.Games.Enabled,
             age1: game('age1'),
@@ -112,11 +115,23 @@ function toServiceConfiguration(config: AppConfig): Configuration {
     };
 }
 type GameSectionKey = `game:${string}`;
-type StaticSectionKey = 'general' | 'internet' | 'announcement' | 'customFiles' | 'mods' | 'replays' | 'sign';
+type StaticSectionKey =
+    | 'general'
+    | 'internet'
+    | 'hosts'
+    | 'announcement'
+    | 'customFiles'
+    | 'mods'
+    | 'replays'
+    | 'sign';
 type SectionKey = StaticSectionKey | GameSectionKey;
 const SECTION_LABELS: Record<StaticSectionKey, { title: string; subtitle: string }> = {
     general: { title: 'General', subtitle: 'Basic server configuration options.' },
     internet: { title: 'Internet', subtitle: 'Internet access and the address the server announces.' },
+    hosts: {
+        title: 'Listeners',
+        subtitle: 'Addresses the server binds and the certificate each one presents.',
+    },
     announcement: { title: 'Announcement', subtitle: 'Configure LAN discovery and announcement settings.' },
     customFiles: {
         title: 'Custom files',
@@ -134,7 +149,7 @@ function sectionInfo(section: SectionKey): { title: string; subtitle: string } {
         const game = AVAILABLE_GAMES.find((candidate) => `game:${candidate.id}` === section);
         return {
             title: game?.name ?? 'Game',
-            subtitle: 'Hosts, battle servers and the embedded battle server for this game.',
+            subtitle: 'Battle servers and the embedded battle server for this game.',
         };
     }
     return SECTION_LABELS[section];
@@ -167,10 +182,12 @@ const AUTH_OPTIONS = [
 ): SectionKey {
     if (field.startsWith('Games.')) {
         const gameId = field.split('.')[1];
+        if (field.endsWith('.Hosts') || field.includes('.Hosts.')) return 'hosts';
         if (AVAILABLE_GAMES.some((game) => game.id === gameId)) return `game:${gameId}`;
         return 'general';
     }
     if (field.startsWith('Internet.')) return 'internet';
+    if (field === 'Hosts' || field.startsWith('Hosts.')) return 'hosts';
     if (field.startsWith('Announcement.')) return 'announcement';
     if (field.startsWith('CustomFiles.')) return 'customFiles';
     if (field.startsWith('Mods.')) return 'mods';
@@ -203,6 +220,76 @@ const AUTH_OPTIONS = [
             .map(([field]) => [field, live[field]]),
     );
 }
+/** One certificate class of the global [Hosts] table. */
+const ListenerCard: React.FC<{
+    title: string;
+    description: string;
+    list: 'Modern' | 'Legacy';
+    icon: React.ReactNode;
+    hosts: string[];
+    errors: ValidationErrors;
+    warnings: ValidationErrors;
+    onChange: (list: 'Modern' | 'Legacy', index: number, value: string) => void;
+    onAdd: (list: 'Modern' | 'Legacy') => void;
+    onRemove: (list: 'Modern' | 'Legacy', index: number) => void;
+}> = ({ title, description, list, icon, hosts, errors, warnings, onChange, onAdd, onRemove }) => {
+    const [expanded, handlers] = useDisclosure(false);
+    const prefix = `Hosts.${list}`;
+    return (
+        <SettingCard
+            icon={icon}
+            title={title}
+            description={description}
+            value={hosts.length > 0 ? hosts.join(', ') : 'None'}
+            error={errors[prefix]}
+            warning={warnings[prefix]}
+            invalid={hosts.some((_, index) => Boolean(errors[`${prefix}.${index}`]))}
+            expanded={expanded}
+            onToggle={handlers.toggle}
+            details={
+                <Stack gap="xs" maw={520}>
+                    {hosts.length === 0 && (
+                        <Text size="sm" c="dimmed">
+                            No address listens with this certificate class.
+                        </Text>
+                    )}
+                    {hosts.map((host, index) => (
+                        <Stack key={index} gap={4}>
+                            <Group gap="sm" wrap="nowrap" justify="flex-start">
+                                <IPv4Input value={host} onChange={(value) => onChange(list, index, value)} />
+                                <ActionIcon
+                                    variant="subtle"
+                                    color="gray"
+                                    size="sm"
+                                    aria-label={`Remove ${list} address ${index + 1}`}
+                                    onClick={() => onRemove(list, index)}
+                                >
+                                    <IconTrash size={16} stroke={1.6} />
+                                </ActionIcon>
+                            </Group>
+                            {errors[`${prefix}.${index}`] && <Input.Error>{errors[`${prefix}.${index}`]}</Input.Error>}
+                            {!errors[`${prefix}.${index}`] && warnings[`${prefix}.${index}`] && (
+                                <Text size="xs" style={{ color: 'var(--mantine-color-warning)' }}>
+                                    {warnings[`${prefix}.${index}`]}
+                                </Text>
+                            )}
+                        </Stack>
+                    ))}
+                    <Button
+                        variant="subtle"
+                        size="compact-sm"
+                        w="fit-content"
+                        leftSection={<IconPlus size={15} stroke={1.8} />}
+                        onClick={() => onAdd(list)}
+                    >
+                        Add address
+                    </Button>
+                </Stack>
+            }
+        />
+    );
+};
+
 interface Screen2Props {
     initialConfig: AppConfig;
     backendValidationErrors: ValidationError[];
@@ -346,19 +433,19 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
         form.setFieldValue('Games.Enabled', enabled);
         requestValidation();
     };
-    const handleGameHostChange = (gameId: string, index: number, value: string) => {
-        form.setFieldValue(`Games.${gameId}.Hosts.${index}`, value);
+    const handleHostChange = (list: 'Modern' | 'Legacy', index: number, value: string) => {
+        form.setFieldValue(`Hosts.${list}.${index}`, value);
     }; // Adding and removing a host change the shape of the list, which is not
     // something that produces a blur: they count as finished edits themselves.
-    const handleAddGameHost = (gameId: string) => {
-        const hosts = form.values.Games[gameId]?.Hosts ?? [];
-        form.setFieldValue(`Games.${gameId}.Hosts`, [...hosts, '0.0.0.0']);
+    const handleAddHost = (list: 'Modern' | 'Legacy') => {
+        const hosts = form.values.Hosts[list] ?? [];
+        form.setFieldValue(`Hosts.${list}`, [...hosts, '0.0.0.0']);
         requestValidation();
     };
-    const handleRemoveGameHost = (gameId: string, index: number) => {
-        const hosts = [...(form.values.Games[gameId]?.Hosts ?? [])];
+    const handleRemoveHost = (list: 'Modern' | 'Legacy', index: number) => {
+        const hosts = [...(form.values.Hosts[list] ?? [])];
         hosts.splice(index, 1);
-        form.setFieldValue(`Games.${gameId}.Hosts`, hosts);
+        form.setFieldValue(`Hosts.${list}`, hosts);
         requestValidation();
     };
     const handlePortChange = (value: string | number) => {
@@ -463,6 +550,7 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
     const navItems: Array<{ key: StaticSectionKey; label: string; icon: React.ReactNode }> = [
         { key: 'general', label: 'General', icon: <IconSettings size={18} stroke={1.6} /> },
         { key: 'internet', label: 'Internet', icon: <IconWorld size={18} stroke={1.6} /> },
+        { key: 'hosts', label: 'Listeners', icon: <IconNetwork size={18} stroke={1.6} /> },
         { key: 'announcement', label: 'Announcement', icon: <IconSpeakerphone size={18} stroke={1.6} /> },
         { key: 'customFiles', label: 'Custom files', icon: <IconFiles size={18} stroke={1.6} /> },
         { key: 'mods', label: 'Mods', icon: <IconApi size={18} stroke={1.6} /> },
@@ -786,7 +874,43 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             </AutoManualCard>
                         </Stack>
                     )}
-                    {/* SECTION 3: ONE GAME AT A TIME */}
+                    {/* SECTION 3: LISTENERS */}
+                    {activeSection === 'hosts' && (
+                        <Stack gap="sm">
+                            <InfoBar severity="info">
+                                <Text size="sm">
+                                    Every listener serves every enabled game. The certificate class only changes what
+                                    the address presents: AoE IV and AoM require the modern certificate, while AoE I-III:
+                                    DE have always used the legacy one.
+                                </Text>
+                            </InfoBar>
+                            <ListenerCard
+                                title="Modern certificates"
+                                description="CA-signed certificate used by Age of Empires IV and Age of Mythology: Retold."
+                                list="Modern"
+                                icon={<IconNetwork size={20} stroke={1.6} />}
+                                hosts={config.Hosts.Modern}
+                                errors={allErrors}
+                                warnings={allWarnings}
+                                onChange={handleHostChange}
+                                onAdd={handleAddHost}
+                                onRemove={handleRemoveHost}
+                            />
+                            <ListenerCard
+                                title="Legacy certificates"
+                                description="Self-signed certificate used by Age of Empires I-III: DE."
+                                list="Legacy"
+                                icon={<IconShield size={20} stroke={1.6} />}
+                                hosts={config.Hosts.Legacy}
+                                errors={allErrors}
+                                warnings={allWarnings}
+                                onChange={handleHostChange}
+                                onAdd={handleAddHost}
+                                onRemove={handleRemoveHost}
+                            />
+                        </Stack>
+                    )}
+                    {/* SECTION 4: ONE GAME AT A TIME */}
                     {activeGame && (
                         <GameSection
                             key={activeGame.id}
@@ -796,9 +920,6 @@ export const Screen2_ConfigEditor: React.FC<Screen2Props> = ({
                             warnings={allWarnings}
                             embeddedDefaults={embeddedDefaults?.[activeGame.id]}
                             disabled={!config.Games.Enabled.includes(activeGame.id)}
-                            onHostChange={handleGameHostChange}
-                            onAddHost={handleAddGameHost}
-                            onRemoveHost={handleRemoveGameHost}
                             onChangeBattleServers={(gameId, servers) =>
                                 form.setFieldValue(`Games.${gameId}.BattleServers`, servers)
                             }

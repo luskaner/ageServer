@@ -43,9 +43,12 @@ type AnnounceMessageData001 struct {
 	GameTitles []string
 }
 
-// AnnounceMessageData002 sends a single game title (as announcements are separated by game) and version
+// AnnounceMessageData002 sends a single game title (as announcements are separated by game), version
+// and the certificate mode of the listener that answered. Mode is empty when an
+// older server does not send it; older launchers ignore the extra field.
 // v1.11.X and higher
 type AnnounceMessageData002 struct {
 	GameTitle string
 	Version   string
+	Mode      string `json:",omitempty"`
 }

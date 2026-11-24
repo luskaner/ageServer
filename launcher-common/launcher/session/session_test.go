@@ -119,6 +119,34 @@ func captureStdout(t *testing.T, fn func()) string {
 	return <-done
 }
 
+func TestResolveServerStop(t *testing.T) {
+	cases := []struct {
+		name     string
+		cfgAuto  bool
+		resolved string
+		multi    bool
+		want     string
+		warn     bool
+	}{
+		{"auto starter multi", true, "true", true, "false", true},
+		{"auto reuse multi", true, "false", true, "false", false},
+		{"explicit true multi", false, "true", true, "true", true},
+		{"explicit false multi", false, "false", true, "false", false},
+		{"auto starter single", true, "true", false, "true", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, warnings := resolveServerStop(tc.cfgAuto, tc.resolved, tc.multi)
+			if got != tc.want {
+				t.Fatalf("resolveServerStop = %q, want %q", got, tc.want)
+			}
+			if (len(warnings) > 0) != tc.warn {
+				t.Fatalf("warnings = %v, want warn=%v", warnings, tc.warn)
+			}
+		})
+	}
+}
+
 func TestRunRootInvalidGame(t *testing.T) {
 	oldGameId, oldCfgFile, oldGameCfgFile := gameId, cfgFile, gameCfgFile
 	defer func() { gameId, cfgFile, gameCfgFile = oldGameId, oldCfgFile, oldGameCfgFile }()

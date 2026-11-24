@@ -3,17 +3,17 @@ package router
 import (
 	"io"
 	"net/http"
-	"runtime"
 
-	"github.com/gorilla/handlers"
+	mapset "github.com/deckarep/golang-set/v3"
 	"github.com/luskaner/ageServer/common"
 	"github.com/luskaner/ageServer/server/internal"
-	cacertPem "github.com/luskaner/ageServer/server/internal/routes/cacert.pem"
-	"github.com/luskaner/ageServer/server/internal/routes/shutdown"
-	"github.com/luskaner/ageServer/server/internal/routes/sigkeyder"
-	"github.com/luskaner/ageServer/server/internal/routes/test"
+	"github.com/luskaner/ageServer/server/internal/models/initializer"
 )
 
+// General is the single-game form of the listener routes. It is deprecated for
+// the server itself, which builds RootRoutes once per listener and dispatches
+// per request; it survives as a composed handler for tests that exercise the
+// root routes without starting a listener.
 type General struct {
 	Router
 	Writer io.Writer
@@ -26,36 +26,6 @@ func (g *General) Name() string {
 func (g *General) InitializeRoutes(gameId string, next http.Handler) http.Handler {
 	g.initialize()
 	writer := internal.NewPrefixedWriter(g.Writer, gameId, g.Name())
-	g.group.Handle(
-		"GET",
-		"/"+common.AnnouncePath,
-		handlers.CustomLoggingHandler(writer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			test.Test(w, r)
-		}), logFormatter),
-	)
-	g.group.Handle(
-		"GET",
-		"/"+common.CACertPath,
-		handlers.CustomLoggingHandler(writer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cacertPem.CacertPem(w, r)
-		}), logFormatter),
-	)
-	g.group.Handle(
-		"GET",
-		"/sigkey.der",
-		handlers.CustomLoggingHandler(writer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			sigkeyder.SigkeyDer(w, r)
-		}), logFormatter),
-	)
-	if runtime.GOOS == "windows" {
-		g.group.Handle(
-			"POST",
-			"/shutdown",
-			handlers.CustomLoggingHandler(writer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				shutdown.Shutdown(w, r)
-			}), logFormatter),
-		)
-	}
-	g.group.HandlePath("/", next)
-	return g.group.mux
+	resolver := NewGameResolver(mapset.NewThreadUnsafeSet[string](gameId), true, initializer.Games)
+	return RootRoutes(common.GameCertMode(gameId), writer, next, resolver.Resolve)
 }

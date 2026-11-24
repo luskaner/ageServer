@@ -42,7 +42,13 @@ type ServerApi struct {
 }
 
 type Server struct {
-	Executable               `koanf:",squash"`
+	Executable `koanf:",squash"`
+	// Games lists the titles the server should serve when this launcher starts
+	// it. Empty keeps the old single-game behaviour ('-e {Game}'). When set, the
+	// launcher replaces the -e value in ExecutableArgs with one -e per game and
+	// the server is no longer stopped automatically when the first launcher
+	// exits.
+	Games                    []string
 	Start                    string
 	Host                     string
 	Stop                     string

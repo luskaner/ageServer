@@ -17,9 +17,15 @@ export interface EmbeddedBattleServerConfig {
 export type EmbeddedBattleServerDefaults = EmbeddedBattleServerConfig;
 
 export interface GameHostsConfig {
-  Hosts: string[];
+  /** Deprecated per-game key: read only to migrate an old document. */
+  Hosts?: string[];
   BattleServers: BattleServerConfig[];
   EmbeddedBattleServer: EmbeddedBattleServerConfig;
+}
+
+export interface HostsConfig {
+  Modern: string[];
+  Legacy: string[];
 }
 
 export interface BattleServerConfig {
@@ -91,6 +97,7 @@ export interface AppConfig {
   Sign: SignConfig;
   Authentication: 'required' | 'cached' | 'adaptive' | 'disabled';
   Internet: InternetConfig;
+  Hosts: HostsConfig;
   Games: GamesConfig;
   Announcement: AnnouncementConfig;
   CustomFiles: CustomFilesConfig;
@@ -126,6 +133,10 @@ export function fieldLabel(field: string): string {
   if (field === 'Sign.Enabled') return 'Re-sign catalogues';
   if (field === 'Sign.PlatformUserIdExceptions') return 'Platform user ID exceptions';
   if (field === 'Internet.Enabled') return 'Internet access';
+  if (field === 'Hosts') return 'Listeners';
+  if (field === 'Hosts.Modern') return 'Modern listeners';
+  if (field === 'Hosts.Legacy') return 'Legacy listeners';
+  if (/^Hosts\.(?:Modern|Legacy)\.\d+$/.test(field)) return 'Listener address';
   if (field === 'Internet.IP') return 'Public IP address';
   if (field === 'Announcement.Port') return 'Announcement port';
   if (field === 'Announcement.MulticastGroup') return 'Multicast group';

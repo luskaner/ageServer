@@ -29,8 +29,14 @@ var (
 		tr := &http.Transport{TLSClientConfig: TlsConfig(serverName, insecureSkipVerify, rootCAs)}
 		return &http.Client{Transport: tr, Timeout: 1 * time.Second}
 	}
-	buildURLFn = func(ipAddr net.IP) url.URL {
-		return url.URL{Scheme: "https", Host: net.JoinHostPort(ipAddr.String(), serverPort), Path: serverPath}
+	buildURLFn = func(ipAddr net.IP, gameTitle string) url.URL {
+		u := url.URL{Scheme: "https", Host: net.JoinHostPort(ipAddr.String(), serverPort), Path: serverPath}
+		// A multi-game listener can only answer with the title that was asked
+		// for; without it the request is ambiguous and the server answers 400.
+		query := u.Query()
+		query.Set("title", gameTitle)
+		u.RawQuery = query.Encode()
+		return u
 	}
 )
 
@@ -115,7 +121,7 @@ func LanServerHost(id uuid.UUID, gameTitle string, host string, insecureSkipVeri
 
 func LanServerIP(id uuid.UUID, gameTitle string, ipAddr net.IP, serverName string, insecureSkipVerify bool, rootCAs *x509.CertPool, ignoreLatency bool) (ok bool, serverId uuid.UUID, latency time.Duration, data *AnnounceMessageDataSupportedLatest) {
 	client := newHTTPClientFn(serverName, insecureSkipVerify, rootCAs)
-	u := buildURLFn(ipAddr)
+	u := buildURLFn(ipAddr, gameTitle)
 	if !ignoreLatency {
 		var latencyAccumulator time.Duration
 		for range LatencyMeasurementCount {

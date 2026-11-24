@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -103,8 +104,8 @@ func TestParseConfigurationAppliesServerDefaults(t *testing.T) {
 		config.Mods.MaxUploadSize != "256MB" || config.Mods.RequireAuthForRead {
 		t.Fatalf("unexpected mods defaults: %#v", config.Mods)
 	}
-	if len(config.Games.Age2.Hosts) != 1 || config.Games.Age2.Hosts[0] != "0.0.0.0" {
-		t.Fatalf("unexpected host defaults: %#v", config.Games.Age2.Hosts)
+	if len(config.Hosts.Modern) != 1 || config.Hosts.Modern[0] != "0.0.0.0" || len(config.Hosts.Legacy) != 0 {
+		t.Fatalf("unexpected listener defaults: %#v", config.Hosts)
 	}
 }
 
@@ -189,7 +190,8 @@ func TestValidateConfiguration(t *testing.T) {
 			name: "valid",
 			config: Configuration{
 				Authentication: "disabled",
-				Games:          GamesConfiguration{Enabled: []string{"age2"}, Age2: GameConfig{Hosts: []string{"127.0.0.1"}}},
+				Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
+				Games:          GamesConfiguration{Enabled: []string{"age2"}},
 				Announcement:   AnnouncementConfig{Port: 31978},
 			},
 		},
@@ -197,7 +199,8 @@ func TestValidateConfiguration(t *testing.T) {
 			name: "unknown authentication",
 			config: Configuration{
 				Authentication: "unknown",
-				Games:          GamesConfiguration{Enabled: []string{"age2"}, Age2: GameConfig{Hosts: []string{"127.0.0.1"}}},
+				Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
+				Games:          GamesConfiguration{Enabled: []string{"age2"}},
 				Announcement:   AnnouncementConfig{Port: 31978},
 			},
 			field:     "Authentication",
@@ -207,6 +210,7 @@ func TestValidateConfiguration(t *testing.T) {
 			name: "empty games list only warns",
 			config: Configuration{
 				Authentication: "disabled",
+				Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
 				Announcement:   AnnouncementConfig{Port: 31978},
 			},
 			field:      "Games.Enabled",
@@ -216,6 +220,7 @@ func TestValidateConfiguration(t *testing.T) {
 			name: "invalid port",
 			config: Configuration{
 				Authentication: "disabled",
+				Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
 				Announcement:   AnnouncementConfig{Port: 65536},
 			},
 			field:     "Announcement.Port",
@@ -225,7 +230,8 @@ func TestValidateConfiguration(t *testing.T) {
 			name: "unknown game",
 			config: Configuration{
 				Authentication: "disabled",
-				Games:          GamesConfiguration{Enabled: []string{"age5"}, Age2: GameConfig{Hosts: []string{"127.0.0.1"}}},
+				Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
+				Games:          GamesConfiguration{Enabled: []string{"age5"}},
 				Announcement:   AnnouncementConfig{Port: 31978},
 			},
 			field:     "Games.Enabled.0",
@@ -269,102 +275,76 @@ func TestValidateConfiguration(t *testing.T) {
 }
 
 func TestValidateConfigurationDuplicateHosts(t *testing.T) {
-	// Two enabled games cannot bind the same address: it is an error on both
-	// sides, as neither of them could be served.
+	// A modern and a legacy listener on the same address would bind it twice.
 	config := Configuration{
 		Authentication: "disabled",
-		Games: GamesConfiguration{
-			Enabled: []string{"age1", "age2"},
-			Age1:    GameConfig{Hosts: []string{"192.0.2.10"}},
-			Age2:    GameConfig{Hosts: []string{"192.0.2.10"}},
+		Hosts: HostsConfiguration{
+			Modern: []string{"192.0.2.10"},
+			Legacy: []string{"192.0.2.10"},
 		},
 		Announcement: AnnouncementConfig{Port: 31978},
 	}
 	issues := validateConfiguration(&config)
 	errors := errorValidationIssues(issues)
 	if len(errors) != 2 {
-		t.Fatalf("the shared address was not reported on both games: %#v", issues)
+		t.Fatalf("the shared address was not reported on both lists: %#v", issues)
 	}
-	if errors[0].Field != "Games.age1.Hosts.0" || errors[1].Field != "Games.age2.Hosts.0" {
+	if errors[0].Field != "Hosts.Modern.0" || errors[1].Field != "Hosts.Legacy.0" {
 		t.Fatalf("unexpected error fields: %#v", errors)
 	}
 	for _, issue := range issues {
-		if issue.Severity == severityWarning {
-			t.Fatalf("the conflict between enabled games warned: %#v", issues)
+		if issue.Severity == severityWarning && issue.Field != "Games.Enabled" {
+			t.Fatalf("the conflict warned instead of blocking: %#v", issues)
 		}
 	}
 
-	// A game that is not enabled is not bound, so it does not take the address
-	// away from the enabled one: only the disabled one is told about it.
-	config = Configuration{
-		Authentication: "disabled",
-		Games: GamesConfiguration{
-			Enabled: []string{"age1"},
-			Age1:    GameConfig{Hosts: []string{"192.0.2.10"}},
-			Age2:    GameConfig{Hosts: []string{"192.0.2.10"}},
-		},
-		Announcement: AnnouncementConfig{Port: 31978},
-	}
+	// No listener at all is an error: the server would have nothing to bind.
+	config.Hosts = HostsConfiguration{}
 	issues = validateConfiguration(&config)
-	if errors := errorValidationIssues(issues); len(errors) != 0 {
-		t.Fatalf("a disabled game blocked the enabled one: %#v", errors)
-	}
-	if len(issues) != 1 || issues[0].Field != "Games.age2.Hosts.0" || issues[0].Severity != severityWarning {
-		t.Fatalf("the disabled game was not warned about: %#v", issues)
-	}
-
-	// Two disabled games do not conflict at all, they only warn about it.
-	config = Configuration{
-		Authentication: "disabled",
-		Games: GamesConfiguration{
-			Enabled: []string{"age1"},
-			Age1:    GameConfig{Hosts: []string{"192.0.2.10"}},
-			Age2:    GameConfig{Hosts: []string{"192.0.2.10"}},
-			Age3:    GameConfig{Hosts: []string{"192.0.2.10"}},
-		},
-		Announcement: AnnouncementConfig{Port: 31978},
-	}
-	issues = validateConfiguration(&config)
-	if errors := errorValidationIssues(issues); len(errors) != 0 {
-		t.Fatalf("the disabled games blocked saving: %#v", errors)
-	}
-	if len(issues) != 2 {
-		t.Fatalf("the disabled games were not warned about: %#v", issues)
-	}
-	for _, issue := range issues {
-		if issue.Severity != severityWarning {
-			t.Fatalf("a disabled game reported an error: %#v", issues)
-		}
+	if errors := errorValidationIssues(issues); len(errors) != 1 || errors[0].Field != "Hosts" {
+		t.Fatalf("both empty lists were not reported: %#v", issues)
 	}
 }
-func TestValidateConfigurationDuplicateHostsWithinGame(t *testing.T) {
+
+func TestValidateConfigurationHostsWildcard(t *testing.T) {
 	config := Configuration{
 		Authentication: "disabled",
-		Games: GamesConfiguration{
-			Enabled: []string{"age2"},
-			Age2:    GameConfig{Hosts: []string{"192.0.2.10", "192.0.2.10"}},
-		},
-		Announcement: AnnouncementConfig{Port: 31978},
+		Hosts:          HostsConfiguration{Modern: []string{"0.0.0.0", "192.0.2.10"}},
+		Announcement:   AnnouncementConfig{Port: 31978},
 	}
 	issues := validateConfiguration(&config)
 	errors := errorValidationIssues(issues)
-	if len(errors) != 2 {
-		t.Fatalf("the duplicated host was not reported on both rows: %#v", issues)
+	if len(errors) != 1 || errors[0].Field != "Hosts.Modern.0" {
+		t.Fatalf("the wildcard in one list was not reported: %#v", issues)
 	}
-	for _, issue := range errors {
-		if !strings.Contains(issue.Message, "age2") {
-			t.Fatalf("a duplicated host did not name its game: %#v", issue)
+
+	// 0.0.0.0 covers every interface, so another mode cannot bind an address.
+	config.Hosts = HostsConfiguration{Modern: []string{"0.0.0.0"}, Legacy: []string{"192.0.2.11"}}
+	issues = validateConfiguration(&config)
+	errors = errorValidationIssues(issues)
+	if len(errors) != 1 || errors[0].Field != "Hosts.Modern.0" {
+		t.Fatalf("the wildcard next to another mode was not reported: %#v", issues)
+	}
+
+	// A class with no listener only warns: the other certificate may still work.
+	config.Hosts = HostsConfiguration{Modern: []string{"127.0.0.1"}}
+	config.Games.Enabled = []string{"age2", "age4"}
+	found := false
+	for _, issue := range validateConfiguration(&config) {
+		if issue.Field == "Hosts.Legacy" && issue.Severity == severityWarning {
+			found = true
 		}
-		if strings.HasSuffix(issue.Message, "by ") {
-			t.Fatalf("a duplicated host produced an empty owner list: %#v", issue)
-		}
+	}
+	if !found {
+		t.Fatal("a legacy game without a legacy listener did not warn")
 	}
 }
 
 func TestValidateConfigurationPrivilegedPortWarnsWithoutBlocking(t *testing.T) {
 	config := Configuration{
 		Authentication: "disabled",
-		Games:          GamesConfiguration{Enabled: []string{"age2"}, Age2: GameConfig{Hosts: []string{"127.0.0.1"}}},
+		Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}, Legacy: []string{"127.0.0.2"}},
+		Games:          GamesConfiguration{Enabled: []string{"age2"}},
 		Announcement:   AnnouncementConfig{Enabled: true, Port: 80},
 	}
 	issues := validateConfiguration(&config)
@@ -393,7 +373,8 @@ func TestValidateConfigurationPrivilegedPortWarnsWithoutBlocking(t *testing.T) {
 func TestValidateConfigurationMulticastIsConditional(t *testing.T) {
 	config := Configuration{
 		Authentication: "disabled",
-		Games:          GamesConfiguration{Enabled: []string{"age2"}, Age2: GameConfig{Hosts: []string{"127.0.0.1"}}},
+		Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}, Legacy: []string{"127.0.0.2"}},
+		Games:          GamesConfiguration{Enabled: []string{"age2"}},
 		Announcement: AnnouncementConfig{
 			Enabled:        true,
 			Multicast:      true,
@@ -589,8 +570,8 @@ func TestConfigurationDocumentAddsMissingSettings(t *testing.T) {
 	if parsed.CustomFiles.MaxFileSize != "64MB" || parsed.CustomFiles.Expiry != "12h" {
 		t.Fatalf("unexpected custom files configuration: %#v", parsed.CustomFiles)
 	}
-	if len(parsed.Games.Age2.Hosts) != 1 || parsed.Games.Age2.Hosts[0] != "0.0.0.0" {
-		t.Fatalf("unexpected default hosts: %#v", parsed.Games.Age2.Hosts)
+	if len(parsed.Hosts.Modern) != 1 || parsed.Hosts.Modern[0] != "0.0.0.0" {
+		t.Fatalf("unexpected default listeners: %#v", parsed.Hosts)
 	}
 }
 
@@ -643,173 +624,136 @@ func TestConfigurationDocumentRoundTripsTheOfficialTemplate(t *testing.T) {
 	}
 }
 
-func TestConfigurationDocumentWritesBattleServersAsTables(t *testing.T) {
-	original := []byte("Authentication = 'disabled'\n\n[Games]\nEnabled = []\n")
-	configuration := serverDefaults()
-	configuration.Games.Enabled = []string{"age2"}
-	configuration.Games.Age2.BattleServers = []BattleServerConfig{
+func TestGameDocumentWritesBattleServersAsTables(t *testing.T) {
+	servers := []BattleServerConfig{
 		{Region: "local", Name: "Local", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
 		{Region: "other", IPv4: "192.168.1.2", BsPort: 30013, WebSocketPort: 30014, OutOfBandPort: 30015},
 	}
-
-	updated, err := configurationDocument(original, configuration)
+	updated, err := gameDocument("age2", nil, GameConfig{BattleServers: servers})
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
 	if strings.Contains(string(updated), "BattleServers =") {
 		t.Fatalf("battle servers were written as an inline array:\n%s", updated)
 	}
-	if count := strings.Count(string(updated), "[[Games.age2.BattleServers]]"); count != 2 {
+	if count := strings.Count(string(updated), "[[Game.BattleServers]]"); count != 2 {
 		t.Fatalf("battle server tables = %d, want 2:\n%s", count, updated)
 	}
-	parsed, err := parseConfiguration(updated)
+	parsed, err := parseGameConfiguration(updated)
 	if err != nil {
 		t.Fatalf("updated document could not be parsed: %v\n%s", err, updated)
 	}
-	if !reflect.DeepEqual(parsed.Games.Age2.BattleServers, configuration.Games.Age2.BattleServers) {
-		t.Fatalf("battle servers did not round-trip: %#v", parsed.Games.Age2.BattleServers)
+	if !reflect.DeepEqual(parsed.BattleServers, servers) {
+		t.Fatalf("battle servers did not round-trip: %#v", parsed.BattleServers)
 	}
 
 	// Saving again must not append a second copy of the same tables.
-	twice, err := configurationDocument(updated, configuration)
+	twice, err := gameDocument("age2", updated, GameConfig{BattleServers: servers})
 	if err != nil {
-		t.Fatalf("second configurationDocument returned an error: %v", err)
+		t.Fatalf("second gameDocument returned an error: %v", err)
 	}
 	if string(twice) != string(updated) {
 		t.Fatalf("a second save changed the document:\nfirst:\n%s\nsecond:\n%s", updated, twice)
 	}
 }
 
-func TestConfigurationDocumentReplacesInlineBattleServers(t *testing.T) {
-	original := []byte(`Authentication = 'disabled'
-
-[Games]
-Enabled = ['age2']
-
-[Games.age2]
+func TestGameDocumentReplacesInlineBattleServers(t *testing.T) {
+	original := []byte(`[Game]
 Hosts = ['0.0.0.0']
 BattleServers = [{Region = 'old', IPv4 = 'auto', BsPort = 1, WebSocketPort = 2}]
 `)
-	configuration := serverDefaults()
-	configuration.Games.Enabled = []string{"age2"}
-	configuration.Games.Age2.BattleServers = []BattleServerConfig{
+	servers := []BattleServerConfig{
 		{Region: "local", Name: "Local", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
 	}
-
-	updated, err := configurationDocument(original, configuration)
+	updated, err := gameDocument("age2", original, GameConfig{BattleServers: servers})
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
 	if strings.Contains(string(updated), "BattleServers = [") {
 		t.Fatalf("the inline BattleServers key was kept:\n%s", updated)
 	}
-	if !strings.Contains(string(updated), "[[Games.age2.BattleServers]]") {
+	if strings.Contains(string(updated), "Hosts = ") {
+		t.Fatalf("the deprecated Game.Hosts key was kept:\n%s", updated)
+	}
+	if !strings.Contains(string(updated), "[[Game.BattleServers]]") {
 		t.Fatalf("battle servers were not written as tables:\n%s", updated)
 	}
-	parsed, err := parseConfiguration(updated)
+	parsed, err := parseGameConfiguration(updated)
 	if err != nil {
 		t.Fatalf("updated document could not be parsed: %v\n%s", err, updated)
 	}
-	if !reflect.DeepEqual(parsed.Games.Age2.BattleServers, configuration.Games.Age2.BattleServers) {
-		t.Fatalf("battle servers did not round-trip: %#v", parsed.Games.Age2.BattleServers)
+	if !reflect.DeepEqual(parsed.BattleServers, servers) {
+		t.Fatalf("battle servers did not round-trip: %#v", parsed.BattleServers)
 	}
 }
 
-func TestConfigurationDocumentRemovesEmptyBattleServers(t *testing.T) {
-	original := []byte(`Authentication = 'disabled'
-
-[Games]
-Enabled = ['age2']
-
-[Games.age2]
+func TestGameDocumentRemovesEmptyBattleServers(t *testing.T) {
+	original := []byte(`[Game]
 Hosts = ['0.0.0.0']
 
-[[Games.age2.BattleServers]]
+[[Game.BattleServers]]
 Region = 'local'
 IPv4 = 'auto'
 BsPort = 30003
 WebSocketPort = 30004
 OutOfBandPort = 30005
 `)
-	configuration := serverDefaults()
-	configuration.Games.Enabled = []string{"age2"}
-
-	updated, err := configurationDocument(original, configuration)
+	updated, err := gameDocument("age2", original, GameConfig{})
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
-	if strings.Contains(string(updated), "BattleServers") {
-		t.Fatalf("an empty battle server list was kept:\n%s", updated)
+	if strings.Contains(string(updated), "BattleServers") || strings.Contains(string(updated), "Hosts = ") {
+		t.Fatalf("the removed keys were kept:\n%s", updated)
 	}
-	if _, err := parseConfiguration(updated); err != nil {
+	if _, err := parseGameConfiguration(updated); err != nil {
 		t.Fatalf("updated document could not be parsed: %v\n%s", err, updated)
 	}
 }
 
-func TestConfigurationDocumentHandlesInterleavedBattleServerTables(t *testing.T) {
-	original := []byte(`Authentication = 'disabled'
-
-[Games]
-Enabled = ['age2', 'age3']
-
-[Games.age2]
+func TestGameDocumentHandlesInterleavedBattleServerTables(t *testing.T) {
+	original := []byte(`[Game]
 Hosts = ['0.0.0.0']
 
-[[Games.age2.BattleServers]]
-Region = 'old-age2'
+[[Game.BattleServers]]
+Region = 'old'
 IPv4 = 'auto'
 BsPort = 1
 WebSocketPort = 2
 
-[Games.age3]
-Hosts = ['0.0.0.0']
+[Game.EmbeddedBattleServer]
+Region = 'embedded'
 
-[[Games.age3.BattleServers]]
-Region = 'age3'
-IPv4 = 'auto'
-BsPort = 3
-WebSocketPort = 4
-
-[[Games.age2.BattleServers]]
-Region = 'old-age2-2'
+[[Game.BattleServers]]
+Region = 'old-2'
 IPv4 = 'auto'
 BsPort = 5
 WebSocketPort = 6
-
-[Announcement]
-Enabled = true
-Multicast = false
-Port = 31978
-MulticastGroup = '239.31.97.8'
 `)
-	configuration := serverDefaults()
-	configuration.Games.Enabled = []string{"age2", "age3"}
-	configuration.Games.Age2.BattleServers = []BattleServerConfig{
-		{Region: "new-age2", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
+	servers := []BattleServerConfig{
+		{Region: "new", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
 	}
-	configuration.Games.Age3.BattleServers = []BattleServerConfig{
-		{Region: "age3", IPv4: "auto", BsPort: 30006, WebSocketPort: 30007, OutOfBandPort: 30008},
-	}
-
-	updated, err := configurationDocument(original, configuration)
+	updated, err := gameDocument("age2", original, GameConfig{
+		BattleServers:        servers,
+		EmbeddedBattleServer: EmbeddedBattleServerConfig{Region: "embedded"},
+	})
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
-	if strings.Contains(string(updated), "old-age2") {
+	if strings.Contains(string(updated), "old") {
 		t.Fatalf("a stale battle server table was kept:\n%s", updated)
 	}
-	if count := strings.Count(string(updated), "[[Games.age2.BattleServers]]"); count != 1 {
-		t.Fatalf("age2 battle server tables = %d, want 1:\n%s", count, updated)
+	if count := strings.Count(string(updated), "[[Game.BattleServers]]"); count != 1 {
+		t.Fatalf("battle server tables = %d, want 1:\n%s", count, updated)
 	}
-	parsed, err := parseConfiguration(updated)
+	parsed, err := parseGameConfiguration(updated)
 	if err != nil {
 		t.Fatalf("updated document could not be parsed: %v\n%s", err, updated)
 	}
-	if !reflect.DeepEqual(parsed.Games.Age2.BattleServers, configuration.Games.Age2.BattleServers) {
-		t.Fatalf("unexpected age2 battle servers: %#v", parsed.Games.Age2.BattleServers)
+	if !reflect.DeepEqual(parsed.BattleServers, servers) {
+		t.Fatalf("unexpected battle servers: %#v", parsed.BattleServers)
 	}
-	if !reflect.DeepEqual(parsed.Games.Age3.BattleServers, configuration.Games.Age3.BattleServers) {
-		t.Fatalf("unexpected age3 battle servers: %#v", parsed.Games.Age3.BattleServers)
+	if parsed.EmbeddedBattleServer.Region != "embedded" {
+		t.Fatalf("the embedded table was lost: %#v", parsed.EmbeddedBattleServer)
 	}
 }
 
@@ -906,7 +850,8 @@ MulticastGroup = '239.31.97.8'
 
 	configuration := Configuration{
 		Authentication: "disabled",
-		Games:          GamesConfiguration{Enabled: []string{"age2"}, Age2: GameConfig{Hosts: []string{"127.0.0.1"}}},
+		Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
+		Games:          GamesConfiguration{Enabled: []string{"age2"}},
 		Announcement:   AnnouncementConfig{Port: 0},
 	}
 	if err := (&ConfigService{}).SaveConfiguration(path, configuration); err == nil {
@@ -970,7 +915,8 @@ func TestSaveConfigurationAsPreservesSourceAndRequiresOverwriteConfirmation(t *t
 	}
 	configuration := Configuration{
 		Authentication: "disabled",
-		Games:          GamesConfiguration{Enabled: []string{"age2"}, Age2: GameConfig{Hosts: []string{"127.0.0.1"}}},
+		Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
+		Games:          GamesConfiguration{Enabled: []string{"age2"}},
 		Announcement:   AnnouncementConfig{Port: 32000, MulticastGroup: "239.31.97.8"},
 	}
 	service := &ConfigService{}
@@ -1017,9 +963,9 @@ func TestCreateConfigFileUsesOfficialTemplate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	configuration := Configuration{
 		Authentication: "disabled",
+		Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
 		Games: GamesConfiguration{
 			Enabled: []string{"age2"},
-			Age2:    GameConfig{Hosts: []string{"127.0.0.1"}},
 		},
 		Announcement: AnnouncementConfig{
 			Enabled:        true,
@@ -1066,7 +1012,8 @@ func TestCreateConfigFileRequiresOverwriteConfirmation(t *testing.T) {
 	}
 	configuration := Configuration{
 		Authentication: "disabled",
-		Games:          GamesConfiguration{Enabled: []string{"age2"}, Age2: GameConfig{Hosts: []string{"127.0.0.1"}}},
+		Hosts:          HostsConfiguration{Modern: []string{"127.0.0.1"}},
+		Games:          GamesConfiguration{Enabled: []string{"age2"}},
 		Announcement:   AnnouncementConfig{Port: 31978},
 	}
 	if _, err := (&ConfigService{}).CreateConfigFile(path, configuration, false); err == nil {
@@ -1084,32 +1031,24 @@ func TestCreateConfigFileRequiresOverwriteConfirmation(t *testing.T) {
 // The embedded battle server table is optional: a document that does not have
 // it must not gain one, and a table with a non-default value is written with
 // only the keys that carry one.
-func TestEmbeddedBattleServerTable(t *testing.T) {
-	original := []byte(`[Games]
-Enabled = ['age2']
-
-[Games.age2]
-Hosts = ['0.0.0.0']
-`)
-	configuration := serverDefaults()
-	configuration.Games.Enabled = []string{"age2"}
-	configuration.Games.Age2.Hosts = []string{"0.0.0.0"}
-
-	updated, err := configurationDocument(original, configuration)
+func TestGameDocumentEmbeddedBattleServerTable(t *testing.T) {
+	original := []byte("[Game]\n")
+	updated, err := gameDocument("age2", original, GameConfig{})
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
 	if strings.Contains(string(updated), "EmbeddedBattleServer") {
 		t.Fatalf("a default embedded battle server was written out:\n%s", updated)
 	}
 
 	// A value the server would not resolve by itself has to reach the document.
-	configuration.Games.Age2.EmbeddedBattleServer.StartIfMissing = "false"
-	updated, err = configurationDocument(original, configuration)
+	updated, err = gameDocument("age2", original, GameConfig{
+		EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "false"},
+	})
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
-	if !strings.Contains(string(updated), "[Games.age2.EmbeddedBattleServer]\nStartIfMissing = 'false'\n") {
+	if !strings.Contains(string(updated), "[Game.EmbeddedBattleServer]\nStartIfMissing = 'false'\n") {
 		t.Fatalf("the embedded battle server table was not written:\n%s", updated)
 	}
 	// Keys the server resolves on its own stay out while they are empty.
@@ -1119,19 +1058,18 @@ Hosts = ['0.0.0.0']
 		}
 	}
 
-	parsed, err := parseConfiguration(updated)
+	parsed, err := parseGameConfiguration(updated)
 	if err != nil {
 		t.Fatalf("updated document could not be parsed: %v\n%s", err, updated)
 	}
-	if parsed.Games.Age2.EmbeddedBattleServer.StartIfMissing != "false" {
-		t.Fatalf("unexpected embedded StartIfMissing: %#v", parsed.Games.Age2.EmbeddedBattleServer)
+	if parsed.EmbeddedBattleServer.StartIfMissing != "false" {
+		t.Fatalf("unexpected embedded StartIfMissing: %#v", parsed.EmbeddedBattleServer)
 	}
 
 	// And going back to the server's own answer removes it again.
-	configuration.Games.Age2.EmbeddedBattleServer.StartIfMissing = "true"
-	updated, err = configurationDocument(updated, configuration)
+	updated, err = gameDocument("age2", updated, GameConfig{})
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
 	if strings.Contains(string(updated), "EmbeddedBattleServer") {
 		t.Fatalf("the default table was kept:\n%s", updated)
@@ -1140,14 +1078,11 @@ Hosts = ['0.0.0.0']
 
 // The editor edits the tables it knows key by key, so the comments a user wrote
 // inside them survive a save.
-func TestConfigurationDocumentKeepsCommentsInEditedTables(t *testing.T) {
-	original := []byte(`[Games]
-Enabled = ['age2']
-
-[Games.age2]
+func TestGameDocumentKeepsCommentsInEditedTables(t *testing.T) {
+	original := []byte(`[Game]
 Hosts = ['0.0.0.0']
 
-[[Games.age2.BattleServers]]
+[[Game.BattleServers]]
 # Description of this server.
 Region = 'lan' # keep the region comment
 IPv4 = 'auto'
@@ -1157,22 +1092,16 @@ OutOfBandPort = 30005
 Extra = 'keep me' # a key this editor does not know
 
 # This comment closes the game and must stay.
-[Announcement]
-Enabled = true
-Multicast = false
-Port = 31978
-MulticastGroup = '239.31.97.8'
 `)
-	configuration := serverDefaults()
-	configuration.Games.Enabled = []string{"age2"}
-	configuration.Games.Age2.BattleServers = []BattleServerConfig{
-		{Region: "lan", IPv4: "auto", BsPort: 30013, WebSocketPort: 30014, OutOfBandPort: 30015},
+	game := GameConfig{
+		BattleServers: []BattleServerConfig{
+			{Region: "lan", IPv4: "auto", BsPort: 30013, WebSocketPort: 30014, OutOfBandPort: 30015},
+		},
+		EmbeddedBattleServer: EmbeddedBattleServerConfig{Region: "embedded"},
 	}
-	configuration.Games.Age2.EmbeddedBattleServer.Region = "embedded"
-
-	updated, err := configurationDocument(original, configuration)
+	updated, err := gameDocument("age2", original, game)
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
 	for _, want := range []string{
 		"# Description of this server.",
@@ -1187,52 +1116,41 @@ MulticastGroup = '239.31.97.8'
 	if !strings.Contains(string(updated), "BsPort = 30013") {
 		t.Fatalf("the port was not updated:\n%s", updated)
 	}
-	parsed, err := parseConfiguration(updated)
+	parsed, err := parseGameConfiguration(updated)
 	if err != nil {
 		t.Fatalf("updated document could not be parsed: %v\n%s", err, updated)
 	}
-	if !reflect.DeepEqual(parsed.Games.Age2.BattleServers, configuration.Games.Age2.BattleServers) {
-		t.Fatalf("unexpected battle servers: %#v", parsed.Games.Age2.BattleServers)
+	if !reflect.DeepEqual(parsed.BattleServers, game.BattleServers) {
+		t.Fatalf("unexpected battle servers: %#v", parsed.BattleServers)
 	}
-	if parsed.Games.Age2.EmbeddedBattleServer.Region != "embedded" {
-		t.Fatalf("unexpected embedded battle server: %#v", parsed.Games.Age2.EmbeddedBattleServer)
+	if parsed.EmbeddedBattleServer.Region != "embedded" {
+		t.Fatalf("unexpected embedded battle server: %#v", parsed.EmbeddedBattleServer)
 	}
 }
 
-// An existing embedded battle server table is edited in place too.
-func TestConfigurationDocumentKeepsCommentsInEmbeddedTable(t *testing.T) {
-	original := []byte(`[Games]
-Enabled = ['age2']
+// An existing embedded battle server table is edited in place too. Only the
+// keys that differ from the inherited values are written, and a key that
+// matches them is dropped so config.toml keeps applying.
+func TestGameDocumentKeepsCommentsInEmbeddedTable(t *testing.T) {
+	original := []byte(`[Game]
 
-[Games.age2]
-Hosts = ['0.0.0.0']
-
-[Games.age2.EmbeddedBattleServer]
+[Game.EmbeddedBattleServer]
 # Pinned so clients always find it.
-StartIfMissing = 'true' # start it when nothing else answers
+StartIfMissing = 'false' # start it when nothing else answers
 Region = 'old'
 IPv4 = 'auto'
 BsPort = 0
 WebSocketPort = 0
 OutOfBandPort = 0
-
-[Announcement]
-Enabled = true
-Multicast = false
-Port = 31978
-MulticastGroup = '239.31.97.8'
 `)
-	configuration := serverDefaults()
-	configuration.Games.Enabled = []string{"age2"}
-	configuration.Games.Age2.EmbeddedBattleServer.Region = "new"
-
-	updated, err := configurationDocument(original, configuration)
+	game := GameConfig{EmbeddedBattleServer: EmbeddedBattleServerConfig{StartIfMissing: "false", Region: "new"}}
+	updated, err := gameDocument("age2", original, game)
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
 	for _, want := range []string{
 		"# Pinned so clients always find it.",
-		"StartIfMissing = 'true' # start it when nothing else answers",
+		"StartIfMissing = 'false' # start it when nothing else answers",
 		"Region = 'new'",
 	} {
 		if !strings.Contains(string(updated), want) {
@@ -1241,16 +1159,146 @@ MulticastGroup = '239.31.97.8'
 	}
 }
 
-// Removing every battle server of a game drops the blocks, not the comment that
-// closes the game after them.
-func TestConfigurationDocumentKeepsCommentsAfterRemovedBlocks(t *testing.T) {
-	original := []byte(`[Games]
+// A per-game file only writes what differs from config.toml: an inherited
+// port is not pinned to a zero after an open and save.
+func TestGameDocumentEmbeddedDeltaAgainstInheritedValues(t *testing.T) {
+	base := EmbeddedBattleServerConfig{StartIfMissing: "true", BsPort: 30003}
+	inherited := EmbeddedBattleServerConfig{StartIfMissing: "true", BsPort: 30003}
+	updated, err := gameDocumentWithBase("age2", nil, GameConfig{EmbeddedBattleServer: inherited}, base)
+	if err != nil {
+		t.Fatalf("gameDocumentWithBase returned an error: %v", err)
+	}
+	if updated != nil {
+		t.Fatalf("an all-inherited table was written:\n%s", updated)
+	}
+
+	changed := inherited
+	changed.BsPort = 30005
+	updated, err = gameDocumentWithBase("age2", nil, GameConfig{EmbeddedBattleServer: changed}, base)
+	if err != nil {
+		t.Fatalf("gameDocumentWithBase returned an error: %v", err)
+	}
+	if !strings.Contains(string(updated), "BsPort = 30005") {
+		t.Fatalf("the changed port was not written:\n%s", updated)
+	}
+	if strings.Contains(string(updated), "StartIfMissing") || strings.Contains(string(updated), "WebSocketPort") {
+		t.Fatalf("inherited keys were written:\n%s", updated)
+	}
+}
+
+// Reading a per-game file overlays only the keys the file assigns, the same
+// field-by-field merge the server does.
+func TestReadGameFilesMergesEmbeddedBattleServerByLeaf(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "config.toml")
+	main := []byte(`Authentication = 'disabled'
+
+[Games]
+Enabled = ['age2']
+
+[Games.age2.EmbeddedBattleServer]
+Region = 'inherited'
+BsPort = 30003
+`)
+	if err := os.WriteFile(path, main, 0600); err != nil {
+		t.Fatalf("write main configuration: %v", err)
+	}
+	if err := os.WriteFile(gameFilePath(path, "age2"), []byte("[Game.EmbeddedBattleServer]\nStartIfMissing = 'false'\n"), 0600); err != nil {
+		t.Fatalf("write game configuration: %v", err)
+	}
+	config, err := parseConfiguration(main)
+	if err != nil {
+		t.Fatalf("parse main configuration: %v", err)
+	}
+	if _, err := readGameFiles(path, config); err != nil {
+		t.Fatalf("readGameFiles returned an error: %v", err)
+	}
+	embedded := config.Games.Age2.EmbeddedBattleServer
+	if embedded.StartIfMissing != "false" {
+		t.Fatalf("StartIfMissing = %q, want the file value", embedded.StartIfMissing)
+	}
+	if embedded.Region != "inherited" || embedded.BsPort != 30003 {
+		t.Fatalf("the file dropped inherited values: %#v", embedded)
+	}
+}
+
+// A v2.0 document without [Hosts] migrates its per-game hosts to the class of
+// the enabled games instead of losing them on the next save.
+func TestReadConfigFileMigratesGameHosts(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "config.toml")
+	content := []byte(`Authentication = 'disabled'
+
+[Games]
 Enabled = ['age2']
 
 [Games.age2]
+Hosts = ['127.0.0.1']
+
+[Announcement]
+Enabled = true
+Multicast = false
+Port = 31978
+MulticastGroup = '239.31.97.8'
+`)
+	if err := os.WriteFile(path, content, 0600); err != nil {
+		t.Fatalf("write configuration: %v", err)
+	}
+	file, err := (&ConfigService{}).readConfigFile(path)
+	if err != nil {
+		t.Fatalf("readConfigFile returned an error: %v", err)
+	}
+	if len(file.Config.Hosts.Legacy) != 1 || file.Config.Hosts.Legacy[0] != "127.0.0.1" {
+		t.Fatalf("Hosts.Legacy = %#v, want the migrated list", file.Config.Hosts.Legacy)
+	}
+	if len(file.Config.Hosts.Modern) != 0 {
+		t.Fatalf("Hosts.Modern = %#v, want it emptied", file.Config.Hosts.Modern)
+	}
+	updated, err := prepareConfigurationDocument(content, *file.Config)
+	if err != nil {
+		t.Fatalf("prepareConfigurationDocument returned an error: %v", err)
+	}
+	saved, err := parseConfiguration(updated)
+	if err != nil {
+		t.Fatalf("saved document is invalid: %v", err)
+	}
+	if len(saved.Hosts.Legacy) != 1 || saved.Hosts.Legacy[0] != "127.0.0.1" {
+		t.Fatalf("saved Hosts.Legacy = %#v, want the migrated list", saved.Hosts.Legacy)
+	}
+	if len(saved.Games.Age2.Hosts) != 0 {
+		t.Fatalf("saved Games.age2.Hosts = %#v, want the per-game key removed", saved.Games.Age2.Hosts)
+	}
+}
+
+// Differing per-game host lists and no [Hosts] cannot be saved silently.
+func TestPrepareConfigurationDocumentRefusesDifferingGameHosts(t *testing.T) {
+	content := []byte(`Authentication = 'disabled'
+
+[Games]
+Enabled = ['age1', 'age2']
+
+[Games.age1]
+Hosts = ['127.0.0.1']
+
+[Games.age2]
+Hosts = ['192.168.1.10']
+`)
+	config, err := parseConfiguration(content)
+	if err != nil {
+		t.Fatalf("parse configuration: %v", err)
+	}
+	if _, err := prepareConfigurationDocument(content, *config); err == nil || !strings.Contains(err.Error(), "differ") {
+		t.Fatalf("prepareConfigurationDocument error = %v, want the differing-lists refusal", err)
+	}
+}
+
+// Removing every battle server of a game drops the blocks, not the comment that
+// closes the game after them.
+func TestGameDocumentKeepsCommentsAfterRemovedBlocks(t *testing.T) {
+	original := []byte(`[Game]
 Hosts = ['0.0.0.0']
 
-[[Games.age2.BattleServers]]
+[[Game.BattleServers]]
 Region = 'lan'
 IPv4 = 'auto'
 BsPort = 30003
@@ -1258,20 +1306,12 @@ WebSocketPort = 30004
 OutOfBandPort = 30005
 
 # This comment closes the game and must stay.
-[Announcement]
-Enabled = true
-Multicast = false
-Port = 31978
-MulticastGroup = '239.31.97.8'
 `)
-	configuration := serverDefaults()
-	configuration.Games.Enabled = []string{"age2"}
-
-	updated, err := configurationDocument(original, configuration)
+	updated, err := gameDocument("age2", original, GameConfig{})
 	if err != nil {
-		t.Fatalf("configurationDocument returned an error: %v", err)
+		t.Fatalf("gameDocument returned an error: %v", err)
 	}
-	if strings.Contains(string(updated), "[[Games.age2.BattleServers]]") {
+	if strings.Contains(string(updated), "[[Game.BattleServers]]") {
 		t.Fatalf("the block was not removed:\n%s", updated)
 	}
 	if !strings.Contains(string(updated), "# This comment closes the game and must stay.") {
@@ -1279,16 +1319,17 @@ MulticastGroup = '239.31.97.8'
 	}
 }
 
-// A table the document does not have is added next to its siblings, so the
-// document keeps reading in order after a save.
-func TestConfigurationDocumentAddsMissingGameNextToTheOthers(t *testing.T) {
-	original := []byte(`[Games]
+// A document without listeners gains the global [Hosts] table, and the old
+// per-game keys disappear instead of being written with a stale value.
+func TestConfigurationDocumentAddsGlobalHostsAndDropsPerGameHosts(t *testing.T) {
+	original := []byte(`Authentication = 'disabled'
+
+[Games]
 Enabled = ['age2']
 
 [Games.age2]
-Hosts = ['0.0.0.0']
+Hosts = ['127.0.0.1']
 
-# Closing comment.
 [Announcement]
 Enabled = true
 Multicast = false
@@ -1302,22 +1343,18 @@ MulticastGroup = '239.31.97.8'
 	if err != nil {
 		t.Fatalf("configurationDocument returned an error: %v", err)
 	}
-	text := string(updated)
-	announcement := strings.Index(text, "[Announcement]")
-	if announcement < 0 {
-		t.Fatalf("the announcement table was lost:\n%s", updated)
+	if !strings.Contains(string(updated), "[Hosts]") || !strings.Contains(string(updated), "Modern = ['0.0.0.0']") {
+		t.Fatalf("the global [Hosts] table was not written:\n%s", updated)
 	}
-	for _, game := range []string{"[Games.age1]", "[Games.age3]", "[Games.age4]", "[Games.athens]"} {
-		at := strings.Index(text, game)
-		if at < 0 {
-			t.Fatalf("%s was not added:\n%s", game, updated)
-		}
-		if at > announcement {
-			t.Fatalf("%s was appended after the other tables:\n%s", game, updated)
-		}
+	if strings.Contains(string(updated), "[Games.age2]\nHosts = ") {
+		t.Fatalf("the deprecated per-game Hosts key was kept:\n%s", updated)
 	}
-	if _, err := parseConfiguration(updated); err != nil {
+	parsed, err := parseConfiguration(updated)
+	if err != nil {
 		t.Fatalf("updated document could not be parsed: %v\n%s", err, updated)
+	}
+	if len(parsed.Hosts.Modern) != 1 || parsed.Hosts.Modern[0] != "0.0.0.0" || len(parsed.Games.Age2.Hosts) != 0 {
+		t.Fatalf("unexpected hosts after save: %#v / %#v", parsed.Hosts, parsed.Games.Age2.Hosts)
 	}
 }
 
@@ -1366,10 +1403,185 @@ func TestConfigurationDocumentKeepsEveryTemplateComment(t *testing.T) {
 	if !parsed.Log || parsed.Announcement.Port != 32100 || parsed.CustomFiles.MaxFileSize != "64MB" {
 		t.Fatalf("the changed values did not round-trip: %#v", parsed)
 	}
-	if len(parsed.Games.Age2.BattleServers) != 1 || parsed.Games.Age2.BattleServers[0].Region != "local" {
-		t.Fatalf("unexpected battle servers: %#v", parsed.Games.Age2.BattleServers)
+	if len(parsed.Games.Age2.BattleServers) != 0 {
+		t.Fatalf("battle servers were written to config.toml: %#v", parsed.Games.Age2.BattleServers)
 	}
-	if parsed.Games.Age2.EmbeddedBattleServer.Region != "embedded" {
-		t.Fatalf("unexpected embedded battle server: %#v", parsed.Games.Age2.EmbeddedBattleServer)
+	document, err := gameDocument("age2", nil, configuration.Games.Age2)
+	if err != nil {
+		t.Fatalf("gameDocument returned an error: %v", err)
+	}
+	game, err := parseGameConfiguration(document)
+	if err != nil {
+		t.Fatalf("per-game document could not be parsed: %v\n%s", err, document)
+	}
+	if len(game.BattleServers) != 1 || game.BattleServers[0].Region != "local" {
+		t.Fatalf("unexpected battle servers: %#v", game.BattleServers)
+	}
+	if game.EmbeddedBattleServer.Region != "embedded" {
+		t.Fatalf("unexpected embedded battle server: %#v", game.EmbeddedBattleServer)
+	}
+}
+
+// A save writes the main document and one file per enabled game, and reading
+// the result merges both halves back into the model.
+func TestSaveConfigurationWritesGameFilesAndReloads(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "config.toml")
+	original := []byte(`Authentication = 'disabled'
+
+[Hosts]
+Modern = ['127.0.0.1']
+Legacy = []
+
+[Games]
+Enabled = ['age2']
+
+[Games.age2]
+Hosts = ['192.0.2.10']
+
+[Announcement]
+Enabled = true
+Multicast = false
+Port = 31978
+MulticastGroup = '239.31.97.8'
+`)
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatalf("create test configuration: %v", err)
+	}
+	configuration, err := parseConfiguration(original)
+	if err != nil {
+		t.Fatalf("parse test configuration: %v", err)
+	}
+	configuration.Games.Age2.BattleServers = []BattleServerConfig{
+		{Region: "lan", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
+	}
+	configuration.Games.Age2.EmbeddedBattleServer = EmbeddedBattleServerConfig{StartIfMissing: "false"}
+	service := &ConfigService{}
+	if err := service.SaveConfiguration(path, *configuration); err != nil {
+		t.Fatalf("SaveConfiguration returned an error: %v", err)
+	}
+	mainContent, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read saved configuration: %v", err)
+	}
+	if strings.Contains(string(mainContent), "Games.age2]\nHosts") || strings.Contains(string(mainContent), "[[Games.age2.BattleServers]]") {
+		t.Fatalf("per-game settings were left in config.toml:\n%s", mainContent)
+	}
+	gamePath := filepath.Join(directory, "config.age2.toml")
+	gameContent, err := os.ReadFile(gamePath)
+	if err != nil {
+		t.Fatalf("read per-game configuration: %v", err)
+	}
+	for _, want := range []string{"[[Game.BattleServers]]", "Region = 'lan'", "[Game.EmbeddedBattleServer]", "StartIfMissing = 'false'"} {
+		if !strings.Contains(string(gameContent), want) {
+			t.Fatalf("%q was not written to %s:\n%s", want, gamePath, gameContent)
+		}
+	}
+
+	file, err := service.readConfigFile(path)
+	if err != nil {
+		t.Fatalf("readConfigFile returned an error: %v", err)
+	}
+	if file.GameFiles["age2"] == "" {
+		t.Fatalf("the per-game file was not returned: %#v", file.GameFiles)
+	}
+	if len(file.Config.Games.Age2.BattleServers) != 1 || file.Config.Games.Age2.BattleServers[0].Region != "lan" {
+		t.Fatalf("the per-game battle servers were not merged: %#v", file.Config.Games.Age2.BattleServers)
+	}
+	if file.Config.Games.Age2.EmbeddedBattleServer.StartIfMissing != "false" {
+		t.Fatalf("the per-game embedded server was not merged: %#v", file.Config.Games.Age2.EmbeddedBattleServer)
+	}
+	if len(file.Config.Games.Age2.Hosts) != 0 {
+		t.Fatalf("the deprecated per-game hosts were kept: %#v", file.Config.Games.Age2.Hosts)
+	}
+}
+
+// Save as copies every per-game document next to the new main file.
+func TestSaveConfigurationAsCopiesGameFiles(t *testing.T) {
+	directory := t.TempDir()
+	sourcePath := filepath.Join(directory, "source.toml")
+	destinationPath := filepath.Join(directory, "destination.toml")
+	mainContent := []byte(`Authentication = 'disabled'
+
+[Hosts]
+Modern = ['127.0.0.1']
+Legacy = []
+
+[Games]
+Enabled = ['age2']
+`)
+	gameContent := []byte(`[Game]
+
+[[Game.BattleServers]]
+# Keep this comment.
+Region = 'lan'
+IPv4 = 'auto'
+BsPort = 30003
+WebSocketPort = 30004
+OutOfBandPort = 30005
+`)
+	if err := os.WriteFile(sourcePath, mainContent, 0600); err != nil {
+		t.Fatalf("create source configuration: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "config.age2.toml"), gameContent, 0600); err != nil {
+		t.Fatalf("create source game configuration: %v", err)
+	}
+	service := &ConfigService{}
+	loaded, err := service.readConfigFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read source configuration: %v", err)
+	}
+	configuration := *loaded.Config
+	file, err := service.SaveConfigurationAs(sourcePath, destinationPath, configuration, true)
+	if err != nil {
+		t.Fatalf("SaveConfigurationAs returned an error: %v", err)
+	}
+	if file.Path != destinationPath || file.GameFiles["age2"] == "" {
+		t.Fatalf("unexpected saved file: %+v", file)
+	}
+	destinationGame, err := os.ReadFile(filepath.Join(directory, "config.age2.toml"))
+	if err != nil {
+		t.Fatalf("read copied game configuration: %v", err)
+	}
+	if string(destinationGame) != string(gameContent) {
+		t.Fatalf("the per-game document was not copied:\n%s", destinationGame)
+	}
+	if len(file.Config.Games.Age2.BattleServers) != 1 || file.Config.Games.Age2.BattleServers[0].Region != "lan" {
+		t.Fatalf("the copied battle servers were not loaded: %#v", file.Config.Games.Age2.BattleServers)
+	}
+}
+
+// Enabling a game does not create an empty per-game file: the header comment
+// must not count as content by itself.
+func TestSaveConfigurationCreatesOnlyGamesWithContent(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "config.toml")
+	content := []byte(`Authentication = 'disabled'
+
+[Hosts]
+Modern = ['127.0.0.1']
+Legacy = []
+
+[Games]
+Enabled = ['age2', 'age3']
+`)
+	if err := os.WriteFile(path, content, 0600); err != nil {
+		t.Fatalf("create test configuration: %v", err)
+	}
+	configuration, err := parseConfiguration(content)
+	if err != nil {
+		t.Fatalf("parse test configuration: %v", err)
+	}
+	configuration.Games.Age2.BattleServers = []BattleServerConfig{
+		{Region: "lan", IPv4: "auto", BsPort: 30003, WebSocketPort: 30004, OutOfBandPort: 30005},
+	}
+	if err := (&ConfigService{}).SaveConfiguration(path, *configuration); err != nil {
+		t.Fatalf("SaveConfiguration returned an error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "config.age2.toml")); err != nil {
+		t.Fatalf("the game with battle servers has no file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "config.age3.toml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("an empty per-game file was created: %v", err)
 	}
 }

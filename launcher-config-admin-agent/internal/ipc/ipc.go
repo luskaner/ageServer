@@ -132,6 +132,14 @@ func checkCertificateValidity(cert *x509.Certificate, gameId string) bool {
 	expectedExtKeyUsages := mapset.NewSet[x509.ExtKeyUsage]()
 	if common.SelfSignedCertGame(gameId) {
 		if !cert.MaxPathLenZero {
+			// A legacy title may be served from a modern listener (the two
+			// modes exist precisely so one process can serve both classes).
+			// Accept the modern CA profile with a warning; the pinning of the
+			// bytes, the CN and IsCA above are not relaxed.
+			if modernCaProfile(cert) {
+				cmdlog.Warn("Game %s is a legacy title but the certificate is the modern CA profile; accepting it with a warning", gameId)
+				return true
+			}
 			return false
 		}
 		selfSignedCertDomains := mapset.NewSet[string](common.SelfSignedCertDomains...)
@@ -149,6 +157,17 @@ func checkCertificateValidity(cert *x509.Certificate, gameId string) bool {
 		return false
 	}
 	return true
+}
+
+// modernCaProfile is the CA half of the modern pair as server-genCert creates
+// it: a CA with only CertSign and no extended usage or SANs. It is deliberately
+// narrower than the legacy profile, not a general "any CA" escape hatch.
+func modernCaProfile(cert *x509.Certificate) bool {
+	return cert.IsCA &&
+		cert.KeyUsage == x509.KeyUsageCertSign &&
+		len(cert.ExtKeyUsage) == 0 &&
+		len(cert.DNSNames) == 0 &&
+		len(cert.IPAddresses) == 0
 }
 
 func handleSetUp(logRoot string, decoder *gob.Decoder) int {

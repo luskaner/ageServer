@@ -32,6 +32,7 @@ export interface BattleServerConfig {
 export interface ConfigFile {
     "path": string;
     "content": string;
+    "gameFiles": { [_ in string]?: string } | null;
     "config": Configuration | null;
     "validationErrors": ValidationError[] | null;
 }
@@ -41,6 +42,7 @@ export interface Configuration {
     "GeneratePlatformUserId": boolean;
     "Sign": SignConfig;
     "Authentication": string;
+    "Hosts": HostsConfiguration;
     "Internet": InternetConfiguration;
     "Games": GamesConfiguration;
     "Announcement": AnnouncementConfig;
@@ -105,6 +107,11 @@ export interface GamesConfiguration {
     "age3": GameConfig;
     "age4": GameConfig;
     "athens": GameConfig;
+}
+
+export interface HostsConfiguration {
+    "Modern": string[];
+    "Legacy": string[];
 }
 
 export interface InternetConfiguration {

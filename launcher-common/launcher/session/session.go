@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/netip"
@@ -284,6 +286,28 @@ var (
 	signalStopFn                    = signal.Stop
 )
 
+// resolveServerStop decides whether this launcher stops the server on exit. A
+// multi-game server is shared, so the launcher that started it must not stop it
+// when it exits unless the user asked for that explicitly: only 'auto' is
+// overridden, and an explicit true is honoured with a warning. cfgStopIsAuto is
+// the configured intent, not the value 'auto' was already resolved to.
+func resolveServerStop(cfgStopIsAuto bool, resolvedStop string, multiGame bool) (string, []string) {
+	if !multiGame {
+		return resolvedStop, nil
+	}
+	switch {
+	case cfgStopIsAuto && resolvedStop == launcher.ModeTrue:
+		return launcher.ModeFalse, []string{"Server.Games has more than one game: the server will not be stopped when this launcher exits; stop it manually or set Server.Stop = true if you really want the first launcher to stop it"}
+	case cfgStopIsAuto:
+		// Already false: a launcher that reuses a server has nothing to stop.
+		return launcher.ModeFalse, nil
+	case resolvedStop == launcher.ModeTrue:
+		return resolvedStop, []string{"Server.Games has more than one game and Server.Stop = true: stopping the server when this launcher exits can cut off the other games"}
+	default:
+		return resolvedStop, nil
+	}
+}
+
 func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 	// Resolved once, here, and read through for the rest of the run: the options
 	// do not move, but which storage they are in depends on the frontend, and
@@ -427,6 +451,9 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		return
 	}
 	serverStop := cfg.Server.Stop
+	// The configured intent, kept because 'auto' is resolved below and the
+	// multi-game rule has to tell "auto" from an explicit true.
+	stopWasAuto := serverStop == launcher.ModeAuto
 	// Trimmed once, here: validation can be lenient about surrounding spaces,
 	// but everything below (the /test probe, the mapping) works on this value
 	// as it is and a padded host would simply fail to resolve.
@@ -460,15 +487,28 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 		return
 	}
 	configSetGameIdFn(gameId)
+	serverGames, gamesErr := validateServerGames(cfg.Server.Games, gameId)
+	if gamesErr != nil {
+		reportOrDiscard().Fail("%s", gamesErr.Error())
+		atomicExitCode.Store(int32(launcher.ErrInvalidServerArgs))
+		return
+	}
 	serverValues := map[string]string{
 		"Game":             gameId,
 		"Id":               uuid.New().String(),
 		"StartBsIfMissing": "true",
 	}
+	// The expansion overloads {Game} only in the server arguments: it is the
+	// single safe way to turn one '-e {Game}' into '-e age1 -e age2' with
+	// shell.Fields. The battle-server-manager keeps the single-game map.
+	serverArgValues := maps.Clone(serverValues)
+	if len(cfg.Server.Games) > 0 {
+		serverArgValues["Game"] = strings.Join(serverGames, " -e ")
+	}
 	var serverArgsValues *cmdServer.Values
 	var serverFlags *pflag.FlagSet
 	var serverArgs []string
-	if serverArgs, err = parseCommandArgsFn(cfg.Server.Args, serverValues); err == nil {
+	if serverArgs, err = parseCommandArgsFn(cfg.Server.Args, serverArgValues); err == nil {
 		var serverSingleFlagSet *commonCmd.SingleFlagSet
 		serverArgsValues, serverSingleFlagSet = cmdServer.SingleFlagSet("", nil, nil)
 		serverFlags = serverSingleFlagSet.Fs()
@@ -914,6 +954,18 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 			}
 		}
 	}
+	// A multi-game server outlives the launcher that started it: stopping it on
+	// exit would cut off the players of every other title it serves. The
+	// configured intent decides, not the 'auto' resolved above: the launcher
+	// that started the server would otherwise keep stop=true and cut off the
+	// other games when it exits.
+	if len(serverGames) > 1 {
+		var warnings []string
+		serverStop, warnings = resolveServerStop(stopWasAuto, serverStop, true)
+		for _, warning := range warnings {
+			reportOrDiscard().Warn("%s", warning)
+		}
+	}
 	if serverStart == "false" {
 		if serverStop == "true" {
 			reportOrDiscard().Warn("serverStart is false. Ignoring serverStop being true.")
@@ -938,9 +990,15 @@ func Run(ctx context.Context, fs *pflag.FlagSet) (err error, exitCode int) {
 				reportOrDiscard().Fail("serverStart is false. Failed to resolve serverHost to a valid and reachable IP.")
 				atomicExitCode.Store(int32(launcher.ErrInvalidServerHost))
 				return
-			} else {
-				serverIP = measuredServerIPAddrs[0].Ip.String()
+			} else if selected, ok := server.SelectServerIP(gameId, measuredServerIPAddrs, func(message string) {
+				reportOrDiscard().Warn("%s", message)
+			}); ok {
+				serverIP = selected.Ip.String()
 				serverArgsValues.Id = id.String()
+			} else {
+				reportOrDiscard().Fail("serverStart is false. Failed to find a usable address of the server.")
+				atomicExitCode.Store(int32(launcher.ErrInvalidServerHost))
+				return
 			}
 		}
 	} else {
@@ -1100,4 +1158,30 @@ func orNone(path string) string {
 		return "none"
 	}
 	return path
+}
+
+// validateServerGames resolves and checks Server.Games. Empty means the old
+// single-game behaviour; otherwise every entry must be a supported game, no
+// entry may repeat, and the game being launched must be one of them.
+func validateServerGames(games []string, current string) ([]string, error) {
+	if len(games) == 0 {
+		return []string{current}, nil
+	}
+	seen := make(map[string]bool, len(games))
+	out := make([]string, 0, len(games))
+	for _, g := range games {
+		g = strings.TrimSpace(g)
+		if !game.SupportedGames.ContainsOne(g) {
+			return nil, fmt.Errorf("Server.Games: unsupported game %q", g)
+		}
+		if seen[g] {
+			return nil, fmt.Errorf("Server.Games: duplicated game %q", g)
+		}
+		seen[g] = true
+		out = append(out, g)
+	}
+	if !seen[current] {
+		return nil, fmt.Errorf("Server.Games must include the current game %q", current)
+	}
+	return out, nil
 }

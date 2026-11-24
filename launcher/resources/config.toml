@@ -52,14 +52,22 @@ StartWithoutConfirmation = false
 # 3. '../../server/'
 # Note: You may use environment variables.
 Executable = 'auto'
+# Games the server should serve when this launcher starts it.
+# Empty (default) = only the game being launched, i.e. '-e {Game}'.
+# If set, it must contain the current game. The launcher replaces the -e value
+# in ExecutableArgs with one -e per listed game.
+# With more than one game the server is not stopped automatically when this
+# launcher exits (Server.Stop = 'auto' resolves to false); set Server.Stop = true
+# only if you really want the first launcher to stop the shared server.
+# Games = []
 # The arguments to pass to the server executable if starting it. Execute the server help flag for available arguments.
 # {Game} will be replaced by the game name. Default, only start the server for the given name.
 # {Id} will be replaced by a random unique server id (UUID v4).
-# {StartBsIfMissing} will be replaced by the embedded battle server StartIfMissing mode for all enabled games (true, false, required).
+# {StartBsIfMissing} is kept for older templates: when present it forces that embedded battle server StartIfMissing mode for all enabled games (true, false, required).
 # When 'Config.Log' is true '-l', '--flatLog', '--logRoot' and '--deterministic' arguments will be passed.
 # Windows: Path names need to use double backslashes within single quotes or be within double quotes.
 # Note: You may use environment variables.
-ExecutableArgs = ['-e', '{Game}', '--id', '{Id}', '--startBsIfMissing', '{StartBsIfMissing}']
+ExecutableArgs = ['-e', '{Game}', '--id', '{Id}']
 # The host of the server to connect to if Start = false, if Start = true/auto this will be ignored
 # The host may be a DNS name or Ipv4 IP. 0.0.0.0 means every local interface IP.
 # Note: See the server config to set the interface to bind to.

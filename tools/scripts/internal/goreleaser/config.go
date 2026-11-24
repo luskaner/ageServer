@@ -36,6 +36,16 @@ func generate(currentWindowsOS OperatingSystem) error {
 	serverArchive.AddDocFiles("docs", nil, nil, "LICENSE", "server/README.md", "server/BattleServers.md")
 	serverArchive.AddSrcDstFile("server/resources/responses", "resources/responses")
 	serverArchive.AddSrcDstFile("server/resources/config", "resources/config")
+	// The per-game template lives outside the copied directory on purpose: a
+	// raw copy of it would land unreplaced, and AddConfigFiles would put the
+	// generated file at resources/<game>.toml without the config/ folder.
+	serverArchive.AddSrcOsDstFile(
+		NewTemplate[FileData]("server/resources/config.game.toml"),
+		nil,
+		func(string) Renders[FileData] {
+			return NewTemplate[FileData]("resources/config/config.{{.Game}}.toml")
+		},
+		nil, 0, true)
 	serverArchive.AddSrcDstFile("server/resources/etc", "resources/etc")
 	serverArchive.AddScriptFiles("", NewTemplate[FileData](baseScriptSource), nil, nil, false, false)
 	serverArchive.AddScriptFiles("", NewTemplate[FileData](fmt.Sprintf(gameScriptSource, `server`)), nil, nil, true, true)

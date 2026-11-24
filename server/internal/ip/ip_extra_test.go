@@ -9,7 +9,10 @@ import (
 
 func TestResolveHostsIPv4(t *testing.T) {
 	hosts := mapset.NewThreadUnsafeSet[string]("127.0.0.1", "192.168.1.1")
-	addrs := ResolveHosts(hosts)
+	addrs, errs := ResolveHosts(hosts)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
 	if addrs.Cardinality() != 2 {
 		t.Fatalf("expected 2, got %d", addrs.Cardinality())
 	}
@@ -18,9 +21,12 @@ func TestResolveHostsIPv4(t *testing.T) {
 	}
 }
 
-func TestResolveHostsIgnoresIPv6(t *testing.T) {
+func TestResolveHostsRejectsIPv6(t *testing.T) {
 	hosts := mapset.NewThreadUnsafeSet[string]("::1", "127.0.0.1")
-	addrs := ResolveHosts(hosts)
+	addrs, errs := ResolveHosts(hosts)
+	if len(errs) != 1 || errs[0].Host != "::1" {
+		t.Fatalf("expected one error for ::1, got %v", errs)
+	}
 	if addrs.Cardinality() != 1 {
 		t.Fatalf("expected 1, got %d", addrs.Cardinality())
 	}
@@ -29,29 +35,31 @@ func TestResolveHostsIgnoresIPv6(t *testing.T) {
 	}
 }
 
-func TestResolveHostsViaCommonHostOrIp(t *testing.T) {
-	// Use a hostname that common.HostOrIpToIpsSet can resolve? It may use DNS.
-	// Instead use an IP that is not parseable as netip but is host? Actually HostOrIpToIpsSet handles hosts like "localhost" maybe?
-	// We can test with an invalid host that returns empty set, should not add
+func TestResolveHostsUnresolvableHostIsAnError(t *testing.T) {
 	hosts := mapset.NewThreadUnsafeSet[string]("invalid_host_name_that_does_not_resolve_123")
-	addrs := ResolveHosts(hosts)
-	// Should be 0 because it fails to resolve and HostOrIpToIpsSet may return empty
+	addrs, errs := ResolveHosts(hosts)
 	if addrs.Cardinality() != 0 {
 		t.Fatalf("expected 0, got %d", addrs.Cardinality())
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected one error, got %v", errs)
 	}
 }
 
 func TestResolveHostsEmpty(t *testing.T) {
 	hosts := mapset.NewThreadUnsafeSet[string]()
-	addrs := ResolveHosts(hosts)
-	if addrs.Cardinality() != 0 {
-		t.Fatal("empty should be 0")
+	addrs, errs := ResolveHosts(hosts)
+	if addrs.Cardinality() != 0 || len(errs) != 0 {
+		t.Fatal("empty should resolve to nothing")
 	}
 }
 
 func TestResolveHostsMixed(t *testing.T) {
 	hosts := mapset.NewThreadUnsafeSet[string]("127.0.0.1", "::1", "10.0.0.1")
-	addrs := ResolveHosts(hosts)
+	addrs, errs := ResolveHosts(hosts)
+	if len(errs) != 1 {
+		t.Fatalf("expected one IPv6 error, got %v", errs)
+	}
 	if addrs.Cardinality() != 2 {
 		t.Fatalf("expected 2 IPv4, got %d", addrs.Cardinality())
 	}

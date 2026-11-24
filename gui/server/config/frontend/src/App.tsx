@@ -45,6 +45,10 @@ function toEditorConfig(config: Configuration): AppConfig {
         Sign: { Enabled: config.Sign.Enabled, PlatformUserIdExceptions: config.Sign.PlatformUserIdExceptions ?? [] },
         Authentication: config.Authentication as AppConfig['Authentication'],
         Internet: config.Internet,
+        Hosts: {
+            Modern: config.Hosts?.Modern ?? ['0.0.0.0'],
+            Legacy: config.Hosts?.Legacy ?? [],
+        },
         Games: {
             Enabled: config.Games.Enabled ?? [],
             age1: game(config.Games.age1.Hosts, config.Games.age1.BattleServers, config.Games.age1.EmbeddedBattleServer),

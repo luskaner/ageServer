@@ -38,13 +38,19 @@ func processedServers(gameTitle string, servers map[uuid.UUID]*server.AnnounceMe
 		if internalData == nil {
 			continue
 		}
-		bestAddress := measuredIPs[0]
+		bestAddress, ok := server.SelectServerIP(gameTitle, measuredIPs, nil)
+		if !ok {
+			continue
+		}
 		var bestHostsSlice []string
 		bestHosts := common.IpToHosts(bestAddress.Ip.String())
 		var alternativeIpSlice []string
 		var alternativeHostsSlice []string
 		alternativeHosts := mapset.NewThreadUnsafeSet[string]()
-		for _, alternativeAddress := range measuredIPs[1:] {
+		for _, alternativeAddress := range measuredIPs {
+			if alternativeAddress.Ip.Equal(bestAddress.Ip) {
+				continue
+			}
 			alternativeHosts.Append(common.IpToHosts(alternativeAddress.Ip.String()).Difference(bestHosts).ToSlice()...)
 			alternativeIpSlice = append(alternativeIpSlice, alternativeAddress.Ip.String())
 		}
