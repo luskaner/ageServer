@@ -1,0 +1,37 @@
+# Per-game configuration, installed as resources/config/config.<game>.toml.
+#
+# Only [Game.BattleServers] and [Game.EmbeddedBattleServer] belong here. Hosts
+# are global in [Hosts] of config.toml, and [Games.<game>] belongs to
+# config.toml. A misspelled key stops the server with the file name instead of
+# being ignored.
+#
+# The values below are the ones the server applies on its own, written out so
+# this file can be edited in place. Delete it and the old [Games.<game>] section
+# of config.toml is used instead, so an existing installation keeps working.
+
+[Game.EmbeddedBattleServer]
+# 'true', 'false' or 'required' (= true only for age4/athens).
+StartIfMissing = 'true'
+# Identifier of the server in the game's battle server list. Must not be a UUID.
+Region = 'Server'
+# Name shown in the games that support it. Same as Region when empty.
+Name = 'Server'
+# 'auto' uses the address the client used to reach this server.
+IPv4 = 'auto'
+# 0 picks the first free port.
+BsPort = 0
+WebSocketPort = 0
+OutOfBandPort = 0
+# none, error, warning, notice, info or debug.
+LogLevel = 'info'
+
+# Battle servers started outside this process. They take precedence: with one
+# listed here the embedded server is not started for this game. Same fields as
+# the battle-server-manager config.
+# [[Game.BattleServers]]
+# Region = 'my-battle-server'
+# Name = 'Battle Server'
+# IPv4 = '192.168.1.10'
+# BsPort = 27012
+# WebSocketPort = 27013
+# OutOfBandPort = 27014

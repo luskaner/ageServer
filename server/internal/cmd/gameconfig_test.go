@@ -196,7 +196,7 @@ func TestApplyGameOverridesFlagWins(t *testing.T) {
 // for every game valid: it is the one users edit, so a renamed key must fail
 // here instead of at boot.
 func TestShippedGameConfigTemplateLoads(t *testing.T) {
-	path := filepath.Join("..", "..", "resources", "config.game.toml")
+	path := filepath.Join("..", "..", "resources", "config", "config.game.toml")
 	for gameID := range game.SupportedGames.Iter() {
 		cfg, found, err := loadGameConfig(internal.Game{}, gameID, "", &server.Values{GameConfig: path})
 		if err != nil {
