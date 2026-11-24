@@ -63,6 +63,7 @@ export interface Configuration {
     "GeneratePlatformUserId": boolean;
     "Hosts": HostsConfiguration;
     "Sign": SignConfig;
+    "Safe": SafeConfig;
     "Authentication": string;
     "Internet": InternetConfiguration;
     "Games": GamesConfiguration;
@@ -176,6 +177,11 @@ export interface ReplaysConfiguration {
 
 export interface SignConfig {
     "Enabled": boolean;
+    "PlatformUserIdExceptions": string[] | null;
+}
+
+export interface SafeConfig {
+    "Enabled": any;
     "PlatformUserIdExceptions": string[] | null;
 }
 

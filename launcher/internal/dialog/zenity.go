@@ -14,6 +14,7 @@ import (
 var (
 	zenityListFn     = zenity.List
 	zenityQuestionFn = zenity.Question
+	zenityWarningFn  = zenity.Warning
 )
 
 // availableOnce probes the system only once per process: the answer cannot
@@ -64,6 +65,20 @@ func (zenityDialog) SelectServer(servers []ServerCandidate, stdin io.Reader) (in
 		return consoleDialog{}.SelectServer(servers, stdin)
 	}
 	return index, true
+}
+
+func (zenityDialog) Warning(text string, stdin io.Reader) {
+	err := zenityWarningFn(text,
+		zenity.Title("Safe mode"),
+		zenity.OKLabel("Continue"),
+		zenity.WarningIcon,
+		zenity.Width(500), // Only Unix.
+	)
+	if err != nil {
+		sinks().Println("Could not show the graphical dialog, using the console instead.")
+		sinks().Println("Error message: " + err.Error())
+		consoleDialog{}.Warning(text, stdin)
+	}
 }
 
 func (zenityDialog) ConfirmStartServer(text string, stdin io.Reader) bool {

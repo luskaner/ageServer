@@ -64,6 +64,11 @@ export interface SignConfig {
   PlatformUserIdExceptions: string[];
 }
 
+export interface SafeConfig {
+  Enabled: 'auto' | 'true' | 'false';
+  PlatformUserIdExceptions: string[];
+}
+
 export interface CustomFilesConfig {
   Enabled: boolean;
   Folder: string;
@@ -95,6 +100,7 @@ export interface AppConfig {
   Log: boolean;
   GeneratePlatformUserId: boolean;
   Sign: SignConfig;
+  Safe: SafeConfig;
   Authentication: 'required' | 'cached' | 'adaptive' | 'disabled';
   Internet: InternetConfig;
   Hosts: HostsConfig;
@@ -132,6 +138,8 @@ export function fieldLabel(field: string): string {
   if (field === 'GeneratePlatformUserId') return 'Generate platform user ID';
   if (field === 'Sign.Enabled') return 'Re-sign catalogues';
   if (field === 'Sign.PlatformUserIdExceptions') return 'Platform user ID exceptions';
+  if (field === 'Safe.Enabled') return 'Safe mode';
+  if (field === 'Safe.PlatformUserIdExceptions') return 'Platform user ID exceptions';
   if (field === 'Internet.Enabled') return 'Internet access';
   if (field === 'Hosts') return 'Listeners';
   if (field === 'Hosts.Modern') return 'Regular listeners';

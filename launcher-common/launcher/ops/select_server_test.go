@@ -57,6 +57,8 @@ func (f *fakeDialog) ListCandidates(servers []launcher.ServerCandidate) {
 
 func (f *fakeDialog) ConfirmStartServer(string, io.Reader) bool { return true }
 
+func (f *fakeDialog) Warning(string, io.Reader) {}
+
 func installFakeDialog(t *testing.T, d launcher.Dialog) {
 	t.Helper()
 	launcher.ResetDialog()
@@ -230,6 +232,8 @@ func (stubConsole) SelectServer(servers []launcher.ServerCandidate, stdin io.Rea
 }
 
 func (stubConsole) ConfirmStartServer(string, io.Reader) bool { return true }
+
+func (stubConsole) Warning(string, io.Reader) {}
 
 // installStubConsole makes a console backend the default for the duration of a
 // test, which is what the console launcher does at init.

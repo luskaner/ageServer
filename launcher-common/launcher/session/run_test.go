@@ -11,6 +11,7 @@ import (
 	"github.com/luskaner/ageServer/common/fileLock"
 	"github.com/luskaner/ageServer/common/game/executor/base"
 	"github.com/luskaner/ageServer/common/game/executor/custom"
+	commonServer "github.com/luskaner/ageServer/common/server"
 	"github.com/luskaner/ageServer/launcher-common/launcher"
 	"github.com/spf13/pflag"
 )
@@ -21,6 +22,33 @@ import (
 // This is what a window's Stop button does. It used to be impossible to express:
 // the only way to stop a run was to end the process, so a frontend that kept
 // running had no way to interrupt a session without taking itself down with it.
+func TestRunSessionWarnsInSafeMode(t *testing.T) {
+	dlg := &fakeDialog{confirm: true}
+	restore := applyOverrides(t, runRootOverrides{
+		gameId:        "age2",
+		isAdmin:       false,
+		gameSupported: true,
+		dialogNewFnVal: func(bool) launcher.Resolution {
+			return launcher.Resolution{Dialog: dlg, Name: "fake"}
+		},
+		configStartServerFnVal: func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
+			return common.ErrSuccess, "127.0.0.1", &commonServer.AnnounceMessageDataSupportedLatest{Safe: "true"}
+		},
+		serverReadCACertFnVal: func(string) *x509.Certificate { return &x509.Certificate{} },
+		configLaunchAgentAndGameFnVal: func(base.Executor, custom.Exec, []string, string, string, string) int {
+			return common.ErrSuccess
+		},
+	})
+	defer restore()
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	if _, exitCode := Run(context.Background(), fs); exitCode != common.ErrSuccess {
+		t.Fatalf("got %d, want success", exitCode)
+	}
+	if len(dlg.warnings) != 1 || dlg.warnings[0] != launcher.SafeModeWarning {
+		t.Fatalf("warnings = %v, want one Safe mode warning", dlg.warnings)
+	}
+}
+
 func TestRunSessionStopsWhenCancelled(t *testing.T) {
 	var mapHostsCalls, launchCalls atomic.Int32
 	restore := applyOverrides(t, runRootOverrides{
@@ -28,8 +56,8 @@ func TestRunSessionStopsWhenCancelled(t *testing.T) {
 		isAdmin:       false,
 		gameSupported: true,
 		newPidLock:    func() fileLock.Locker { return &fakePidLocker{} },
-		configStartServerFnVal: func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string) {
-			return common.ErrSuccess, "192.168.1.10"
+		configStartServerFnVal: func(string, *pflag.FlagSet, *cmdServer.Values, bool) (int, string, *commonServer.AnnounceMessageDataSupportedLatest) {
+			return common.ErrSuccess, "192.168.1.10", nil
 		},
 		serverReadCACertFnVal: func(string) *x509.Certificate { return nil },
 		configMapHostsFnVal: func(string, string, bool, bool, bool, bool) int {

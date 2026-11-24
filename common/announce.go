@@ -51,4 +51,7 @@ type AnnounceMessageData002 struct {
 	GameTitle string
 	Version   string
 	Mode      string `json:",omitempty"`
+	// Safe is the configured [Safe] mode: "auto", "true" or "false". It is
+	// empty from servers that predate the field; older launchers ignore it.
+	Safe string `json:",omitempty"`
 }

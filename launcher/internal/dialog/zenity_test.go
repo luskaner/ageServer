@@ -47,6 +47,32 @@ func failQuestion(err error) func(string, ...zenity.Option) error {
 	return func(string, ...zenity.Option) error { return err }
 }
 
+func TestZenityWarningShowsWindow(t *testing.T) {
+	orig := zenityWarningFn
+	t.Cleanup(func() { zenityWarningFn = orig })
+	called := false
+	zenityWarningFn = func(string, ...zenity.Option) error {
+		called = true
+		return nil
+	}
+	(zenityDialog{}).Warning("Safe mode is on.", strings.NewReader(""))
+	if !called {
+		t.Fatal("zenity.Warning was not called")
+	}
+}
+
+func TestZenityWarningFallsBackToConsole(t *testing.T) {
+	orig := zenityWarningFn
+	t.Cleanup(func() { zenityWarningFn = orig })
+	zenityWarningFn = func(string, ...zenity.Option) error { return errors.New("no display") }
+	out := captureStdout(t, func() {
+		(zenityDialog{}).Warning("Safe mode is on.", strings.NewReader(""))
+	})
+	if !strings.Contains(out, "Safe mode is on. Press enter to continue...") {
+		t.Errorf("the console fallback did not show the warning, got:\n%s", out)
+	}
+}
+
 func TestZenityName(t *testing.T) {
 	if got := (zenityDialog{}).Name(); got != "zenity" {
 		t.Fatalf("Name() = %q, want %q", got, "zenity")

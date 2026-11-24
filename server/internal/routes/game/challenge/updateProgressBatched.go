@@ -113,6 +113,11 @@ func UpdateProgressBatched(w http.ResponseWriter, r *http.Request) {
 		i.JSON(&w, i.A{0})
 		return
 	}
+	if models.SafeForRequest(r) {
+		// Safe mode acknowledges the batch without persisting it.
+		i.JSON(&w, i.A{0})
+		return
+	}
 	game := models.G(r)
 	sess := models.SessionOrPanic(r)
 	user, ok := game.Users().GetUserById(sess.GetUserId())

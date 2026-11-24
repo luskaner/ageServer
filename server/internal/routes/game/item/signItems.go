@@ -2,7 +2,6 @@ package item
 
 import (
 	"net/http"
-	"strconv"
 
 	i "github.com/luskaner/ageServer/server/internal"
 	"github.com/luskaner/ageServer/server/internal/models"
@@ -51,23 +50,11 @@ func SignItems(w http.ResponseWriter, r *http.Request) {
 }
 
 // isPlatformUserIdException checks if the requesting user's platform user ID
-// is in the SignConfigRuntime.PlatformUserIdExceptions list.
+// is in the SignConfigRuntime.PlatformUserIdExceptions list. The user is
+// resolved from the login context or the session, so this works on the game
+// routes where LoginUserMiddleware is not installed.
 func isPlatformUserIdException(req *http.Request) bool {
-	userVal := req.Context().Value("user")
-	if userVal == nil {
-		return false
-	}
-	user, ok := userVal.(models.User)
-	if !ok {
-		return false
-	}
-	platformUserId := user.GetPlatformUserID()
-	for _, exception := range i.SignConfigRuntime.PlatformUserIdExceptions {
-		if exception == strconv.FormatUint(platformUserId, 10) {
-			return true
-		}
-	}
-	return false
+	return i.PlatformUserIdInExceptions(models.PlatformUserIdForRequest(req), i.SignConfigRuntime.PlatformUserIdExceptions)
 }
 
 // requestedItemIds returns the itemIDs value verbatim, whether it arrived in the

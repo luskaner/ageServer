@@ -31,6 +31,21 @@ Enabled = false
 # The platform user ID is the numeric ID (e.g., "76561198000000000" for Steam, Xbox ID for Xbox).
 PlatformUserIdExceptions = []
 
+# CONFIGURING SAFE MODE
+[Safe]
+# Whether the server avoids handing the client progress that an official
+# account would sync to Xbox.
+#   'auto' (default): safe for official sessions (Xbox Live, or a Steam
+#           ticket that is not plaintext), unsafe for emulated clients.
+#   true: safe for every session.
+#   false: unsafe for every session.
+# A safe session gets no earned achievements, pending challenge progress and
+# no avatar-stat writes.
+Enabled = 'auto'
+
+# PlatformUserIdExceptions inverts the resolved value, like [Sign].
+PlatformUserIdExceptions = []
+
 [Internet]
 # Whether to allow the server to use the Internet at all (DNS connectivity check,
 # authentication, and public IP detection). Set to false for fully offline/air-gapped use.

@@ -43,6 +43,10 @@ function toEditorConfig(config: Configuration): AppConfig {
         Log: config.Log,
         GeneratePlatformUserId: config.GeneratePlatformUserId,
         Sign: { Enabled: config.Sign.Enabled, PlatformUserIdExceptions: config.Sign.PlatformUserIdExceptions ?? [] },
+        Safe: {
+            Enabled: config.Safe?.Enabled ?? 'auto',
+            PlatformUserIdExceptions: config.Safe?.PlatformUserIdExceptions ?? [],
+        },
         Authentication: config.Authentication as AppConfig['Authentication'],
         Internet: config.Internet,
         Hosts: {
